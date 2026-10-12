@@ -17,11 +17,18 @@ if (!preg_match_all('~<script\b([^>]*)>(.*?)</script\s*>~is', $html, $scripts, P
 if (count($scripts) !== 1) throw new RuntimeException('Unexpected number of script tags');
 foreach ($scripts as $script) {
     if (trim($script[2]) !== '') throw new RuntimeException('Inline script body is not CSP-compliant');
-    if (!preg_match('~\bsrc\s*=\s*(["\'])/scrm/static/app\.js\1~i', $script[1])) {
-        throw new RuntimeException('JavaScript must be served as /scrm/static/app.js');
+    if (!preg_match('~\bsrc\s*=\s*(["\'])/scrm/static/app\.js\?v=([0-9a-f]{12})\1~i', $script[1], $jsMatch)) {
+        throw new RuntimeException('JavaScript must use a content-versioned /scrm/static/app.js URL');
     }
+    $jsHash = hash_file('sha256', $root . '/dist/digiops-release/static/app.js');
+    if (!is_string($jsHash) || $jsMatch[2] !== substr($jsHash, 0, 12)) throw new RuntimeException('JavaScript cache version is stale');
 }
 if (preg_match('~\s(?:on[a-z]+)\s*=~i', $html)) throw new RuntimeException('Inline event handler found');
+if (!preg_match('~href=(["\'])/scrm/static/style\.css\?v=([0-9a-f]{12})\1~i', $html, $cssMatch)) {
+    throw new RuntimeException('Stylesheet must use a content-versioned URL');
+}
+$cssHash = hash_file('sha256', $root . '/dist/digiops-release/static/style.css');
+if (!is_string($cssHash) || $cssMatch[2] !== substr($cssHash, 0, 12)) throw new RuntimeException('Stylesheet cache version is stale');
 if (!str_contains($gateway, "script-src \\'self\\' \\'report-sample\\'")) {
     // Generated PHP string escapes its single quotes; the literal source must match exactly.
     throw new RuntimeException('Unexpected CSP in PHP release gateway');
