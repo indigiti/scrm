@@ -1,132 +1,110 @@
-# SchoolFlow — Multi-user School Enquiry CRM
+# SchoolFlow — Cloudways PHP Enquiry CRM
 
-A working **multi-user web app** inspired by the supplied school admin dashboard reference. Includes a FastAPI backend, persistent SQLite storage, role-enforced school workspaces, a responsive HTML/CSS/JS CRM interface, and a live website enquiry API.
+**PHP-only, no Python and no database service required.** This is a self-hosted, multi-user School Enquiry Management CRM using the same UI as the earlier prototype. It captures enquiries from many WordPress sites, isolates schools, assigns counsellors, schedules follow-ups and tracks admission stages.
 
-This is a **self-hosted MVP**, not a hosted service. It works across multiple staff browsers on the same reachable server. Schools and their data are kept separate. A full security/privacy review, HTTPS, backups and production infrastructure are required before entering live child/guardian data at scale.
+**Technology:** PHP **8.2+**, HTML, CSS, vanilla JavaScript, flat JSON-file persistence. MariaDB **is optional for future scaling**, not used by this release. PHP's native password hashing and secure random-number functions are required (standard on Cloudways PHP).
 
-## 1. Start the app
+## Cloudways deployment (custom PHP application)
 
-You need Python 3.11+.
+1. In Cloudways create/select a **PHP Custom App** (prefer an application separate from your existing WordPress site), configure a domain such as `crm.example.com`, and enable HTTPS in the Cloudways SSL settings.
+2. Using the Cloudways application SFTP/SSH account, upload the contents of this package **to the application root**, with the following directory arrangement:
 
-```bash
-cd SchoolFlow_Multiuser_CRM
-python -m venv .venv
-# Linux/macOS:
-source .venv/bin/activate
-# Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python app.py create-admin
-uvicorn app:app --host 127.0.0.1 --port 8000
-```
+   ```text
+   applications/YOUR_APP/
+   ├── public_html/                 ← the ONLY web-accessible directory
+   │   ├── .htaccess                ← Apache rewrite rules for /api/…
+   │   ├── index.php                ← API + dashboard gateway
+   │   ├── router.php               ← local PHP built-in server only
+   │   └── static/{index.html,app.js,style.css}
+   ├── app_private/                ← OUTSIDE public_html
+   │   ├── api.php                  ← PHP API and role checks
+   │   ├── store.php                ← locked file persistence layer
+   │   └── data/                    ← created automatically at first use
+   ├── bin/create-admin.php
+   ├── wordpress/schoolflow-contact-form-7.php
+   └── tests/test_smoke.php
+   ```
 
-Open **http://127.0.0.1:8000**. Sign in using the email/password you provided during `create-admin`.
+   **Never place `app_private`, backups, API secrets, or `bin` inside `public_html`**. This is more secure than relying on `.htaccess` protection, especially with Nginx in front of Apache. Cloudways documents keeping sensitive files above `public_html`. If needed, set `SCHOOLFLOW_DATA_DIR` to a writable **non-public absolute path** accessible to the web PHP process and PHP CLI account.
+3. Ensure PHP has write permission **only to `app_private/data/`** (normally PHP will create it, if `app_private` is writable). Protect the parent and data directory against reads by other tenants/users. The application saves its database-like records in `app_private/data/store.json` with a process-wide `flock()` on `store.lock`. If the directory is unwritable, the API returns HTTP 500; **do not** fix by making it world-writable (`777`). Use the same filesystem for all PHP workers.
+4. Disable Varnish caching for the CRM (or explicitly bypass `/api/*`, `/health` and authenticated responses); do not cache any enrolment/personal-data endpoints. Confirm PHP sends `Authorization` headers to FastCGI/PHP, and that `.htaccess` rewrites `/api/*` to `index.php`.
+5. Create the initial admin using **SSH/Cloudways terminal** in the package root. Enter the password **without putting it in your shell history**:
 
-For access from other devices on a trusted LAN, use `--host 0.0.0.0` with firewall controls and a trusted HTTPS reverse proxy. **Do not expose bare Uvicorn or HTTP login traffic to the public Internet.**
+   ```bash
+   cd ~/applications/YOUR_APP
+   read -rs -p 'New CRM admin password: ' SCHOOLFLOW_ADMIN_PASSWORD; echo
+   export SCHOOLFLOW_ADMIN_PASSWORD
+   php bin/create-admin.php admin@example.com 'School Admin' 'My School'
+   unset SCHOOLFLOW_ADMIN_PASSWORD
+   ```
 
-To choose the database path, set the `SCHOOLFLOW_DB` environment variable before both `create-admin` and `uvicorn`, e.g. `SCHOOLFLOW_DB=/secure/path/schoolflow.sqlite3`.
+   Use a unique admin password of at least 12 characters. Only the **first** admin can be bootstrapped this way, and there are **no default accounts**. For the fastest setup the app can also run locally:
 
-### Docker option
+   ```bash
+   php -S 127.0.0.1:8100 -t public_html public_html/router.php
+   ```
 
-If you have Docker with Compose, you can also run:
+6. Open `https://crm.example.com/`, sign in, create staff in **Team** and create a Website Source in **Websites & Forms** for each WordPress or landing-page domain. Copy each source key once; it is not displayed again.
 
-```bash
-docker compose build
-docker compose run --rm schoolflow python app.py create-admin
-docker compose up -d
-```
+## Roles and data isolation
 
-The app will be available at **http://127.0.0.1:8000**, bound only to localhost. Configure an HTTPS reverse proxy before public Internet access. The named `schoolflow_data` volume contains the SQLite database; include it in encrypted backups.
+- **Admin:** see and edit school leads; manage staff, website sources, and API keys; create another school workspace.
+- **Admissions:** see and edit all leads belonging to their school.
+- **Counsellor:** see and edit only leads assigned to their account. Newly submitted enquiries are auto-assigned to the least-loaded counsellor.
 
-## 2. Everyday CRM workflow
+Every request validates that the logged-in user belongs to the selected school. A website API key identifies **one** school; the client may not supply its own school ID. Existing staff accounts cannot be silently attached to another school; invitation/acceptance is reserved for a later release.
 
-1. Log in as Admin. Optionally click **+ Add school** for another isolated school workspace.
-2. Go to **Team**, choose **Add staff member** and create an account for each counsellor/admissions user. New account passwords must have 12+ characters. Existing account emails can be granted membership in another school without resetting the password.
-3. Go to **Websites & Forms** → **Connect website** for each WordPress site, campaign page or custom website. **Copy the generated API key immediately.** It will never be displayed again.
-4. Connect the form to the server-side intake API (see below).
-5. New leads appear in **Enquiries** and **Dashboard**, with source attribution and automatic assignment to the least-loaded counsellor. Move cards in **Pipeline**, add notes, schedule follow-ups and export CSV reports.
+## Connect WordPress (Contact Form 7)
 
-Roles are enforced on the backend:
-
-| Role | View enquiries | Edit enquiries | Add sources/staff |
-|---|---|---|---|
-| Admin | All leads for member school | Yes | Yes |
-| Admissions | All leads for member school | Yes | No |
-| Counsellor | Only assigned leads | Only assigned leads | No |
-
-## 3. WordPress form connection
-
-The sample plugin `wordpress/schoolflow-contact-form-7.php` supports **Contact Form 7**. For each WordPress website:
-
-1. Add its own website source in SchoolFlow. Copy its site-specific key.
-2. Place the included PHP file in a WordPress plugin folder (`wp-content/plugins/schoolflow-cf7/schoolflow-contact-form-7.php`) and activate it. Install/activate Contact Form 7 first.
-3. Add these two constants to that website's `wp-config.php` (server-side only):
+Copy `wordpress/schoolflow-contact-form-7.php` to a WordPress website's `wp-content/plugins/schoolflow-cf7/` directory and activate the plugin. On the **WordPress** site, keep credentials server-side in `wp-config.php`:
 
 ```php
-define('SCHOOLFLOW_CRM_URL', 'https://crm.yourschooldomain.com');
-define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_YOUR_SITE_KEY');
+define('SCHOOLFLOW_CRM_URL', 'https://crm.example.com');
+define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_COPY_THIS_WEBSITE_KEY');
 ```
 
-4. Configure Contact Form 7 input field names: `student_name`, `parent_name`, `phone`, `grade`, `email`, `message`, `consent`. Make `consent` a **required guardian consent checkbox**.
-5. Submit a test enquiry. It should show in SchoolFlow. If it fails, confirm outbound WordPress HTTPS works, the CRM URL and key are correct, and your form's field names match the mapping. The integration never embeds the key in page HTML.
+Create a Contact Form 7 form with names: `student_name`, `parent_name`, `phone`, `grade`, `email`, `message`, `consent`. Require a **guardian consent checkbox**. The server-side plugin posts to the PHP CRM over HTTPS. Other WordPress plugins or custom websites can send the same payload from **server-side** code; never expose the key in JavaScript or HTML.
 
-For **WPForms, Elementor, Gravity Forms and custom websites**, configure their trusted server-side automation/webhook logic to call the same endpoint. A browser-side script must **not** contain the key.
-
-### Inbound API contract
-
-`POST https://crm.example.com/api/v1/inbound-leads`
-
-Headers:
+### Intake API (compatible with the previous Python version)
 
 ```http
-Authorization: Bearer sfsite_PER_WEBSITE_PRIVATE_KEY
+POST https://crm.example.com/api/v1/inbound-leads
+Authorization: Bearer sfsite_YOUR_PRIVATE_WEBSITE_KEY
+Idempotency-Key: unique-form-submission-123456
 Content-Type: application/json
-Idempotency-Key: form-submission-000123
-```
 
-Body:
-
-```json
 {
   "student_name": "Example Student",
   "parent_name": "Example Guardian",
   "phone": "+91 9876543210",
-  "class": "Grade 4",
-  "email": "parent@example.org",
-  "message": "Please share admission fees",
+  "class": "Grade 5",
+  "email": "guardian@example.com",
+  "message": "Please share admission details",
   "utm_source": "facebook",
   "utm_campaign": "admissions-2026",
   "consent": true
 }
 ```
 
-On success the API returns `201 {"id":123,"duplicate_submission":false}`. Resending the **same** `Idempotency-Key` for the **same website** returns HTTP 200 and the original ID; it does not create another lead. New form submissions using the same phone number are retained but flagged with `duplicate_of` for staff review. The backend resolves `school_id` exclusively from the site key; it does not accept a caller-provided school ID.
+A new submission responds with `201 {"id":1,"duplicate_submission":false}`. The same `Idempotency-Key` for the same site returns `200 {"id":1,"duplicate_submission":true}` without creating another enquiry. Another submission with the same phone number is retained and flagged `duplicate_of`. Keys are unique per source and can be rotated/disabled.
 
-## 4. Security and data handling
-
-Built in: PBKDF2 password hashes with per-user random salt, session tokens stored as SHA-256 hashes in DB with 12-hour expiry, school membership checks on every CRM API, per-role access, per-site secret keys stored as hashes, HTTPS-oriented WordPress connector, idempotent webhooks, phone-duplicate warning, basic process-local rate limits, activity timeline and admin/lead audit events, parameterised SQL and escaped HTML rendering.
-
-**Before real-world deployment:** put this behind HTTPS (Caddy, nginx or another trusted reverse proxy), add distributed rate limiting, configure firewall/security headers and CSRF posture, enforce password reset/MFA, automate encrypted offsite backups and restore drills, configure alerts and operational logs without personal information, create consent notices/data retention and deletion policies appropriate to your location, implement least-privilege tenant-specific exports, perform penetration testing, and migrate from SQLite to PostgreSQL if multiple API processes or high write concurrency are required. This MVP does not send automated SMS/WhatsApp/email alerts and does not support staff self-service password reset yet. Auto assignment is not an asynchronous queue.
-
-**Development/test data:** do not store real student or guardian information until the above controls are in place. This package contains no seeded personal records and no default passwords.
-
-## 5. Project structure
-
-```
-app.py                 FastAPI backend, SQLite schema and authentication
-static/index.html      CRM entry page
-static/style.css       UI design system based on reference screenshots
-static/app.js          Interactive multi-page front end
-wordpress/*.php        Contact Form 7 server-side connector
-requirements.txt       Python dependencies
-Dockerfile / compose.yaml   Optional container-based deployment
-tests/test_api.py       Core API tests
-```
-
-## 6. Tests
+## Local tests (PHP only)
 
 ```bash
-pip install pytest httpx
-python -m pytest -q
+php tests/test_smoke.php
+find app_private bin public_html -name '*.php' -exec php -l {} \;
 ```
 
-The source code is deliberately framework-light so your developers can extend this into a React/Next.js or PostgreSQL version later without changing the intake API contract.
+## Storage, backup and migration
+
+All users, schools, enquiries, notes, API key hashes and session hashes are in **one private JSON file**. Writes are serialized using `flock` and atomically replaced under a lock. This is practical for a small/medium initial deployment on **one Cloudways filesystem**. It is **not** a full relational database: it rewrites the entire data file per update, and will slow down as enquiries/activities grow. Do not use multiple servers or shared remote storage without reworking locking.
+
+- Back up the entire private `data/` directory into access-controlled **encrypted** offsite storage; include `store.json` and test restores. Do not commit it to GitHub.
+- When load increases, replace `SchoolFlowStore` with a MariaDB repository/transaction layer and a one-time JSON import; the `/api/*` contract and WordPress connectors can remain unchanged. **Automatic MariaDB migration is not included.**
+- The JSON files are **not encrypted at rest by the application**. Guardian/student names and contact details are sensitive. Keep strict filesystem permissions and backups under access control.
+
+## Production readiness limitations
+
+This MVP is **not** yet audited or deployed. Before admitting real student/guardian data, add monitoring, managed rate limiting beyond the simple in-file limits, account recovery and MFA, password policies, automated encrypted backups, disaster recovery tests, defined retention/deletion policies, legal/guardian consent copy, and security assessment. Use HTTPS everywhere. Admin self-service password reset and SMS/WhatsApp messages are not included.
+
+The previous Python/FastAPI version is superseded on the feature branch; the PHP release does **not** require Python, SQLite, Docker, or MariaDB to run.
