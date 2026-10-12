@@ -132,3 +132,10 @@ No sample enquiries are imported automatically on deployment; the admin clicks t
 This error was fixed in the HTTP request parser. A legitimate empty JSON object `{}` is now accepted; JSON arrays such as `[]` are still rejected. The demo seed button deliberately submits `{}` because it does not require any parameters. The GitHub workflow runs `php tests/test_http_json.php` against the **built** release to prevent regressions.
 
 After DigiOps deploys the new `digiops-release` artifact, refresh `/scrm/` and select **Add demo data** again. Existing administrator accounts and actual enquiries are preserved.
+
+
+## Layout and enquiry drawer
+
+The authenticated CRM fills the browser width on desktop (including zoomed-out displays). Enquiry **View** opens a fixed right-side detail drawer above the page with a dimmed backdrop and its own scroll area. On narrow screens it becomes a full-width drawer. Click the outside backdrop or the close icon to exit.
+
+DigiOps build validates presence of the required `.drawer-overlay` and `.drawer-head` styles; no API/database changes are needed for this fix. Stylesheets use content-hash cache versioning, so deploying a new `digiops-release` loads updated CSS automatically.
