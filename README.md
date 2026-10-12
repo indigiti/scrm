@@ -139,3 +139,14 @@ After DigiOps deploys the new `digiops-release` artifact, refresh `/scrm/` and s
 The authenticated CRM fills the browser width on desktop (including zoomed-out displays). Enquiry **View** opens a fixed right-side detail drawer above the page with a dimmed backdrop and its own scroll area. On narrow screens it becomes a full-width drawer. Click the outside backdrop or the close icon to exit.
 
 DigiOps build validates presence of the required `.drawer-overlay` and `.drawer-head` styles; no API/database changes are needed for this fix. Stylesheets use content-hash cache versioning, so deploying a new `digiops-release` loads updated CSS automatically.
+
+
+## Persistent audit log (from DigiOps release #9)
+
+SchoolFlow saves an append-only, school-scoped audit trail in the protected JSON store at `private_html/scrm/data/store.json`. It records **who**, **when**, **school**, **enquiry** (where applicable), **action**, and a short description. Important actions include successful and known-user failed logins, logouts, school/staff setup, website connections/key rotation/enabling, inbound and manually created enquiries, enquiry detail views, stage/assignment/follow-up changes, note additions, CSV exports, and adding/removing demo data. An enquiry's audit log is at the **bottom of its right-side View drawer**; Admins can also review the school-wide log under **Reports → School activity log**. Both have “Load older activity” pagination.
+
+Audit records are saved under the same locked JSON transaction as the related business operation and are not deleted when demo data is cleared. Historic enquiry activity from prior releases is copied once into the audit stream on the first audited write; existing conversation notes remain intact in the separate conversation history. Secrets (passwords, tokens, private website API keys) and full note text are never placed in audit entries. The API does not expose an audit-delete action. Admin access is required for school-wide records; the per-enquiry log follows normal enquiry visibility permissions.
+
+Audit logging covers **meaningful API and user actions**, not each keystroke or passive dashboard request. Activity generated prior to enabling this feature is limited to the historical enquiry activity already stored; there was no general log for earlier events.
+
+**Operational note:** JSON-based audit storage grows with use; monitor `store.json` size and back up the protected directory. Use MariaDB or another database plus retention/access policies for higher-volume and regulated deployments. The audit trail is application-level and is not cryptographically tamper-proof against an administrator with filesystem access.

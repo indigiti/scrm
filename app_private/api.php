@@ -69,9 +69,68 @@ function sf_limit(array &$s, string $key, int $max, int $seconds): void {
     $s['rate_limits'][$key] = $times;
     if (count($s['rate_limits']) > 4000) $s['rate_limits'] = array_slice($s['rate_limits'], -1000, null, true);
 }
+/** Append-only business audit: every record is committed with the same locked JSON transaction.
+ * Records contain minimal descriptions (never passwords, notes, bearer credentials, or private keys).
+ * Older installations have 'activities' but not 'audit_logs': import those once on first audited write.
+ */
+function sf_event(array &$s, int $schoolId, ?int $leadId, ?int $actorId, string $action, string $details = ''): void {
+    if (!isset($s['audit_logs'])) {
+        $s['audit_logs'] = [];
+        foreach ($s['activities'] ?? [] as $old) {
+            $actor = isset($old['actor_id']) && $old['actor_id'] !== null ? sf_user($s, (int)$old['actor_id']) : null;
+            $s['audit_logs'][] = [
+                'id'=>sf_id($s,'audit_logs'), 'school_id'=>$old['school_id'],
+                'lead_id'=>$old['lead_id']??null, 'actor_id'=>$old['actor_id']??null,
+                'actor_name'=>$actor['name']??'Website / system', 'action'=>$old['action'],
+                'details'=>$old['action']==='note'?'Conversation note added':substr((string)($old['details']??''),0,220),
+                'created_at'=>$old['created_at'],
+            ];
+        }
+    }
+    $actor = $actorId !== null ? sf_user($s,$actorId) : null;
+    $s['audit_logs'][] = [
+        'id'=>sf_id($s,'audit_logs'), 'school_id'=>$schoolId,'lead_id'=>$leadId,
+        'actor_id'=>$actorId, 'actor_name'=>$actor['name']??'Website / system',
+        'action'=>$action, 'details'=>substr($details,0,220), 'created_at'=>sf_time(),
+    ];
+}
 function sf_audit(array &$s, int $schoolId, ?int $leadId, ?int $actorId, string $action, string $details = ''): void {
     $s['activities'][] = ['id'=>sf_id($s,'activities'), 'school_id'=>$schoolId,'lead_id'=>$leadId,
         'actor_id'=>$actorId,'action'=>$action,'details'=>substr($details,0,2000),'created_at'=>sf_time()];
+    sf_event($s,$schoolId,$leadId,$actorId,$action,$action==='note'?'Conversation note added':$details);
+}
+/** Newest-first cursor-based audit page. Limits protect the JSON-backed web app. */
+function sf_audit_page(array $s, int $schoolId, ?int $leadId, ?int $before, int $limit=50): array {
+    $limit=max(1,min(100,$limit));$rows=[];
+    $logs=$s['audit_logs'] ?? null;
+    if ($logs === null) {
+        // Read-only view of history from installations that predate the audit-log feature.
+        // The same IDs are persisted when the first audited write imports this history.
+        $logs=[];$oldId=(int)($s['counters']['audit_logs']??0);
+        foreach ($s['activities'] ?? [] as $activity) {
+            $actor=isset($activity['actor_id']) && $activity['actor_id']!==null?sf_user($s,(int)$activity['actor_id']):null;
+            $logs[]=['id'=>++$oldId,'school_id'=>$activity['school_id'],'lead_id'=>$activity['lead_id']??null,
+                'actor_id'=>$activity['actor_id']??null,'actor_name'=>$actor['name']??'Website / system',
+                'action'=>$activity['action'],'details'=>$activity['action']==='note'?'Conversation note added':substr((string)($activity['details']??''),0,220),
+                'created_at'=>$activity['created_at']];
+        }
+    }
+    foreach (array_reverse($logs) as $entry) {
+        if ($entry['school_id'] !== $schoolId) continue;
+        if ($leadId !== null && ($entry['lead_id']??null) !== $leadId) continue;
+        if ($before !== null && $entry['id'] >= $before) continue;
+        $rows[]=$entry;
+        if (count($rows)>$limit) break;
+    }
+    $hasMore=count($rows)>$limit;
+    if ($hasMore) array_pop($rows);
+    return ['events'=>$rows,'has_more'=>$hasMore,'next_before'=>$hasMore ? end($rows)['id'] : null];
+}
+function sf_audit_cursor(string $uri): ?int {
+    $query=(string)(parse_url($uri,PHP_URL_QUERY) ?: '');parse_str($query,$args);
+    if (!isset($args['before'])) return null;
+    if (!is_scalar($args['before']) || !ctype_digit((string)$args['before']) || (int)$args['before']<=0) sf_fail(422,'Invalid audit cursor');
+    return (int)$args['before'];
 }
 function sf_lead_view(array $s, array $lead): array {
     $source = $lead['site_id'] ? sf_source($s, $lead['site_id']) : null;
@@ -297,6 +356,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $s['users'][] = $user;
             $s['schools'][] = $schoolRow;
             $s['memberships'][] = ['school_id'=>$schoolRow['id'],'user_id'=>$user['id'],'role'=>'Admin'];
+            sf_event($s,$schoolRow['id'],null,$user['id'],'admin_created','First administrator created');
             unset($s['setup_code_hash']);
             $sessionToken = bin2hex(random_bytes(40));
             $expires = time() + SF_TTL;
@@ -311,11 +371,15 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $pass=sf_text($payload,'password',1024,1);
             $user=null;
             foreach ($s['users'] as $u) if ($u['email']===$email && $u['active']) { $user=$u;break; }
-            if (!$user || !password_verify($pass,$user['password_hash'])) return [401, ['detail'=>'Incorrect email or password']];
+            if (!$user || !password_verify($pass,$user['password_hash'])) {
+                if ($user) foreach ($s['memberships'] as $m) if ($m['user_id']===$user['id']) sf_event($s,$m['school_id'],null,$user['id'],'login_failed','Incorrect password');
+                return [401, ['detail'=>'Incorrect email or password']];
+            }
             $token = bin2hex(random_bytes(40));
             $expires=time()+SF_TTL;
             $s['sessions'] = array_values(array_filter($s['sessions'], fn($v) => $v['expires_at'] > time()));
             $s['sessions'][] = ['token_hash'=>sf_hash($token),'user_id'=>$user['id'],'expires_at'=>$expires];
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$user['id']) sf_event($s,$m['school_id'],null,$user['id'],'login','Signed in');
             return [200, ['token'=>$token,'expires_at'=>gmdate('Y-m-d\TH:i:s+00:00', $expires)]];
         },true);
     }
@@ -342,11 +406,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     if (!str_starts_with($path, '/api/')) sf_fail(404,'Not found');
     $auth=$headers['authorization']??'';
     $write=$method !== 'GET';
-    return $store->transaction(function (&$s) use ($path,$method,$payload,$auth) {
+    return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri) {
         $user=sf_session($s,$auth);$uid=$user['id'];
         if ($path==='/api/auth/logout' && $method==='POST') {
             $hash=sf_hash(substr($auth,7));
             $s['sessions']=array_values(array_filter($s['sessions'],fn($ss)=>$ss['token_hash']!==$hash));
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid) sf_event($s,$m['school_id'],null,$uid,'logout','Signed out');
             return [200,['ok'=>true]];
         }
         if ($path==='/api/me' && $method==='GET') {
@@ -365,20 +430,39 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $name=sf_text($payload,'name',140,3);
             $school=['id'=>sf_id($s,'schools'),'name'=>$name,'created_at'=>sf_time()];
             $s['schools'][]=$school;$s['memberships'][]=['user_id'=>$uid,'school_id'=>$school['id'],'role'=>'Admin'];
+            sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
-        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes))?$#D',$path,$m)) sf_fail(404,'Not found');
+        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes|audit|view))?$#D',$path,$m)) sf_fail(404,'Not found');
         $schoolId=(int)$m[1];$area=$m[2];$itemId=isset($m[3]) && $m[3]!==''?(int)$m[3]:null;
         $sub=$m[4]??'';
         $role=sf_membership($s,$schoolId,$uid);
+        if ($area==='audit') {
+            if ($itemId!==null) sf_fail(404,'Not found');
+            if ($method==='POST' && ($payload['event']??'')==='export_enquiries') {
+                sf_event($s,$schoolId,null,$uid,'enquiries_exported','Exported school enquiry CSV');
+                return [200,['ok'=>true]];
+            }
+            sf_membership($s,$schoolId,$uid,['Admin']);
+            if ($method!=='GET') sf_fail(404,'Not found');
+            return [200,sf_audit_page($s,$schoolId,null,sf_audit_cursor($uri))];
+        }
         if ($area==='demo-data') {
             sf_membership($s,$schoolId,$uid,['Admin']);
             $demoAction=$m[3]??'';
             if ($demoAction==='' && $method==='GET') return [200,sf_demo_status($s,$schoolId)];
-            if ($demoAction==='seed' && $method==='POST') return [201,sf_demo_seed($s,$schoolId,$uid)];
+            if ($demoAction==='seed' && $method==='POST') {
+                $result=sf_demo_seed($s,$schoolId,$uid);
+                sf_event($s,$schoolId,null,$uid,'demo_seeded','Added '.$result['leads'].' sample enquiries and '.$result['sites'].' sample sites');
+                return [201,$result];
+            }
             if ($demoAction==='clear' && $method==='POST') {
                 if (($payload['confirm']??null)!=='CLEAR DEMO') sf_fail(422,'Type CLEAR DEMO to confirm');
-                return [200,sf_demo_clear($s,$schoolId)];
+                // Import legacy history before demo activities are removed.
+                if (!isset($s['audit_logs'])) sf_event($s,$schoolId,null,$uid,'audit_upgraded','Audit history initialized');
+                $result=sf_demo_clear($s,$schoolId);
+                sf_event($s,$schoolId,null,$uid,'demo_cleared','Removed '.$result['removed_leads'].' sample enquiries and '.$result['removed_sites'].' sample sites');
+                return [200,$result];
             }
             sf_fail(404,'Not found');
         }
@@ -420,6 +504,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 $site=['id'=>sf_id($s,'sites'),'school_id'=>$schoolId,'name'=>$name,'domain'=>$domain,'platform'=>$platform,
                     'key_hash'=>sf_hash($key),'enabled'=>1,'created_at'=>sf_time()];
                 $s['sites'][]=$site;
+                sf_event($s,$schoolId,null,$uid,'website_connected','Source #'.$site['id'].' connected');
                 return [201,['id'=>$site['id'],'name'=>$name,'api_key'=>$key,'warning'=>'Copy this key now. It cannot be shown again.']];
             }
             if ($itemId!==null) {
@@ -428,12 +513,19 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 foreach ($s['sites'] as &$v) if ($v['id']===$itemId) {
                     if ($sub==='rotate-key' && $method==='POST') {
                         $key='sfsite_'.bin2hex(random_bytes(32));$v['key_hash']=sf_hash($key);
+                        sf_event($s,$schoolId,null,$uid,'website_key_rotated','Source #'.$itemId.' key rotated');
                         return [200,['api_key'=>$key,'warning'=>'Old key revoked. Copy the new key now.']];
                     }
-                    if ($sub==='' && $method==='PATCH') {
+                    if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                if ($sub==='view' && $method==='POST') {
+                    sf_event($s,$schoolId,$itemId,$uid,'enquiry_viewed','Opened enquiry details');
+                    return [200,['ok'=>true]];
+                }
+                if ($sub==='' && $method==='PATCH') {
                         $enabled=$_GET['enabled']??null;
                         if (!in_array($enabled,['true','false','1','0'],true)) sf_fail(422,'enabled query parameter required');
                         $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
+                        sf_event($s,$schoolId,null,$uid,'website_status_changed','Source #'.$itemId.($v['enabled']?' enabled':' disabled'));
                         return [200,['ok'=>true,'enabled'=>(bool)$v['enabled']]];
                     }
                 } unset($v);
@@ -467,7 +559,13 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         $a['actor_name']=$actor['name']??null;$activities[]=$a;
                     }
                     usort($activities,fn($a,$b)=>$b['id']<=>$a['id']);
-                    return [200,['lead'=>sf_lead_view($s,$lead),'activities'=>array_slice($activities,0,100)]];
+                    return [200,['lead'=>sf_lead_view($s,$lead),'activities'=>array_slice($activities,0,100),
+                        'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
+                }
+                if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                if ($sub==='view' && $method==='POST') {
+                    sf_event($s,$schoolId,$itemId,$uid,'enquiry_viewed','Opened enquiry details');
+                    return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
                     $changes=[];

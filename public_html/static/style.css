@@ -44,3 +44,15 @@ body:has(.drawer-overlay),body:has(.modal-wrap) {overflow:hidden;}
   .drawer-head {padding:19px 17px;}
   .detail-body {padding:17px;}
 }
+
+/* Immutable audit trail: compact actions at the bottom of every enquiry drawer. */
+.drawer-audit{margin-top:25px;padding-top:5px;border-top:1px solid #e6e9f4}
+.drawer-audit .section-title{margin-bottom:6px}
+.audit-entry{position:relative;margin:14px 0;padding:10px 13px 10px 18px;background:#fafbff;border:1px solid #edf0f8;border-left:3px solid #8982ef;border-radius:9px;overflow-wrap:anywhere}
+.audit-entry-title{font-size:12px;font-weight:800;text-transform:capitalize;color:#333b59}
+.audit-entry-desc{font-size:11px;color:#5d6580;margin-top:5px;white-space:pre-wrap}
+.audit-entry-meta{font-size:10px;color:#808aa3;margin-top:7px}
+.audit-entry-link{font-size:10px;color:#726ae4;margin-top:5px}
+.audit-more{display:flex;justify-content:center;padding:11px 0 4px}
+.audit-school{margin-top:25px;max-width:1000px}
+.audit-school .audit-entry{margin:10px 0}

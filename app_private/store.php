@@ -41,6 +41,6 @@ final class SchoolFlowStore {
     }
     public static function blank(): array {
         return ['version'=>1, 'counters'=>[], 'users'=>[], 'schools'=>[], 'memberships'=>[], 'sites'=>[],
-            'leads'=>[], 'activities'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
+            'leads'=>[], 'activities'=>[], 'audit_logs'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
     }
 }
