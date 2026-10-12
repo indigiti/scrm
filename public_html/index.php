@@ -22,8 +22,15 @@ $raw=file_get_contents('php://input');
 if (strlen($raw)>32768) sf_json(['detail'=>'Request too large'],413);
 $payload=[];
 if (($raw??'')!=='') {
-    try {$payload = json_decode($raw,true,32,JSON_THROW_ON_ERROR);}catch(Throwable){sf_json(['detail'=>'Malformed JSON'],400);}
-    if (!is_array($payload) || array_is_list($payload)) sf_json(['detail'=>'JSON object required'],422);
+    try {
+        // Decode once as a JSON object to distinguish {} from []. With associative
+        // decoding both become an empty PHP array and array_is_list([]) is true.
+        $decoded = json_decode($raw, false, 32, JSON_THROW_ON_ERROR);
+        if (!$decoded instanceof stdClass) sf_json(['detail'=>'JSON object required'],422);
+        $payload = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
+    } catch (JsonException $e) {
+        sf_json(['detail'=>'Malformed JSON'],400);
+    }
 }
 $headers=[];
 foreach (['Authorization'=>'authorization','Idempotency-Key'=>'idempotency-key'] as $header=>$name) {
