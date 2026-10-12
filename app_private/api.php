@@ -117,6 +117,93 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     sf_audit($s,$schoolId,$lead['id'],$actor,$action,$duplicate ? 'Potential duplicate' : '');
     return sf_lead_view($s, $lead);
 }
+/** Demo records have an explicit flag and are always scoped to one school. */
+function sf_demo_status(array $s, int $schoolId): array {
+    $leadCount = 0; $siteCount = 0;
+    foreach ($s['leads'] as $l) if ($l['school_id'] === $schoolId && !empty($l['is_demo'])) $leadCount++;
+    foreach ($s['sites'] as $site) if ($site['school_id'] === $schoolId && !empty($site['is_demo'])) $siteCount++;
+    return ['leads'=>$leadCount,'sites'=>$siteCount,'has_demo_data'=>($leadCount+$siteCount)>0];
+}
+function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
+    $status = sf_demo_status($s,$schoolId);
+    if ($status['has_demo_data']) sf_fail(409,'Demo records already exist for this school. Clear demo data before adding a new set.');
+    // Domains and phone numbers are non-operational, deliberately synthetic examples.
+    $examples = [
+        ['Demo: School Website','demo-school.example.invalid','WordPress'],
+        ['Demo: Admissions Landing Page','admissions-demo.example.invalid','Landing page'],
+        ['Demo: Open Day Registration','open-day-demo.example.invalid','WordPress'],
+    ];
+    $siteIds = [];
+    foreach ($examples as [$name,$domain,$platform]) {
+        $siteId=sf_id($s,'sites'); $siteIds[]=$siteId;
+        $s['sites'][]=['id'=>$siteId,'school_id'=>$schoolId,'name'=>$name,'domain'=>$domain,'platform'=>$platform,
+            'key_hash'=>sf_hash(bin2hex(random_bytes(24))), 'enabled'=>0,'is_demo'=>true,'created_at'=>sf_time()];
+    }
+    // Real staff members may be used as assignment targets; no demo login accounts are created.
+    $owners=[];
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && in_array($m['role'],['Counsellor','Admissions'],true)) $owners[]=$m['user_id'];
+    if (!$owners) $owners=[$adminId];
+    $rows = [
+        ['Aarav Mehta','Rohan Mehta','Grade 1','New',-1,0],
+        ['Diya Sharma','Nisha Sharma','Grade 3','Contacted',0,1],
+        ['Kabir Patel','Meera Patel','Grade 5','Counselling',2,2],
+        ['Ananya Singh','Rahul Singh','KG', 'Visit Scheduled',3,0],
+        ['Reyansh Gupta','Pooja Gupta','Grade 2','Applied',5,1],
+        ['Ishita Rao','Manoj Rao','Grade 4','Enrolled',0,2],
+        ['Vivaan Nair','Priya Nair','Grade 7','New',-2,0],
+        ['Sara Khan','Amina Khan','Grade 6','Contacted',1,1],
+        ['Advik Jain','Ritu Jain','Grade 8','Counselling',-1,2],
+        ['Myra Kapoor','Neha Kapoor','Grade 1','Visit Scheduled',4,0],
+        ['Arjun Reddy','Kiran Reddy','Grade 9','Lost',0,1],
+        ['Tara Iyer','Lakshmi Iyer','Grade 2','Applied',2,2],
+        ['Ayaan Ali','Farah Ali','Grade 3','Enrolled',0,0],
+        ['Kiara Shah','Anita Shah','Grade 4','New',1,1],
+        ['Dev Malhotra','Vikas Malhotra','Grade 6','Contacted',-3,2],
+        ['Riya Verma','Sanjay Verma','KG','Counselling',3,0],
+        ['Neil Das','Maya Das','Grade 5','Visit Scheduled',6,1],
+        ['Zoya Mirza','Saba Mirza','Grade 7','Applied',-1,2],
+    ];
+    foreach ($rows as $i => [$student,$guardian,$grade,$stage,$followOffset,$siteIndex]) {
+        // 00000-prefixed phone values and example.invalid emails are never contactable.
+        $phone=sprintf('+91 00000 %05d',10000+$i);
+        $p=['student_name'=>'Demo: '.$student,'parent_name'=>'Demo: '.$guardian,'phone'=>$phone,
+            'email'=>'demo'.$i.'@example.invalid','grade'=>$grade,
+            'message'=>'SAMPLE DATA — training only. Do not contact. Parent requested fees, transport, or campus information.',
+            'utm_source'=>$siteIndex===1?'google-demo':'website-demo','utm_campaign'=>'demo-admissions',
+            'consent'=>false,'followup_date'=>in_array($stage,['Enrolled','Lost'],true)?'':gmdate('Y-m-d',strtotime(($followOffset>=0?'+':'').$followOffset.' days'))];
+        $assigned=$owners[$i % count($owners)];
+        $lead=sf_create_lead($s,$schoolId,$p,$siteIds[$siteIndex],$adminId,$assigned,'demo_seed');
+        $leadId=$lead['id'];
+        $leadIndex=count($s['leads'])-1;
+        $s['leads'][$leadIndex]['is_demo']=true;
+        $s['leads'][$leadIndex]['status']=$stage;
+        $s['leads'][$leadIndex]['created_at']=gmdate('Y-m-d\TH:i:s+00:00',strtotime('-'.($i%12+1).' days'));
+        sf_audit($s,$schoolId,$leadId,$adminId,'note','DEMO NOTE: Example counselling discussion; not an actual family or enquiry.');
+    }
+    return array_merge(sf_demo_status($s,$schoolId),['created'=>true]);
+}
+function sf_demo_clear(array &$s, int $schoolId): array {
+    $removedLeadIds=[];
+    foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) $removedLeadIds[$l['id']]=true;
+    $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($removedLeadIds[$l['id']])));
+    $s['activities']=array_values(array_filter($s['activities'],fn($a)=>!isset($removedLeadIds[$a['lead_id'] ?? -1])));
+    // Preserve real submissions even if they refer to a demo lead or a demo source.
+    foreach ($s['leads'] as &$l) if ($l['school_id']===$schoolId && isset($removedLeadIds[$l['duplicate_of'] ?? -1])) $l['duplicate_of']=null;
+    unset($l);
+    $removedSiteIds=[];$keptSites=0;
+    foreach ($s['sites'] as $site) if ($site['school_id']===$schoolId && !empty($site['is_demo'])) {
+        $referenced=false;
+        foreach ($s['leads'] as $l) if ($l['site_id']===$site['id']) {$referenced=true;break;}
+        if ($referenced) $keptSites++; else $removedSiteIds[$site['id']]=true;
+    }
+    // A demo website retained for real enquiries must no longer be demo-tagged.
+    foreach ($s['sites'] as &$site) if ($site['school_id']===$schoolId && !empty($site['is_demo']) && !isset($removedSiteIds[$site['id']])) { $site['is_demo']=false; $site['enabled']=0; }
+    unset($site);
+    $s['sites']=array_values(array_filter($s['sites'],fn($site)=>!isset($removedSiteIds[$site['id']])));
+    $s['receipts']=array_values(array_filter($s['receipts'],fn($r)=>!isset($removedLeadIds[$r['lead_id']]) && !isset($removedSiteIds[$r['site_id']])));
+    return ['removed_leads'=>count($removedLeadIds),'removed_sites'=>count($removedSiteIds),'kept_demo_sites_with_real_leads'=>$keptSites];
+}
+
 function sf_json(mixed $result, int $status=200): never {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
@@ -280,10 +367,21 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $s['schools'][]=$school;$s['memberships'][]=['user_id'=>$uid,'school_id'=>$school['id'],'role'=>'Admin'];
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
-        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads)(?:/(\d+))?(?:/(rotate-key|notes))?$#D',$path,$m)) sf_fail(404,'Not found');
+        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes))?$#D',$path,$m)) sf_fail(404,'Not found');
         $schoolId=(int)$m[1];$area=$m[2];$itemId=isset($m[3]) && $m[3]!==''?(int)$m[3]:null;
         $sub=$m[4]??'';
         $role=sf_membership($s,$schoolId,$uid);
+        if ($area==='demo-data') {
+            sf_membership($s,$schoolId,$uid,['Admin']);
+            $demoAction=$m[3]??'';
+            if ($demoAction==='' && $method==='GET') return [200,sf_demo_status($s,$schoolId)];
+            if ($demoAction==='seed' && $method==='POST') return [201,sf_demo_seed($s,$schoolId,$uid)];
+            if ($demoAction==='clear' && $method==='POST') {
+                if (($payload['confirm']??null)!=='CLEAR DEMO') sf_fail(422,'Type CLEAR DEMO to confirm');
+                return [200,sf_demo_clear($s,$schoolId)];
+            }
+            sf_fail(404,'Not found');
+        }
         if ($area==='members' && $itemId===null) {
             if ($method==='GET') {
                 $rows=[];
