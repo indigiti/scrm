@@ -40,7 +40,7 @@ foreach (['Authorization'=>'authorization','Idempotency-Key'=>'idempotency-key']
 }
 try {
     $store=new SchoolFlowStore();
-    [$status,$data]=sf_handle($_SERVER['REQUEST_METHOD']??'GET',$path, $payload,$headers, $_SERVER['REMOTE_ADDR']??'unknown',$store);
+    [$status,$data]=sf_handle($_SERVER['REQUEST_METHOD']??'GET',$path . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING']!=='' ? '?'.$_SERVER['QUERY_STRING'] : ''), $payload,$headers, $_SERVER['REMOTE_ADDR']??'unknown',$store);
     sf_json($data,$status);
 } catch (SFError $e) {sf_json(['detail'=>$e->getMessage()],$e->httpStatus);}
 catch(Throwable $e){error_log('SchoolFlow internal error (message redacted)');sf_json(['detail'=>'Server error; check private storage permissions'],500);}

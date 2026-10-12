@@ -25,6 +25,7 @@ jobs:
           php tests/test_setup.php
           php tests/test_web_setup.php
           php tests/test_demo.php
+          php tests/test_audit.php
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: HTTP JSON object regression test
