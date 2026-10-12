@@ -53,17 +53,16 @@ Do not upload `dist/` into Git; the workflow generates the public-only payload.
 2. Ensure the DigiOps deployment extracts artifact contents into `public_html/scrm/` such that `public_html/scrm/index.php` exists. In particular, **do not deploy the artifact as an extra nested folder** `public_html/scrm/digiops-release/`.
 3. Ensure PHP can create and write `private_html/scrm/data` (or create it with owner permissions, **not** mode `777`). The directory must not be publicly accessible or included in GitHub release artifacts.
 4. Exclude `/scrm/*` from all **Varnish / reverse-proxy caching**, particularly `/scrm/api/*` and `/scrm/health`. Ensure the `Authorization` header is forwarded to PHP. The app sends `Cache-Control: private, no-store`.
-5. From the Cloudways application **SSH terminal** create the first administrator. Do not paste a password into the process arguments or shell history:
+5. Open `https://YOUR_CLOUDWAYS_DOMAIN/scrm/`. If the app has no users, it displays **Create first administrator** instead of a sign-in form. To prevent strangers claiming your admin account, generate a one-time bootstrap code via Cloudways SSH, then enter it in the form along with your school name, name, email and password (12+ characters):
 
    ```bash
    cd ~/applications/YOUR_CLOUDWAYS_APP
-   read -rs -p 'New admin password: ' SCHOOLFLOW_ADMIN_PASSWORD; echo
-   export SCHOOLFLOW_ADMIN_PASSWORD
-   php public_html/scrm/index.php create-admin admin@example.com 'School Admin' 'My School'
-   unset SCHOOLFLOW_ADMIN_PASSWORD
+   php public_html/scrm/index.php setup-code
    ```
 
-   The first-admin command works only before any user has been created; it does **not** reset passwords or create a second initial admin. Passwords must be at least 12 characters. There are **no default logins**.
+   **Keep the printed setup code private.** Only a SHA-256 hash is stored server-side in `private_html/scrm/data/store.json`; the raw code is never returned over HTTP or included in the release. Running `setup-code` again before initialization rotates the code. The creation endpoint works only while the store has no users; it consumes the code atomically and signs the administrator in. After initialization, visitors see the standard **Sign in** page, and attempts to register another first administrator are rejected. The setup endpoint cannot reset an existing account.
+
+   **Optional headless setup:** You can still create the administrator entirely over SSH by using `SCHOOLFLOW_ADMIN_PASSWORD` and `php public_html/scrm/index.php create-admin admin@example.com 'School Admin' 'My School'`. Never put a password in shell arguments or GitHub workflows.
 6. Open `https://YOUR_CLOUDWAYS_DOMAIN/scrm/` (or your domain's `/scrm/` path), sign in and create staff, schools and website integrations.
 7. Verify `https://YOUR_CLOUDWAYS_DOMAIN/scrm/health` responds, then verify login and WordPress lead capture using a test enquiry before using real family records.
 

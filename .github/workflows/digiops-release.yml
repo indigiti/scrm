@@ -20,7 +20,9 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' phpfile; do php -l "$phpfile"; done < <(find app_private bin public_html tests tools wordpress -name '*.php' -print0)
       - name: API smoke tests
-        run: php tests/test_smoke.php
+        run: |
+          php tests/test_smoke.php
+          php tests/test_setup.php
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: Validate bundled gateway
