@@ -114,3 +114,15 @@ This is intended for modest usage on a single Cloudways PHP server. File-backed 
 Before processing actual pupil or guardian details, ensure TLS, backups with restore tests, proper permissions, school privacy and consent policies, account recovery/MFA, additional abuse protection, and a security/privacy review. At-rest data is **not encrypted by the app**. Avoid putting secrets or school enquiry data in a public repository or GitHub Actions artifacts.
 
 **Deployment status:** The GitHub build creates a deployable artifact; clicking Deploy in DigiOps is a separate step. Do not assume the CRM is live until DigiOps reports successful deployment and the public URL is checked.
+
+## Administrator demo-data controls
+
+On the **Dashboard**, an authenticated administrator can select **Add demo data** to create 18 clearly marked fictional enquiries, example follow-ups, and three **disabled** demo website sources. The sample enquiries cover all admissions pipeline stages and use non-routable `example.invalid` domains and synthetic zero-prefixed telephone numbers. The operation is idempotent: an existing set must be cleared before adding a new one. No dummy staff credentials are generated.
+
+**Clear demo data** requires typing `CLEAR DEMO`, deletes only records explicitly marked `is_demo` and their lead activities, and leaves real enquiries, registered staff, actual websites, login sessions and other schools untouched. A demo website with a real lead linked to it is deliberately retained to avoid orphaning real leads. Both endpoints enforce the Admin role server-side and are scoped to the selected school.
+
+- `GET /scrm/api/schools/{id}/demo-data` — get demo record counts (Admin only)
+- `POST /scrm/api/schools/{id}/demo-data/seed` — add demo records (Admin only)
+- `POST /scrm/api/schools/{id}/demo-data/clear` with `{"confirm":"CLEAR DEMO"}` — remove only demo records (Admin only)
+
+No sample enquiries are imported automatically on deployment; the admin clicks the button for the school where examples are wanted.

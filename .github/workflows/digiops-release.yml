@@ -24,6 +24,7 @@ jobs:
           php tests/test_smoke.php
           php tests/test_setup.php
           php tests/test_web_setup.php
+          php tests/test_demo.php
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: CSP / external-script regression check
