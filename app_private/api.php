@@ -124,8 +124,46 @@ function sf_json(mixed $result, int $status=200): never {
     exit;
 }
 
+/**
+ * One-time browser bootstrap: verify a minimal-permission GitHub token against the
+ * immutable GitHub user ID of the owner of indigiti/scrm. Token is never persisted.
+ */
+function sf_github_owner_verified(string $token): bool {
+    // Fine-grained GitHub PATs can call GET /user without repository permissions.
+    if (!preg_match('/^github_pat_[A-Za-z0-9_]{30,240}$/D', $token)) {
+        sf_fail(422, 'Use a fine-grained GitHub personal access token (github_pat_...).');
+    }
+    if (!function_exists('curl_init')) sf_fail(503, 'The server PHP cURL extension is required for GitHub verification.');
+    $ch = curl_init('https://api.github.com/user');
+    if ($ch === false) sf_fail(503, 'GitHub verification is not available.');
+    try {
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPGET => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/vnd.github+json',
+                'Authorization: Bearer ' . $token,
+                'User-Agent: SchoolFlow-First-Admin',
+                'X-GitHub-Api-Version: 2022-11-28',
+            ],
+        ]);
+        $body = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    } finally {curl_close($ch);}
+    if ($body === false) sf_fail(503, 'GitHub is temporarily unreachable. Please retry.');
+    if ($status !== 200) sf_fail(403, 'GitHub could not verify this fine-grained token.');
+    $profile = json_decode($body, true);
+    // ID is more stable than a mutable username. indigiti GitHub owner id = 34906944.
+    return is_array($profile) && ($profile['id'] ?? null) === 34906944;
+}
+
 /** Route return form: [HTTP status, data]. All mutations run inside exclusive file lock. */
-function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store): array {
+function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     // Public first-run discovery contains no secrets. Setup is available only for a truly empty store.
@@ -136,12 +174,28 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         });
     }
     if ($path === '/api/setup/admin' && $method === 'POST') {
-        return $store->transaction(static function (array &$s) use ($payload): array {
-            // The exclusive store lock enforces single-use even for concurrent submissions.
+        // Count every attempt BEFORE external verification; even failed requests are rate limited.
+        $store->transaction(static function (array &$s) use ($ip): void {
             if (!empty($s['users'])) sf_fail(409, 'Setup is already complete. Please sign in.');
-            $code = sf_text($payload, 'setup_code', 128, 12);
-            if (empty($s['setup_code_hash']) || !hash_equals($s['setup_code_hash'], sf_hash($code))) {
-                sf_fail(403, 'Incorrect setup code. Generate it using Cloudways SSH.');
+            sf_limit($s, 'first-admin:' . hash('sha256', $ip), 6, 900);
+        }, true);
+        $github = isset($payload['github_token']) && $payload['github_token'] !== '';
+        if ($github) {
+            $token = sf_text($payload, 'github_token', 255, 40);
+            // In production this always calls GitHub over HTTPS. Callback injection is
+            // provided solely for isolated tests of the first-admin state machine.
+            $verifier = $ownerVerifier ?? 'sf_github_owner_verified';
+            if ($verifier($token) !== true) sf_fail(403, 'GitHub verification requires the indigiti repository owner.');
+        }
+        return $store->transaction(static function (array &$s) use ($payload, $github): array {
+            // This second locked check prevents a concurrent request creating another admin.
+            if (!empty($s['users'])) sf_fail(409, 'Setup is already complete. Please sign in.');
+            if (!$github) {
+                // Keep legacy SSH setup-code support for installations already using it.
+                $code = sf_text($payload, 'setup_code', 128, 12);
+                if (empty($s['setup_code_hash']) || !hash_equals($s['setup_code_hash'], sf_hash($code))) {
+                    sf_fail(403, 'Incorrect setup code. Use GitHub verification or Cloudways SSH.');
+                }
             }
             $name = sf_text($payload, 'name', 140, 2);
             $school = sf_text($payload, 'school_name', 140, 3);
@@ -157,10 +211,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $s['schools'][] = $schoolRow;
             $s['memberships'][] = ['school_id'=>$schoolRow['id'],'user_id'=>$user['id'],'role'=>'Admin'];
             unset($s['setup_code_hash']);
-            $token = bin2hex(random_bytes(40));
+            $sessionToken = bin2hex(random_bytes(40));
             $expires = time() + SF_TTL;
-            $s['sessions'][] = ['token_hash'=>sf_hash($token),'user_id'=>$user['id'],'expires_at'=>$expires];
-            return [201, ['token'=>$token,'expires_at'=>gmdate('Y-m-d\TH:i:s+00:00',$expires)]];
+            $s['sessions'][] = ['token_hash'=>sf_hash($sessionToken),'user_id'=>$user['id'],'expires_at'=>$expires];
+            return [201, ['token'=>$sessionToken,'expires_at'=>gmdate('Y-m-d\TH:i:s+00:00',$expires)]];
         }, true);
     }
     if ($path === '/api/auth/login' && $method === 'POST') {
