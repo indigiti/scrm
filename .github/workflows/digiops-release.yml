@@ -1,0 +1,42 @@
+name: DigiOps Release - SchoolFlow CRM
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: PHP version
+        run: php -v
+      - name: PHP source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' phpfile; do php -l "$phpfile"; done < <(find app_private bin public_html tests tools wordpress -name '*.php' -print0)
+      - name: API smoke tests
+        run: php tests/test_smoke.php
+      - name: Build DigiOps public payload
+        run: php tools/build-digiops.php
+      - name: Validate bundled gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l dist/digiops-release/index.php
+          test -f dist/digiops-release/.htaccess
+          test -f dist/digiops-release/static/app.js
+          ! grep -q '/static/app.js' dist/digiops-release/static/index.html || grep -q '/scrm/static/app.js' dist/digiops-release/static/index.html
+          ! find dist/digiops-release -type f \( -name '*.json' -o -name '*password*' -o -name '*.env' \) | grep .
+      - name: Upload DigiOps deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digiops-release
+          path: dist/digiops-release/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

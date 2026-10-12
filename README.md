@@ -1,110 +1,102 @@
-# SchoolFlow — Cloudways PHP Enquiry CRM
+# SchoolFlow CRM — DigiOps / Cloudways PHP deployment
 
-**PHP-only, no Python and no database service required.** This is a self-hosted, multi-user School Enquiry Management CRM using the same UI as the earlier prototype. It captures enquiries from many WordPress sites, isolates schools, assigns counsellors, schedules follow-ups and tracks admission stages.
+This repository contains the **PHP-only, database-free** School Enquiry CRM. It supports multiple schools, authenticated staff, counselling and admission stages, enquiries from many WordPress websites, staff assignments, notes and follow-ups. Records live in locked JSON files; MariaDB can be added later without changing the intake API.
 
-**Technology:** PHP **8.2+**, HTML, CSS, vanilla JavaScript, flat JSON-file persistence. MariaDB **is optional for future scaling**, not used by this release. PHP's native password hashing and secure random-number functions are required (standard on Cloudways PHP).
+## DigiOps settings (already configured)
 
-## Cloudways deployment (custom PHP application)
+| Setting | Value |
+| --- | --- |
+| GitHub repository | `indigiti/scrm` |
+| Release branch | `main` |
+| Workflow artifact | **`digiops-release`** |
+| Browser route | **`/scrm/`** |
+| Public deploy folder | **`public_html/scrm/`** |
+| Private runtime folder | **`private_html/scrm/`** |
 
-1. In Cloudways create/select a **PHP Custom App** (prefer an application separate from your existing WordPress site), configure a domain such as `crm.example.com`, and enable HTTPS in the Cloudways SSL settings.
-2. Using the Cloudways application SFTP/SSH account, upload the contents of this package **to the application root**, with the following directory arrangement:
+**Do not deploy the whole repository directly to `public_html/scrm/`.** The repository has private PHP source, tests and WordPress connector files. GitHub Actions builds a **public-only release artifact** containing exactly:
 
-   ```text
-   applications/YOUR_APP/
-   ├── public_html/                 ← the ONLY web-accessible directory
-   │   ├── .htaccess                ← Apache rewrite rules for /api/…
-   │   ├── index.php                ← API + dashboard gateway
-   │   ├── router.php               ← local PHP built-in server only
-   │   └── static/{index.html,app.js,style.css}
-   ├── app_private/                ← OUTSIDE public_html
-   │   ├── api.php                  ← PHP API and role checks
-   │   ├── store.php                ← locked file persistence layer
-   │   └── data/                    ← created automatically at first use
-   ├── bin/create-admin.php
-   ├── wordpress/schoolflow-contact-form-7.php
-   └── tests/test_smoke.php
-   ```
-
-   **Never place `app_private`, backups, API secrets, or `bin` inside `public_html`**. This is more secure than relying on `.htaccess` protection, especially with Nginx in front of Apache. Cloudways documents keeping sensitive files above `public_html`. If needed, set `SCHOOLFLOW_DATA_DIR` to a writable **non-public absolute path** accessible to the web PHP process and PHP CLI account.
-3. Ensure PHP has write permission **only to `app_private/data/`** (normally PHP will create it, if `app_private` is writable). Protect the parent and data directory against reads by other tenants/users. The application saves its database-like records in `app_private/data/store.json` with a process-wide `flock()` on `store.lock`. If the directory is unwritable, the API returns HTTP 500; **do not** fix by making it world-writable (`777`). Use the same filesystem for all PHP workers.
-4. Disable Varnish caching for the CRM (or explicitly bypass `/api/*`, `/health` and authenticated responses); do not cache any enrolment/personal-data endpoints. Confirm PHP sends `Authorization` headers to FastCGI/PHP, and that `.htaccess` rewrites `/api/*` to `index.php`.
-5. Create the initial admin using **SSH/Cloudways terminal** in the package root. Enter the password **without putting it in your shell history**:
-
-   ```bash
-   cd ~/applications/YOUR_APP
-   read -rs -p 'New CRM admin password: ' SCHOOLFLOW_ADMIN_PASSWORD; echo
-   export SCHOOLFLOW_ADMIN_PASSWORD
-   php bin/create-admin.php admin@example.com 'School Admin' 'My School'
-   unset SCHOOLFLOW_ADMIN_PASSWORD
-   ```
-
-   Use a unique admin password of at least 12 characters. Only the **first** admin can be bootstrapped this way, and there are **no default accounts**. For the fastest setup the app can also run locally:
-
-   ```bash
-   php -S 127.0.0.1:8100 -t public_html public_html/router.php
-   ```
-
-6. Open `https://crm.example.com/`, sign in, create staff in **Team** and create a Website Source in **Websites & Forms** for each WordPress or landing-page domain. Copy each source key once; it is not displayed again.
-
-## Roles and data isolation
-
-- **Admin:** see and edit school leads; manage staff, website sources, and API keys; create another school workspace.
-- **Admissions:** see and edit all leads belonging to their school.
-- **Counsellor:** see and edit only leads assigned to their account. Newly submitted enquiries are auto-assigned to the least-loaded counsellor.
-
-Every request validates that the logged-in user belongs to the selected school. A website API key identifies **one** school; the client may not supply its own school ID. Existing staff accounts cannot be silently attached to another school; invitation/acceptance is reserved for a later release.
-
-## Connect WordPress (Contact Form 7)
-
-Copy `wordpress/schoolflow-contact-form-7.php` to a WordPress website's `wp-content/plugins/schoolflow-cf7/` directory and activate the plugin. On the **WordPress** site, keep credentials server-side in `wp-config.php`:
-
-```php
-define('SCHOOLFLOW_CRM_URL', 'https://crm.example.com');
-define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_COPY_THIS_WEBSITE_KEY');
+```
+index.php                  # Self-contained PHP API + dashboard gateway
+.htaccess                 # Apache routing at /scrm/
+static/index.html         # Browser shell
+static/app.js             # CRM frontend
+static/style.css          # CRM styles
 ```
 
-Create a Contact Form 7 form with names: `student_name`, `parent_name`, `phone`, `grade`, `email`, `message`, `consent`. Require a **guardian consent checkbox**. The server-side plugin posts to the PHP CRM over HTTPS. Other WordPress plugins or custom websites can send the same payload from **server-side** code; never expose the key in JavaScript or HTML.
+`index.php` in the artifact is built from the editable `app_private/store.php`, `app_private/api.php`, and `public_html/index.php` sources. The bundled PHP contains no API keys, user passwords or stored data. **Never include JSON runtime records in a release.**
 
-### Intake API (compatible with the previous Python version)
+The app writes its persistent records to `private_html/scrm/data/store.json`, with an adjacent `store.lock`. It determines that location relative to the deployed `public_html/scrm/index.php` and preserves data across new releases. Requires a **single writable shared filesystem** and PHP 8.2+. No Python, Docker, MySQL or MariaDB installation is required.
 
-```http
-POST https://crm.example.com/api/v1/inbound-leads
-Authorization: Bearer sfsite_YOUR_PRIVATE_WEBSITE_KEY
-Idempotency-Key: unique-form-submission-123456
-Content-Type: application/json
+## Build and release through GitHub Actions
 
-{
-  "student_name": "Example Student",
-  "parent_name": "Example Guardian",
-  "phone": "+91 9876543210",
-  "class": "Grade 5",
-  "email": "guardian@example.com",
-  "message": "Please share admission details",
-  "utm_source": "facebook",
-  "utm_campaign": "admissions-2026",
-  "consent": true
-}
-```
+On push to `main` (or manual *Run workflow*), `.github/workflows/digiops-release.yml`:
 
-A new submission responds with `201 {"id":1,"duplicate_submission":false}`. The same `Idempotency-Key` for the same site returns `200 {"id":1,"duplicate_submission":true}` without creating another enquiry. Another submission with the same phone number is retained and flagged `duplicate_of`. Keys are unique per source and can be rotated/disabled.
+1. Lints PHP files and runs the PHP API smoke tests.
+2. Generates and lints a standalone `dist/digiops-release/index.php` and copies only public assets.
+3. Publishes a GitHub Actions artifact named **`digiops-release`** (including hidden `.htaccess`).
 
-## Local tests (PHP only)
+DigiOps should show a successful build after **Check update** and then be able to deploy this artifact into `public_html/scrm/`. **This GitHub workflow only builds and uploads the artifact.** It does **not** contact Cloudways or invoke the DigiOps Deploy button directly; deploy using DigiOps. If DigiOps requires a different internal archive layout, confirm its artifact contract before deployment.
+
+To reproduce locally:
 
 ```bash
 php tests/test_smoke.php
-find app_private bin public_html -name '*.php' -exec php -l {} \;
+php tools/build-digiops.php
+php -l dist/digiops-release/index.php
 ```
 
-## Storage, backup and migration
+Do not upload `dist/` into Git; the workflow generates the public-only payload.
 
-All users, schools, enquiries, notes, API key hashes and session hashes are in **one private JSON file**. Writes are serialized using `flock` and atomically replaced under a lock. This is practical for a small/medium initial deployment on **one Cloudways filesystem**. It is **not** a full relational database: it rewrites the entire data file per update, and will slow down as enquiries/activities grow. Do not use multiple servers or shared remote storage without reworking locking.
+## First Cloudways installation
 
-- Back up the entire private `data/` directory into access-controlled **encrypted** offsite storage; include `store.json` and test restores. Do not commit it to GitHub.
-- When load increases, replace `SchoolFlowStore` with a MariaDB repository/transaction layer and a one-time JSON import; the `/api/*` contract and WordPress connectors can remain unchanged. **Automatic MariaDB migration is not included.**
-- The JSON files are **not encrypted at rest by the application**. Guardian/student names and contact details are sensitive. Keep strict filesystem permissions and backups under access control.
+1. Enable **HTTPS** for the application and use a Cloudways PHP runtime version **8.2 or newer**.
+2. Ensure the DigiOps deployment extracts artifact contents into `public_html/scrm/` such that `public_html/scrm/index.php` exists. In particular, **do not deploy the artifact as an extra nested folder** `public_html/scrm/digiops-release/`.
+3. Ensure PHP can create and write `private_html/scrm/data` (or create it with owner permissions, **not** mode `777`). The directory must not be publicly accessible or included in GitHub release artifacts.
+4. Exclude `/scrm/*` from all **Varnish / reverse-proxy caching**, particularly `/scrm/api/*` and `/scrm/health`. Ensure the `Authorization` header is forwarded to PHP. The app sends `Cache-Control: private, no-store`.
+5. From the Cloudways application **SSH terminal** create the first administrator. Do not paste a password into the process arguments or shell history:
 
-## Production readiness limitations
+   ```bash
+   cd ~/applications/YOUR_CLOUDWAYS_APP
+   read -rs -p 'New admin password: ' SCHOOLFLOW_ADMIN_PASSWORD; echo
+   export SCHOOLFLOW_ADMIN_PASSWORD
+   php public_html/scrm/index.php create-admin admin@example.com 'School Admin' 'My School'
+   unset SCHOOLFLOW_ADMIN_PASSWORD
+   ```
 
-This MVP is **not** yet audited or deployed. Before admitting real student/guardian data, add monitoring, managed rate limiting beyond the simple in-file limits, account recovery and MFA, password policies, automated encrypted backups, disaster recovery tests, defined retention/deletion policies, legal/guardian consent copy, and security assessment. Use HTTPS everywhere. Admin self-service password reset and SMS/WhatsApp messages are not included.
+   The first-admin command works only before any user has been created; it does **not** reset passwords or create a second initial admin. Passwords must be at least 12 characters. There are **no default logins**.
+6. Open `https://YOUR_CLOUDWAYS_DOMAIN/scrm/` (or your domain's `/scrm/` path), sign in and create staff, schools and website integrations.
+7. Verify `https://YOUR_CLOUDWAYS_DOMAIN/scrm/health` responds, then verify login and WordPress lead capture using a test enquiry before using real family records.
 
-The previous Python/FastAPI version is superseded on the feature branch; the PHP release does **not** require Python, SQLite, Docker, or MariaDB to run.
+## Connect WordPress websites (Contact Form 7)
+
+Copy `wordpress/schoolflow-contact-form-7.php` from the repository to the WordPress site's `wp-content/plugins/schoolflow-cf7/` directory, then activate it. On **each** connected website, store the unique site API key server-side in `wp-config.php`, never in browser JavaScript or a public form:
+
+```php
+define('SCHOOLFLOW_CRM_URL', 'https://YOUR_CLOUDWAYS_DOMAIN/scrm');
+define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_UNIQUE_KEY_FROM_THE_CRM');
+```
+
+The plugin sends to `https://YOUR_CLOUDWAYS_DOMAIN/scrm/api/v1/inbound-leads` using the website-specific bearer token. Create a Contact Form 7 form with fields `student_name`, `parent_name`, `phone`, `grade`, `email`, `message` and required guardian `consent`. Each website has its own revocable key and the correct school is determined from that key (not from a public submitted school ID).
+
+Manual API example:
+
+```http
+POST /scrm/api/v1/inbound-leads HTTP/1.1
+Authorization: Bearer sfsite_THE_WEBSITE_SECRET
+Idempotency-Key: wordpress-submission-123456
+Content-Type: application/json
+
+{"student_name":"Example Student","parent_name":"Example Guardian","phone":"+91 9876543210","class":"Grade 5","consent":true}
+```
+
+Unique idempotency keys prevent duplicate submissions. A phone-number duplicate is tracked and flagged.
+
+## Data security, backups and MariaDB later
+
+All student, guardian, school and user records persist in **private JSON storage** with exclusive `flock()` locks and atomic writes. The runtime data is **not** included in the GitHub artifact, and a new deployment must **never** remove or overwrite `private_html/scrm/data`.
+
+This is intended for modest usage on a single Cloudways PHP server. File-backed JSON is not an enterprise data store: every write replaces the JSON document, and it does not support multiple servers without redesign. MariaDB can later replace `SchoolFlowStore` with an import of the JSON data; **MariaDB migration is not implemented** yet.
+
+Before processing actual pupil or guardian details, ensure TLS, backups with restore tests, proper permissions, school privacy and consent policies, account recovery/MFA, additional abuse protection, and a security/privacy review. At-rest data is **not encrypted by the app**. Avoid putting secrets or school enquiry data in a public repository or GitHub Actions artifacts.
+
+**Deployment status:** The GitHub build creates a deployable artifact; clicking Deploy in DigiOps is a separate step. Do not assume the CRM is live until DigiOps reports successful deployment and the public URL is checked.

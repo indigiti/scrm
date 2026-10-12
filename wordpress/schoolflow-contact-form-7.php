@@ -9,7 +9,7 @@ if (!defined('ABSPATH')) { exit; }
 
 /**
  * In wp-config.php (NEVER in the HTML of the public form):
- * define('SCHOOLFLOW_CRM_URL', 'https://crm.example.org');
+ * define('SCHOOLFLOW_CRM_URL', 'https://crm.example.org/scrm');
  * define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_PASTE_KEY');
  *
  * Your Contact Form 7 fields should be named:

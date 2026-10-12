@@ -5,7 +5,7 @@ declare(strict_types=1);
 final class SchoolFlowStore {
     private string $dir;
     public function __construct(?string $directory = null) {
-        $this->dir = $directory ?: (getenv('SCHOOLFLOW_DATA_DIR') ?: __DIR__ . '/data');
+        $this->dir = $directory ?: (getenv('SCHOOLFLOW_DATA_DIR') ?: (defined('SCHOOLFLOW_DEFAULT_DATA_DIR') ? SCHOOLFLOW_DEFAULT_DATA_DIR : __DIR__ . '/data'));
         if (!is_dir($this->dir) && !mkdir($this->dir, 0700, true) && !is_dir($this->dir)) {
             throw new RuntimeException('Cannot create private data directory');
         }
