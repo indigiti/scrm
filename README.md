@@ -90,6 +90,21 @@ Content-Type: application/json
 
 Unique idempotency keys prevent duplicate submissions. A phone-number duplicate is tracked and flagged.
 
+## Content Security Policy (CSP) diagnostics
+
+The CRM permits only **same-origin external JavaScript** through `script-src 'self' 'report-sample'`. The dashboard loads **`/scrm/static/app.js`** as an external file; it does not use inline `<script>` blocks or inline `onclick` handlers. **Do not disable CSP or add `unsafe-inline`** to silence an error.
+
+If Chrome reports `Executing inline script violates Content Security Policy`, and login / first-admin setup still function, the blocked script may have been injected by a browser extension (such as a password manager), Cloudways/DigiOps page customization, or a proxy. `report-sample` requests diagnostic samples of blocked content where supported; it does not permit execution.
+
+To isolate the origin:
+
+1. Try `/scrm/` in an Incognito browser window with extensions disabled.
+2. Open DevTools → **Console**. Click the CSP error to inspect the **source filename and line**; then use **Network** to confirm `/scrm/static/app.js` has status **200**.
+3. In **Network → Document → Response**, compare the served HTML with `public_html/static/index.html`. An additional inline `<script>` tag in the response indicates server/proxy injection. If this occurs, remove the injector or move its trusted JavaScript into a same-origin external file.
+4. Share the blocked script's source filename / line if it persists in a clean browser. Only allow a narrowly scoped script hash **after** identifying and reviewing its content. Do not whitelist an unknown hash merely because the browser suggests it.
+
+The GitHub release workflow runs `php tests/test_csp.php` to reject first-party inline script regressions in the **packaged** DigiOps artifact.
+
 ## Data security, backups and MariaDB later
 
 All student, guardian, school and user records persist in **private JSON storage** with exclusive `flock()` locks and atomic writes. The runtime data is **not** included in the GitHub artifact, and a new deployment must **never** remove or overwrite `private_html/scrm/data`.
