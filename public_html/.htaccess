@@ -1,0 +1,13 @@
+Options -Indexes
+DirectoryIndex index.php
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /scrm/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L,QSA]
+</IfModule>
+SetEnvIfNoCase Authorization "(.+)" HTTP_AUTHORIZATION=$1
+<IfModule mod_headers.c>
+Header always set Cache-Control "private, no-store"
+</IfModule>
