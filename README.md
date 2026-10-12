@@ -126,3 +126,9 @@ On the **Dashboard**, an authenticated administrator can select **Add demo data*
 - `POST /scrm/api/schools/{id}/demo-data/clear` with `{"confirm":"CLEAR DEMO"}` — remove only demo records (Admin only)
 
 No sample enquiries are imported automatically on deployment; the admin clicks the button for the school where examples are wanted.
+
+## Troubleshooting: Add demo data says “JSON object required”
+
+This error was fixed in the HTTP request parser. A legitimate empty JSON object `{}` is now accepted; JSON arrays such as `[]` are still rejected. The demo seed button deliberately submits `{}` because it does not require any parameters. The GitHub workflow runs `php tests/test_http_json.php` against the **built** release to prevent regressions.
+
+After DigiOps deploys the new `digiops-release` artifact, refresh `/scrm/` and select **Add demo data** again. Existing administrator accounts and actual enquiries are preserved.

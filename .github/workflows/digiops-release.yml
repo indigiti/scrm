@@ -27,6 +27,8 @@ jobs:
           php tests/test_demo.php
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
+      - name: HTTP JSON object regression test
+        run: php tests/test_http_json.php
       - name: CSP / external-script regression check
         run: php tests/test_csp.php
       - name: Validate bundled gateway
