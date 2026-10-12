@@ -23,9 +23,22 @@ $gateway = str_replace("__DIR__ . '/static/index.html'", "__DIR__ . '/static/ind
 
 $cli = <<<'CLI'
 if (PHP_SAPI === 'cli') {
-    // Run only from trusted Cloudways SSH: php public_html/scrm/index.php create-admin ...
+    // The browser cannot create an admin without a secret printed privately over Cloudways SSH.
+    if (($argv[1] ?? '') === 'setup-code' && $argc === 2) {
+        try {
+            $code = bin2hex(random_bytes(16));
+            (new SchoolFlowStore())->transaction(function (&$db) use ($code): void {
+                if (!empty($db['users'])) throw new RuntimeException('SchoolFlow is already initialized');
+                $db['setup_code_hash'] = sf_hash($code);
+            }, true);
+            echo "One-time SchoolFlow setup code (keep private): $code\n";
+            echo "Enter it in the Create First Admin form at /scrm/.\n";
+            exit(0);
+        } catch (Throwable $e) {fwrite(STDERR, "Setup code error: ".$e->getMessage()."\n");exit(1);}
+    }
+    // Legacy trusted SSH bootstrap is still available for a headless installation.
     if (($argv[1] ?? '') !== 'create-admin' || $argc !== 5) {
-        fwrite(STDERR, "Usage: php index.php create-admin admin@example.com 'Admin Name' 'School Name'\n");
+        fwrite(STDERR, "Usage: php index.php setup-code  OR  php index.php create-admin admin@example.com 'Admin Name' 'School Name'\n");
         exit(2);
     }
     $email=sf_email($argv[2]);$name=trim($argv[3]);$school=trim($argv[4]);

@@ -128,6 +128,41 @@ function sf_json(mixed $result, int $status=200): never {
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
+    // Public first-run discovery contains no secrets. Setup is available only for a truly empty store.
+    if ($path === '/api/setup/status' && $method === 'GET') {
+        return $store->transaction(static function (array $s): array {
+            return [200, ['needs_setup' => count($s['users']) === 0,
+                          'code_ready' => !empty($s['setup_code_hash']) && count($s['users']) === 0]];
+        });
+    }
+    if ($path === '/api/setup/admin' && $method === 'POST') {
+        return $store->transaction(static function (array &$s) use ($payload): array {
+            // The exclusive store lock enforces single-use even for concurrent submissions.
+            if (!empty($s['users'])) sf_fail(409, 'Setup is already complete. Please sign in.');
+            $code = sf_text($payload, 'setup_code', 128, 12);
+            if (empty($s['setup_code_hash']) || !hash_equals($s['setup_code_hash'], sf_hash($code))) {
+                sf_fail(403, 'Incorrect setup code. Generate it using Cloudways SSH.');
+            }
+            $name = sf_text($payload, 'name', 140, 2);
+            $school = sf_text($payload, 'school_name', 140, 3);
+            $email = sf_email(sf_text($payload, 'email', 254, 3));
+            $password = sf_text($payload, 'password', 1024, 12);
+            $confirm = sf_text($payload, 'confirm_password', 1024, 12);
+            if (!hash_equals($password, $confirm)) sf_fail(422, 'Passwords do not match');
+            $user = ['id'=>sf_id($s,'users'),'name'=>$name,'email'=>$email,
+                'password_hash'=>password_hash($password, PASSWORD_DEFAULT),
+                'active'=>true,'created_at'=>sf_time()];
+            $schoolRow = ['id'=>sf_id($s,'schools'),'name'=>$school,'created_at'=>sf_time()];
+            $s['users'][] = $user;
+            $s['schools'][] = $schoolRow;
+            $s['memberships'][] = ['school_id'=>$schoolRow['id'],'user_id'=>$user['id'],'role'=>'Admin'];
+            unset($s['setup_code_hash']);
+            $token = bin2hex(random_bytes(40));
+            $expires = time() + SF_TTL;
+            $s['sessions'][] = ['token_hash'=>sf_hash($token),'user_id'=>$user['id'],'expires_at'=>$expires];
+            return [201, ['token'=>$token,'expires_at'=>gmdate('Y-m-d\TH:i:s+00:00',$expires)]];
+        }, true);
+    }
     if ($path === '/api/auth/login' && $method === 'POST') {
         return $store->transaction(function (&$s) use ($payload,$ip) {
             sf_limit($s, 'login:' . hash('sha256',$ip), 12,900);
