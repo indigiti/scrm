@@ -105,6 +105,11 @@ To isolate the origin:
 
 The GitHub release workflow runs `php tests/test_csp.php` to reject first-party inline script regressions in the **packaged** DigiOps artifact.
 
+
+### If a previous login screen stays after deploying
+
+The DigiOps build now fingerprints `static/app.js` and `static/style.css` using a 12-character SHA-256 query (`?v=...`) in the packaged HTML. This makes each updated frontend asset fetch a new URL, even behind a browser/CDN cache. The PHP page itself sends `Cache-Control: private, no-store`. In Chrome DevTools → Network, confirm `/scrm/static/app.js?v=...` returns HTTP 200 and that `/scrm/api/setup/status` returns `{"needs_setup":true}` for a fresh installation. Avoid enabling `unsafe-inline`; CSP warnings about injected scripts may originate from extensions or an upstream HTML injector. If the error remains, disable **all** extensions (incognito does not always disable extensions that have been permitted there) and reload.
+
 ## Data security, backups and MariaDB later
 
 All student, guardian, school and user records persist in **private JSON storage** with exclusive `flock()` locks and atomic writes. The runtime data is **not** included in the GitHub artifact, and a new deployment must **never** remove or overwrite `private_html/scrm/data`.

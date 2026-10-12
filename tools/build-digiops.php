@@ -68,6 +68,20 @@ if (file_put_contents($output . '/index.php', $built) === false) throw new Runti
 foreach (['.htaccess','static/app.js','static/index.html','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
 }
+// The public URL remains stable (/scrm/), but JavaScript/CSS must be versioned.
+// This prevents a previous CRM UI from remaining cached after a DigiOps deploy.
+$htmlPath = $output . '/static/index.html';
+$html = file_get_contents($htmlPath);
+if (!is_string($html)) throw new RuntimeException('Cannot read packaged HTML');
+foreach (['static/app.js', 'static/style.css'] as $asset) {
+    $hash = hash_file('sha256', $output . '/' . $asset);
+    if (!is_string($hash)) throw new RuntimeException('Cannot hash asset: ' . $asset);
+    $unversioned = '/scrm/' . $asset . '"';
+    if (substr_count($html, $unversioned) !== 1) throw new RuntimeException('Expected a single asset reference: ' . $asset);
+    $versioned = '/scrm/' . $asset . '?v=' . substr($hash, 0, 12) . '"';
+    $html = str_replace($unversioned, $versioned, $html);
+}
+if (file_put_contents($htmlPath, $html) === false) throw new RuntimeException('Cannot write versioned HTML');
 $exposedFiles = [];
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($output, FilesystemIterator::SKIP_DOTS));
 foreach($iterator as $file) $exposedFiles[] = str_replace($output.'/','',$file->getPathname());
