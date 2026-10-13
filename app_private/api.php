@@ -138,6 +138,8 @@ function sf_lead_view(array $s, array $lead): array {
     $lead['source_name'] = $source['name'] ?? null;
     $lead['source_domain'] = $source['domain'] ?? null;
     $lead['assigned_name'] = $owner['name'] ?? null;
+    $lead['last_contact_at'] = $lead['last_contact_at'] ?? '';
+    $lead['last_call_outcome'] = $lead['last_call_outcome'] ?? '';
     return $lead;
 }
 function sf_lead_allowed(array $s, int $schoolId, int $leadId, int $userId, string $role): array {
@@ -161,12 +163,49 @@ function sf_auto_owner(array $s, int $schoolId): ?int {
     asort($loads, SORT_NUMERIC);
     return (int)array_key_first($loads);
 }
+/** Assignment can be configured per school; default remains the prior least-loaded policy. */
+function sf_assignment_owner(array &$s, int $schoolId): ?int {
+    $policy = $s['assignment_modes'][(string)$schoolId] ?? 'least_loaded';
+    if ($policy === 'manual') return null;
+    if ($policy !== 'round_robin') return sf_auto_owner($s,$schoolId);
+    $people=[];
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor') {
+        $user=sf_user($s,$m['user_id']);if ($user && $user['active']) $people[]=$user['id'];
+    }
+    sort($people,SORT_NUMERIC);
+    if (!$people) return null;
+    $last=(int)($s['assignment_cursors'][(string)$schoolId]??0);
+    $next=$people[0];
+    foreach($people as $id) if($id>$last){$next=$id;break;}
+    $s['assignment_cursors'][(string)$schoolId]=$next;
+    return $next;
+}
+function sf_visible_leads(array $s,int $schoolId,int $uid,string $role): array {
+    return array_values(array_filter($s['leads'],fn($l)=>$l['school_id']===$schoolId&&($role!=='Counsellor'||$l['assigned_to']===$uid)));
+}
+function sf_valid_datetime(string $v): string {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/D',$v)) sf_fail(422,'Use YYYY-MM-DDTHH:MM local time');
+    sf_date(substr($v,0,10));return $v;
+}
+function sf_parent_key(array $l): string {return (string)($l['normalized_phone']??preg_replace('/\D/','',(string)($l['phone']??'')));}
+function sf_family_view(array $s,int $schoolId,array $lead,int $uid,string $role): array {
+    $key=sf_parent_key($lead);$children=[];
+    foreach(sf_visible_leads($s,$schoolId,$uid,$role) as $l) if($key!=='' && sf_parent_key($l)===$key) {
+        $children[]=['id'=>$l['id'],'name'=>$l['name'],'grade'=>$l['grade'],'status'=>$l['status']];
+    }
+    return ['guardian'=>$lead['guardian'],'phone'=>$lead['phone'],'email'=>$lead['email'],
+        'children'=>$children,'count'=>count($children)];
+}
+function sf_visit_view(array $v,array $s): array {
+    $l=sf_find($s['leads'],$v['lead_id']);$v['student_name']=$l['name']??'Unknown';
+    $staff=isset($v['staff_id'])&&$v['staff_id']!==null?sf_user($s,(int)$v['staff_id']):null;$v['staff_name']=$staff['name']??'Unassigned';return $v;
+}
 function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $actor, ?int $assigned, string $action): array {
     $name = sf_text($p,'student_name',140,2);$guardian = sf_text($p,'parent_name',140,2);
     $phone = sf_phone(sf_text($p,'phone',40,6));$norm = preg_replace('/\D/','',$phone);
     $duplicate = null;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && $lead['normalized_phone'] === $norm) { $duplicate = $lead['id']; break; }
-    if ($assigned === null) $assigned = sf_auto_owner($s, $schoolId);
+    if ($assigned === null) $assigned = sf_assignment_owner($s, $schoolId);
     $lead = ['id'=>sf_id($s,'leads'),'school_id'=>$schoolId,'site_id'=>$siteId,'name'=>$name,'guardian'=>$guardian,
         'phone'=>$phone,'normalized_phone'=>$norm,'email'=>sf_text($p,'email',160),'grade'=>sf_text($p,'grade',80),
         'message'=>sf_text($p,'message',2000),'utm_source'=>sf_text($p,'utm_source',140),'utm_campaign'=>sf_text($p,'utm_campaign',140),
@@ -433,7 +472,104 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
-        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes|audit|view))?$#D',$path,$m)) sf_fail(404,'Not found');
+        // CRM 2.0 school-scoped modules: backwards compatible with existing store.json.
+        if (preg_match('#^/api/schools/(\d+)/(assignment|visits|families|templates|analytics)(?:/(\d+))?(?:/(siblings))?$#D',$path,$ext)) {
+            $sid=(int)$ext[1];$kind=$ext[2];$rid=isset($ext[3])?(int)$ext[3]:null;
+            $role=sf_membership($s,$sid,$uid);
+            $visible=sf_visible_leads($s,$sid,$uid,$role);
+            if($kind==='assignment') {
+                if($method==='GET')return [200,['mode'=>$s['assignment_modes'][(string)$sid]??'least_loaded','options'=>['least_loaded','round_robin','manual']]];
+                sf_membership($s,$sid,$uid,['Admin']);
+                if($method==='PATCH' && $rid===null) {
+                    $mode=sf_text($payload,'mode',30,3);
+                    if(!in_array($mode,['least_loaded','round_robin','manual'],true))sf_fail(422,'Invalid assignment mode');
+                    $s['assignment_modes'][(string)$sid]=$mode;
+                    sf_event($s,$sid,null,$uid,'assignment_policy_changed',$mode);
+                    return [200,['mode'=>$mode]];
+                }
+            }
+            if($kind==='families') {
+                if($method==='GET' && $rid===null) {
+                    $family=[];foreach($visible as $l){$key=sf_parent_key($l);if($key!==''&&!isset($family[$key]))$family[$key]=sf_family_view($s,$sid,$l,$uid,$role);}
+                    return [200,array_values($family)];
+                }
+                if($method==='POST'&&$rid!==null&&($ext[4]??'')==='siblings') {
+                    $parent=sf_lead_allowed($s,$sid,$rid,$uid,$role);
+                    $p=['student_name'=>sf_text($payload,'student_name',140,2),
+                        'parent_name'=>$parent['guardian'],'phone'=>$parent['phone'],
+                        'email'=>$parent['email'],'grade'=>sf_text($payload,'grade',80),
+                        'message'=>'Sibling enquiry','consent'=>$parent['consent']];
+                    $created=sf_create_lead($s,$sid,$p,$parent['site_id'],$uid,$parent['assigned_to'],'sibling_enquiry_created');
+                    sf_event($s,$sid,$parent['id'],$uid,'sibling_linked','Sibling enquiry #'.$created['id']);
+                    return [201,$created];
+                }
+            }
+            if($kind==='visits') {
+                $s['visits']=$s['visits']??[];
+                if($method==='GET'&&$rid===null) {
+                    $visibleIds=array_column($visible,'id');$rows=[];
+                    foreach($s['visits'] as $v)if($v['school_id']===$sid&&in_array($v['lead_id'],$visibleIds,true))$rows[]=sf_visit_view($v,$s);
+                    usort($rows,fn($a,$b)=>strcmp($a['starts_at'],$b['starts_at']));
+                    return [200,array_slice($rows,0,2000)];
+                }
+                if($method==='POST'&&$rid===null){
+                    $lid=(int)($payload['lead_id']??0);$l=sf_lead_allowed($s,$sid,$lid,$uid,$role);
+                    $start=sf_valid_datetime(sf_text($payload,'starts_at',16,16));
+                    $staff=sf_validate_assignment($s,$sid,$payload['staff_id']??($l['assigned_to']??null));
+                    if($role==='Counsellor'&&$staff!==$uid)sf_fail(403,'Counsellors cannot book another staff member');
+                    $visit=['id'=>sf_id($s,'visits'),'school_id'=>$sid,'lead_id'=>$lid,'staff_id'=>$staff,
+                        'starts_at'=>$start,'purpose'=>sf_text($payload,'purpose',120,2),
+                        'status'=>'Scheduled','created_at'=>sf_time()];
+                    $s['visits'][]=$visit;sf_event($s,$sid,$lid,$uid,'visit_booked',$start.' · '.$visit['purpose']);
+                    return [201,sf_visit_view($visit,$s)];
+                }
+                if($method==='PATCH'&&$rid!==null){
+                    foreach($s['visits'] as &$v)if($v['id']===$rid&&$v['school_id']===$sid){
+                        sf_lead_allowed($s,$sid,$v['lead_id'],$uid,$role);
+                        $status=sf_text($payload,'status',30,3);
+                        if(!in_array($status,['Scheduled','Completed','No Show','Cancelled'],true))sf_fail(422,'Invalid visit status');
+                        $v['status']=$status;sf_event($s,$sid,$v['lead_id'],$uid,'visit_status_changed',$status);
+                        return [200,sf_visit_view($v,$s)];
+                    }unset($v);sf_fail(404,'Visit not found');
+                }
+            }
+            if($kind==='templates') {
+                $s['email_templates']=$s['email_templates']??[];
+                if($method==='GET'&&$rid===null){
+                    $r=array_values(array_filter($s['email_templates'],fn($t)=>$t['school_id']===$sid));
+                    if(!$r)$r=[['id'=>0,'school_id'=>$sid,'title'=>'Admissions follow-up','subject'=>'Following up on your school enquiry',
+                        'body'=>'Hello {parent},\n\nThank you for your interest in {school} for {student}. Please reply if you would like to schedule a visit.\n\nAdmissions Team']];
+                    return [200,$r];
+                }
+                sf_membership($s,$sid,$uid,['Admin']);
+                if($method==='POST'&&$rid===null){
+                    $t=['id'=>sf_id($s,'email_templates'),'school_id'=>$sid,'title'=>sf_text($payload,'title',80,2),
+                        'subject'=>sf_text($payload,'subject',180,2),'body'=>sf_text($payload,'body',4000,2)];
+                    $s['email_templates'][]=$t;sf_event($s,$sid,null,$uid,'email_template_created','Template #'.$t['id']);return [201,$t];
+                }
+                if($method==='PATCH'&&$rid!==null){
+                    foreach($s['email_templates'] as &$t)if($t['school_id']===$sid&&$t['id']===$rid){
+                        foreach(['title'=>80,'subject'=>180,'body'=>4000] as $f=>$max)if(array_key_exists($f,$payload))$t[$f]=sf_text($payload,$f,$max,2);
+                        sf_event($s,$sid,null,$uid,'email_template_updated','Template #'.$rid);return [200,$t];
+                    }unset($t);sf_fail(404,'Template not found');
+                }
+            }
+            if($kind==='analytics'&&$method==='GET'){
+                $total=count($visible);$enrolled=0;$pending=0;$due=0;$stage=[];$source=[];$byStaff=[];
+                foreach($visible as $l){
+                    $stage[$l['status']]=($stage[$l['status']]??0)+1;
+                    $source[(string)($l['site_id']??'manual')]=($source[(string)($l['site_id']??'manual')]??0)+1;
+                    $byStaff[(string)($l['assigned_to']??'unassigned')]=($byStaff[(string)($l['assigned_to']??'unassigned')]??0)+1;
+                    if($l['status']==='Enrolled')$enrolled++;
+                    if($l['status']==='New'&&empty($l['last_contact_at']))$pending++;
+                    if(!empty($l['followup_date'])&&$l['followup_date']<=gmdate('Y-m-d')&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
+                }
+                return [200,['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
+                    'first_contact_pending'=>$pending,'followups_due'=>$due,'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff]];
+            }
+            sf_fail(404,'Not found');
+        }
+        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes|audit|view|calls|contact-action))?$#D',$path,$m)) sf_fail(404,'Not found');
         $schoolId=(int)$m[1];$area=$m[2];$itemId=isset($m[3]) && $m[3]!==''?(int)$m[3]:null;
         $sub=$m[4]??'';
         $role=sf_membership($s,$schoolId,$uid);
@@ -559,7 +695,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         $a['actor_name']=$actor['name']??null;$activities[]=$a;
                     }
                     usort($activities,fn($a,$b)=>$b['id']<=>$a['id']);
-                    return [200,['lead'=>sf_lead_view($s,$lead),'activities'=>array_slice($activities,0,100),
+                    $calls=array_values(array_filter($s['calls']??[],fn($v)=>$v['school_id']===$schoolId&&$v['lead_id']===$itemId));
+                    $visits=array_values(array_filter($s['visits']??[],fn($v)=>$v['school_id']===$schoolId&&$v['lead_id']===$itemId));
+                    usort($calls,fn($a,$b)=>$b['id']<=>$a['id']);
+                    return [200,['lead'=>sf_lead_view($s,$lead),'family'=>sf_family_view($s,$schoolId,$lead,$uid,$role),
+                        'calls'=>array_slice($calls,0,50),'visits'=>array_map(fn($v)=>sf_visit_view($v,$s),$visits),
+                        'activities'=>array_slice($activities,0,100),
                         'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
                 }
                 if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
@@ -582,6 +723,31 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         $l['updated_at']=sf_time();$updated=$l;break;
                     } unset($l);
                     return [200,sf_lead_view($s,$updated)];
+                }
+                if ($sub==='contact-action' && $method==='POST') {
+                    $channel=sf_text($payload,'channel',16,3);
+                    if(!in_array($channel,['phone','whatsapp','email'],true))sf_fail(422,'Invalid communication channel');
+                    if($channel!=='phone'&&!$lead['consent'])sf_fail(403,'Guardian contact consent required');
+                    if($channel==='email'&&!filter_var($lead['email'],FILTER_VALIDATE_EMAIL))sf_fail(422,'Guardian email required');
+                    sf_event($s,$schoolId,$itemId,$uid,'communication_link_opened',$channel.' action opened (delivery not confirmed)');
+                    return [200,['ok'=>true]];
+                }
+                if($sub==='calls' && $method==='POST') {
+                    $outcome=sf_text($payload,'outcome',30,2);
+                    if(!in_array($outcome,['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'],true))sf_fail(422,'Invalid call outcome');
+                    $next=sf_date($payload['followup_date']??null);
+                    $note=sf_text($payload,'note',1000);
+                    $s['calls']=$s['calls']??[];
+                    $entry=['id'=>sf_id($s,'calls'),'school_id'=>$schoolId,'lead_id'=>$itemId,
+                        'actor_id'=>$uid,'outcome'=>$outcome,'note'=>$note,'created_at'=>sf_time(), 'followup_date'=>$next];
+                    $s['calls'][]=$entry;
+                    foreach($s['leads'] as &$v)if($v['id']===$itemId){
+                        $v['last_call_outcome']=$outcome;$v['last_contact_at']=sf_time();
+                        if($next!=='')$v['followup_date']=$next;
+                        $v['updated_at']=sf_time();break;
+                    }unset($v);
+                    sf_event($s,$schoolId,$itemId,$uid,'call_logged',$outcome.($next?' · next '.$next:''));
+                    return [201,$entry];
                 }
                 if ($sub==='notes' && $method==='POST') {
                     $note=sf_text($payload,'text',2000,1);

@@ -26,6 +26,11 @@ jobs:
           php tests/test_web_setup.php
           php tests/test_demo.php
           php tests/test_audit.php
+          php tests/test_schoolflow_v2.php
+      - name: JavaScript syntax and UI smoke checks
+        run: |
+          node --check public_html/static/app.js
+          node tests/check_frontend_v2.js
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: HTTP JSON object regression test

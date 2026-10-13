@@ -150,3 +150,48 @@ Audit records are saved under the same locked JSON transaction as the related bu
 Audit logging covers **meaningful API and user actions**, not each keystroke or passive dashboard request. Activity generated prior to enabling this feature is limited to the historical enquiry activity already stored; there was no general log for earlier events.
 
 **Operational note:** JSON-based audit storage grows with use; monitor `store.json` size and back up the protected directory. Use MariaDB or another database plus retention/access policies for higher-volume and regulated deployments. The audit trail is application-level and is not cryptographically tamper-proof against an administrator with filesystem access.
+
+
+## SchoolFlow 2.0 — admissions productivity (PHP + JSON)
+
+This release extends the existing application without replacing its JSON store or changing any stored school, user, enquiry or audit identifiers. **No MariaDB, Python or external messaging service is required.** Deploying the artifact does not create or delete enquiries.
+
+### New features
+
+1. **Call and follow-up management:** From an enquiry's right-hand drawer, staff can record an outcome (Answered / No Answer / Busy / Interested / Not Interested / Callback Requested), optional notes, and next follow-up date. The outcomes are saved to private JSON; the audit log records action metadata without exposing call-note text. Follow-ups show due/overdue items and a manual email-reminder draft action when the guardian has provided contact consent and an email address.
+2. **WhatsApp and email quick actions:** Buttons open `wa.me` and `mailto:` links with draft wording. The user must click Send in WhatsApp or their email client. The CRM **does not automatically deliver or confirm delivery**. WhatsApp/email options require recorded guardian contact consent; the links opening are audit-logged. Phone links start a call using the device's dialer if available.
+3. **Automatic assignment:** Under **Team**, admins choose `least_loaded` (prior behavior), `round_robin` across active counsellors, or `manual` (leave new leads unassigned). The policy applies only to future enquiries without an explicit assignee. The round-robin cursor is school-scoped and persisted in JSON.
+4. **School visits:** A month-based calendar and visit table show bookings, assigned staff and completion/no-show/cancelled status. Staff can book visits from an enquiry or the calendar. Times are entered as school-local date/time (initial convention: Asia/Kolkata) and are not synced to third-party calendars.
+5. **Advanced filters:** On **Enquiries**, filter by stage, source, counsellor/unassigned, contact status, follow-up timing and text search.
+6. **Analytics:** Dashboard adds first-contact pending, upcoming visits, family profiles and conversion. Reports show assignment distribution and existing funnel/source breakdown. Counsellor analytics are limited to their assigned enquiries.
+7. **Parent and sibling profiles:** The **Families** page groups enquiries with the same normalized telephone number within a school. Add a sibling enquiry from an existing enquiry; it reuses the parent contact and assignment but creates a separate enquiry and audit event. These are linked by phone, **not** an identity-verification/merge operation.
+8. **Email templates and reminders:** Admins can create/edit school-scoped templates with `{parent}`, `{student}`, `{grade}` and `{school}` placeholders. Staff select a template before opening their email client. Reminders are visible in the follow-up queue, with manual draft actions; **scheduled outbound email or WhatsApp campaigns are not enabled** until a provider, verified opt-in and reliable cron job are configured.
+
+### School-scoped API additions
+
+- `GET/PATCH /scrm/api/schools/{id}/assignment`
+- `GET/POST /scrm/api/schools/{id}/visits` and `PATCH /visits/{visitId}`
+- `GET /scrm/api/schools/{id}/families` and `POST /families/{leadId}/siblings`
+- `GET/POST /scrm/api/schools/{id}/templates` and `PATCH /templates/{templateId}`
+- `GET /scrm/api/schools/{id}/analytics`
+- `POST /scrm/api/schools/{id}/leads/{leadId}/calls`
+- `POST /scrm/api/schools/{id}/leads/{leadId}/contact-action`
+
+All paths above are beneath `/scrm/api/schools/{id}`. Authenticated requests use the existing bearer session. API role and school isolation are checked server-side; normal counsellors cannot manage assignment policy or templates.
+
+### Storage and verification
+
+Existing `store.json` objects are backwards compatible: new collections (`calls`, `visits`, `email_templates`, assignment policies/cursors) are initialized lazily when needed. Do not wipe `private_html/scrm/data` during deployment. Keep secure, tested backups and monitor store growth before expanding the user count substantially. This version does not implement MariaDB migration.
+
+To verify from repository source:
+
+```bash
+php tests/test_schoolflow_v2.php
+node tests/check_frontend_v2.js
+php tools/build-digiops.php
+php tests/test_http_json.php
+php tests/test_csp.php
+php tests/test_layout.php
+```
+
+Run **DigiOps → sCRM → Check update → Deploy** to apply the latest successful `digiops-release` to `/scrm/`. GitHub builds do not themselves deploy to Cloudways.

@@ -56,3 +56,26 @@ body:has(.drawer-overlay),body:has(.modal-wrap) {overflow:hidden;}
 .audit-more{display:flex;justify-content:center;padding:11px 0 4px}
 .audit-school{margin-top:25px;max-width:1000px}
 .audit-school .audit-entry{margin:10px 0}
+
+/* SchoolFlow 2.0 extensions — compatible with existing CSS and CSP. */
+.v2-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.v2-metric{padding:15px 17px;border:1px solid #e3e8f3;background:#fafbff;border-radius:12px;min-width:0}
+.v2-metric b{display:block;font-size:23px;font-weight:800;line-height:1.3;color:#514ad0}
+.v2-metric span{display:block;font-size:11px;color:#747d95;line-height:1.4}
+.v2-toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;margin:12px 0 18px;color:#777e93;font-size:12px}
+.v2-toolbar input{margin-left:8px;padding:9px;border:1px solid #dce0ee;border-radius:9px}
+.visit-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;padding:10px;border:1px solid #e6e9f2;border-radius:12px;background:#f7f9fd}
+.visit-day{background:white;border:1px solid #ebedf5;min-height:84px;border-radius:8px;padding:9px;min-width:0}
+.visit-day strong{font-size:11px;color:#6b738a}
+.visit-chip{background:#e8e9ff;border:0;color:#514ad0;border-radius:6px;display:block;font-size:10px;line-height:1.4;margin-top:5px;padding:6px;width:100%;white-space:normal;text-align:left;overflow-wrap:anywhere}
+.family-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px}
+.family-card{padding:18px}.family-card h3{margin:0 0 6px;font-size:15px}
+.family-card p{color:#7e879a;overflow-wrap:anywhere;font-size:12px}
+.family-child{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:9px;border:1px solid #e5e7f5;border-radius:9px;background:#f9faff;padding:10px;text-align:left;font-size:11px;color:#303a5b}
+.family-child span{color:#6861cb}.template-preview{white-space:pre-wrap;font-size:12px;line-height:1.55;color:#6c7388;background:#f8f9fe;border:1px solid #eaeefa;padding:12px;border-radius:10px;margin:12px 0;max-height:180px;overflow:auto}
+.contact-actions,.family-details,.call-management{border-bottom:1px solid #edf0f8;padding-bottom:16px}.contact-actions .btn{white-space:normal}
+.call-history{margin-top:14px}.call-history .audit-entry{padding:9px 0;border-bottom:1px solid #eef0f7}
+.call-history .audit-entry p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}
+.report-staff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+@media(max-width:1100px){.v2-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.v2-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.visit-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}.visit-day{min-height:66px;padding:6px}.family-grid{grid-template-columns:1fr}}
