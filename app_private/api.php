@@ -52,6 +52,62 @@ function sf_membership(array $s, int $schoolId, int $userId, array $roles = []):
 }
 function sf_user(array $s, int $id): ?array { return sf_find($s['users'], $id); }
 function sf_source(array $s, int $id): ?array { return sf_find($s['sites'], $id); }
+
+/** A group website owns several server-approved campus routes; its key never enters the browser. */
+function sf_group_site_by_key(array $s, string $authorization): ?array {
+    if (!str_starts_with($authorization, 'Bearer sfgroup_')) return null;
+    $hash=sf_hash(substr($authorization,7));
+    foreach ($s['group_sites']??[] as $group) if (!empty($group['enabled']) && hash_equals($group['key_hash'],$hash)) return $group;
+    return null;
+}
+function sf_group_campuses(array $s, array $group): array {
+    $out=[];
+    foreach ($group['routes'] as $route) {
+        $school=sf_find($s['schools'], (int)$route['school_id']);
+        $site=sf_source($s,(int)$route['site_id']);
+        if (!$school || !$site || empty($site['enabled'])) continue;
+        // An owner who has lost school-admin membership cannot keep routing data there.
+        $authorized=false;
+        foreach ($s['memberships'] as $m) if ($m['school_id']===$school['id'] && $m['user_id']===$group['owner_id'] && $m['role']==='Admin') {$authorized=true;break;}
+        if($authorized) $out[]=['code'=>$route['code'],'name'=>$school['name'],'school_id'=>$school['id'],'site_id'=>$site['id']];
+    }
+    return $out;
+}
+function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name, string $domain, mixed $selected, array $previous=[]): array {
+    if (!is_array($selected) || !$selected || !array_is_list($selected) || count($selected)>60) sf_fail(422,'Select between 1 and 60 school campuses');
+    $ids=[];
+    foreach($selected as $item) {
+        if(!is_int($item) && (!is_string($item)||!ctype_digit($item))) sf_fail(422,'Invalid school selection');
+        $sid=(int)$item;
+        if($sid<1 || isset($ids[$sid])) sf_fail(422,'School selection contains invalid or duplicate IDs');
+        sf_membership($s,$sid,$uid,['Admin']);$ids[$sid]=true;
+    }
+    $routes=[];
+    foreach(array_keys($ids) as $sid) {
+        $source=null;
+        foreach($previous as $old) if((int)$old['school_id']===$sid) {$source=(int)$old['site_id'];break;}
+        if($source===null){
+            $source=sf_id($s,'sites');
+            $s['sites'][]=['id'=>$source,'school_id'=>$sid,'name'=>$name.' (Group website)','domain'=>$domain,
+                'platform'=>'Group website','key_hash'=>sf_hash(bin2hex(random_bytes(32))),
+                'enabled'=>1,'group_site_id'=>$groupId,'is_group_route'=>true,'created_at'=>sf_time()];
+        }
+        $routes[]=['code'=>'campus-'.$sid,'school_id'=>$sid,'site_id'=>$source];
+        foreach($s['sites'] as &$site) if($site['id']===$source){$site['enabled']=1;$site['name']=$name.' (Group website)';$site['domain']=$domain;}
+        unset($site);
+    }
+    foreach($previous as $old) if(!isset($ids[(int)$old['school_id']])) {
+        foreach($s['sites'] as &$site) if($site['id']===$old['site_id']) $site['enabled']=0;
+        unset($site);
+    }
+    return $routes;
+}
+function sf_group_public_view(array $s, array $group): array {
+    return ['id'=>$group['id'],'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
+        'schools'=>array_map(static fn($r)=>['code'=>$r['code'],'school_id'=>$r['school_id'],
+            'name'=>(sf_find($s['schools'],(int)$r['school_id'])['name']??'Unknown school')], $group['routes'])];
+}
+
 function sf_session(array $s, string $authorization): array {
     if (!str_starts_with($authorization, 'Bearer ')) sf_fail(401, 'Sign in required');
     $hash = sf_hash(substr($authorization, 7));
@@ -422,12 +478,42 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [200, ['token'=>$token,'expires_at'=>gmdate('Y-m-d\TH:i:s+00:00', $expires)]];
         },true);
     }
+    if ($path === '/api/v1/group-schools' && $method === 'GET') {
+        $auth=$headers['authorization']??'';
+        return $store->transaction(static function (array $s) use($auth): array {
+            $group=sf_group_site_by_key($s,$auth);
+            if (!$group) sf_fail(401,'Group website key not recognized or inactive');
+            $list=sf_group_campuses($s,$group);
+            return [200,['schools'=>array_map(static fn($x)=>['code'=>$x['code'],'name'=>$x['name']],$list)]];
+        });
+    }
     if ($path === '/api/v1/inbound-leads' && $method === 'POST') {
         $auth=$headers['authorization']??'';
-        if (!str_starts_with($auth,'Bearer sfsite_')) sf_fail(401, 'Website API key required');
+        if (!str_starts_with($auth,'Bearer sfsite_') && !str_starts_with($auth,'Bearer sfgroup_')) sf_fail(401, 'Website API key required');
         $idem=$headers['idempotency-key']??'';
         if (strlen($idem)<6 || strlen($idem)>160) sf_fail(422,'A unique Idempotency-Key of 6–160 characters is required');
         if (($payload['consent']??false) !== true) sf_fail(422,'Parent/guardian consent required');
+        if (str_starts_with($auth,'Bearer sfgroup_')) {
+            return $store->transaction(function (&$s) use ($auth,$idem,$payload) {
+                $group=sf_group_site_by_key($s,$auth);
+                if (!$group) sf_fail(401,'Group website key not recognized or inactive');
+                $code=sf_text($payload,'school_code',50,3);
+                $route=null;
+                foreach(sf_group_campuses($s,$group) as $campus) if(hash_equals($campus['code'],$code)) {$route=$campus;break;}
+                if(!$route) sf_fail(422,'Choose a valid school from this group website');
+                sf_limit($s,'group:'.$group['id'],120,60);
+                // Separate receipt namespace from legacy site IDs; replay stays tied to the selected campus.
+                foreach($s['receipts'] as $receipt) if(($receipt['group_site_id']??null)===$group['id'] && $receipt['idempotency_key']===$idem) {
+                    if(($receipt['school_id']??null)!==$route['school_id']) sf_fail(409,'This submission ID was already used for a different school');
+                    return [200,['id'=>$receipt['lead_id'],'duplicate_submission'=>true]];
+                }
+                $p=$payload;$p['grade']=$payload['class']??($payload['grade']??'');
+                $lead=sf_create_lead($s,$route['school_id'],$p,$route['site_id'],null,null,'group_website_received');
+                $s['receipts'][]=['group_site_id'=>$group['id'],'school_id'=>$route['school_id'],
+                    'idempotency_key'=>$idem,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
+                return [201,['id'=>$lead['id'],'duplicate_submission'=>false]];
+            },true);
+        }
         return $store->transaction(function (&$s) use ($auth,$idem,$payload) {
             $site=null;
             foreach ($s['sites'] as $entry) if ($entry['enabled'] && hash_equals($entry['key_hash'],sf_hash(substr($auth,7)))) {$site=$entry;break;}
@@ -462,7 +548,65 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             usort($schools,fn($a,$b)=>strcmp($a['name'],$b['name']));
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email']],'schools'=>$schools]];
         }
-        // Admin-only cross-school routing overview; no site keys or unrelated-school data.
+        // Group website administration: owner must be an administrator of each destination school.
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key))?$#D',$path,$gm)) {
+            $s['group_sites']=$s['group_sites']??[];
+            $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
+            $operation=$gm[2]??'';
+            $authorizedSchools=[];
+            foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin') $authorizedSchools[]=$member['school_id'];
+            if(!$authorizedSchools) sf_fail(403,'School administrator access required');
+            if($method==='GET' && $groupId===null) {
+                $visible=[];
+                foreach($s['group_sites'] as $group) if($group['owner_id']===$uid) $visible[]=sf_group_public_view($s,$group);
+                return [200,$visible];
+            }
+            if($method==='POST' && $groupId===null) {
+                $name=sf_text($payload,'name',140,3);$domain=sf_text($payload,'domain',180,3);
+                $schoolIds=$payload['school_ids']??null;
+                // All validation before allocating a persistent group source.
+                if(!is_array($schoolIds) || !$schoolIds || !array_is_list($schoolIds)) sf_fail(422,'Choose school campuses');
+                foreach($schoolIds as $sid) {
+                    if((!is_int($sid) && (!is_string($sid) || !ctype_digit($sid))) || !in_array((int)$sid,$authorizedSchools,true)) sf_fail(403,'You may only connect schools you administer');
+                }
+                $id=sf_id($s,'group_sites');
+                $routes=sf_group_select_schools($s,$uid,$id,$name,$domain,$schoolIds);
+                $key='sfgroup_'.bin2hex(random_bytes(32));
+                $group=['id'=>$id,'owner_id'=>$uid,'name'=>$name,'domain'=>$domain,'key_hash'=>sf_hash($key),
+                    'enabled'=>true,'routes'=>$routes,'created_at'=>sf_time()];
+                $s['group_sites'][]=$group;
+                foreach($routes as $route)sf_event($s,$route['school_id'],null,$uid,'group_website_connected','Group source #'.$id.' connected');
+                return [201,array_merge(sf_group_public_view($s,$group),['api_key'=>$key])];
+            }
+            $group=null;
+            foreach($s['group_sites'] as $g) if($g['id']===$groupId && $g['owner_id']===$uid) {$group=$g;break;}
+            if(!$group)sf_fail(404,'Group website not found');
+            if($method==='POST' && $operation==='rotate-key') {
+                $key='sfgroup_'.bin2hex(random_bytes(32));
+                foreach($s['group_sites'] as &$row)if($row['id']===$groupId)$row['key_hash']=sf_hash($key);
+                unset($row);
+                foreach($group['routes'] as $route)sf_event($s,$route['school_id'],null,$uid,'group_key_rotated','Group source #'.$groupId);
+                return [200,['api_key'=>$key]];
+            }
+            if($method==='PATCH' && $operation==='') {
+                $name=sf_text($payload,'name',140,3);
+                $domain=sf_text($payload,'domain',180,3);
+                $enabled=$payload['enabled']??true;
+                if(!is_bool($enabled))sf_fail(422,'enabled must be true or false');
+                $routes=sf_group_select_schools($s,$uid,$groupId,$name,$domain,$payload['school_ids']??null,$group['routes']);
+                foreach($s['group_sites'] as &$row) if($row['id']===$groupId){
+                    $row['name']=$name;$row['domain']=$domain;$row['enabled']=$enabled;$row['routes']=$routes;
+                    $group=$row;break;
+                }unset($row);
+                foreach($routes as $route) foreach($s['sites'] as &$site) if($site['id']===$route['site_id'])$site['enabled']=$enabled;
+                unset($site);
+                foreach($routes as $route)sf_event($s,$route['school_id'],null,$uid,'group_routing_changed','Group source #'.$groupId.' updated');
+                return [200,sf_group_public_view($s,$group)];
+            }
+            sf_fail(404,'Unknown group website action');
+        }
+        // School-wide routing overview: only schools where this user is an Admin.
+        // Never expose site bearer keys or leads from unrelated schools.
         if ($path==='/api/schools/overview' && $method==='GET') {
             $adminIds=[];
             foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $adminIds[$m['school_id']]=true;
@@ -673,6 +817,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             if ($itemId!==null) {
                 $site=sf_source($s,$itemId);
                 if (!$site || $site['school_id']!==$schoolId) sf_fail(404,'Website not found');
+                if(!empty($site['is_group_route'])) sf_fail(403,'Manage group sources from Schools & Routing');
                 foreach ($s['sites'] as &$v) if ($v['id']===$itemId) {
                     if ($sub==='rotate-key' && $method==='POST') {
                         $key='sfsite_'.bin2hex(random_bytes(32));$v['key_hash']=sf_hash($key);

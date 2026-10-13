@@ -1,0 +1,31 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const js=fs.readFileSync(__dirname+'/../public_html/static/app.js','utf8');
+const handlers={};let html='';
+const root={addEventListener:(k,fn)=>handlers[k]=fn,querySelector:()=>null};
+Object.defineProperty(root,'innerHTML',{get:()=>html,set:v=>html=v});
+const schools=[{id:1,name:'ABC Wakad',role:'Admin'},{id:2,name:'ABC Baner',role:'Admin'}];
+const routes=[{id:1,name:'ABC Group Website',domain:'group.test',enabled:true,schools:[{code:'campus-1',name:'ABC Wakad',school_id:1},{code:'campus-2',name:'ABC Baner',school_id:2}]}];
+const data={
+ '/api/setup/status':{needs_setup:false},'/api/me':{user:{id:1,name:'Group admin'},schools},
+ '/api/schools/1/leads':[],'/api/schools/1/sites':[],'/api/schools/1/members':[],
+ '/api/schools/1/demo-data':{leads:0,sites:0,has_demo_data:false},'/api/schools/1/visits':[],
+ '/api/schools/1/families':[],'/api/schools/1/templates':[],'/api/schools/1/analytics':{},'/api/schools/1/assignment':{mode:'least_loaded'},
+ '/api/schools/overview':schools.map(s=>({id:s.id,name:s.name,leads:0,new_leads:0,unassigned:0,sites:[],assignment_mode:'least_loaded'})),
+ '/api/group-sites':routes,
+};
+const ctx={document:{getElementById:()=>root,addEventListener:()=>{},body:{append:()=>{}}},
+ sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
+ fetch:async path=>{const route=path.replace('/scrm','');if(!(route in data))throw Error('Unexpected API '+route);return {status:200,ok:true,json:async()=>data[route]};},
+ setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},window:{location:{href:''},open:()=>{}}};
+vm.runInNewContext(js,ctx);
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+(async()=>{
+ await sleep(120);
+ handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Schools & Routing'}})}});
+ await sleep(120);
+ assert.match(html,/Group websites/);assert.match(html,/ABC Group Website/);assert.match(html,/ABC Wakad/);assert.match(html,/campus-2/);
+ handlers.click({target:{closest:()=>({dataset:{action:'new-group'}})}});
+ assert.match(html,/groupSiteForm/);assert.match(html,/Schools served by the group website/);
+ assert.match(html,/ABC Baner/);
+ console.log('PASS: Group Websites management, server-generated school routes and school selection form');
+})().catch(e=>{console.error(e);process.exitCode=1;});

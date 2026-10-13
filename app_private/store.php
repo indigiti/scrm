@@ -41,6 +41,6 @@ final class SchoolFlowStore {
     }
     public static function blank(): array {
         return ['version'=>1, 'counters'=>[], 'users'=>[], 'schools'=>[], 'memberships'=>[], 'sites'=>[],
-            'leads'=>[], 'calls'=>[], 'visits'=>[], 'email_templates'=>[], 'assignment_modes'=>[], 'assignment_cursors'=>[], 'activities'=>[], 'audit_logs'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
+            'leads'=>[], 'group_sites'=>[], 'calls'=>[], 'visits'=>[], 'email_templates'=>[], 'assignment_modes'=>[], 'assignment_cursors'=>[], 'activities'=>[], 'audit_logs'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
     }
 }
