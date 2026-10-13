@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SchoolFlow CF7 Webhook
  * Description: Send Contact Form 7 school enquiries to SchoolFlow CRM using a private server-side API key.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Requires Plugins: contact-form-7
  */
 if (!defined('ABSPATH')) { exit; }
@@ -10,7 +10,9 @@ if (!defined('ABSPATH')) { exit; }
 /**
  * In wp-config.php (NEVER in the HTML of the public form):
  * define('SCHOOLFLOW_CRM_URL', 'https://crm.example.org/scrm');
- * define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_PASTE_KEY');
+ * define('SCHOOLFLOW_CRM_SITE_KEY', 'sfsite_PASTE_KEY'); // Legacy single-school fallback
+ * define('SCHOOLFLOW_CRM_FORM_KEYS', [123 => 'sfsite_SCHOOL_A', 456 => 'sfsite_SCHOOL_B']);
+ * // When the map exists, forms without a matching ID are ignored.
  *
  * Your Contact Form 7 fields should be named:
  * student_name, parent_name, phone, grade, email, message, consent.
@@ -19,7 +21,17 @@ if (!defined('ABSPATH')) { exit; }
 add_action('wpcf7_before_send_mail', 'schoolflow_capture_cf7_submission');
 
 function schoolflow_capture_cf7_submission($form) {
-    if (!defined('SCHOOLFLOW_CRM_URL') || !defined('SCHOOLFLOW_CRM_SITE_KEY')) { return; }
+    if (!defined('SCHOOLFLOW_CRM_URL')) { return; }
+    $formId = (int) $form->id();
+    if (defined('SCHOOLFLOW_CRM_FORM_KEYS')) {
+        $keys = SCHOOLFLOW_CRM_FORM_KEYS;
+        if (!is_array($keys) || !isset($keys[$formId])) { return; }
+        $siteKey = $keys[$formId];
+    } else {
+        if (!defined('SCHOOLFLOW_CRM_SITE_KEY')) { return; }
+        $siteKey = SCHOOLFLOW_CRM_SITE_KEY;
+    }
+    if (!is_string($siteKey) || strpos($siteKey, 'sfsite_') !== 0) { return; }
     if (!class_exists('WPCF7_Submission')) { return; }
     $submission = WPCF7_Submission::get_instance();
     if (!$submission) { return; }
@@ -59,7 +71,7 @@ function schoolflow_capture_cf7_submission($form) {
         'timeout' => 12,
         'blocking' => true,
         'headers' => array(
-            'Authorization'  => 'Bearer ' . SCHOOLFLOW_CRM_SITE_KEY,
+            'Authorization'  => 'Bearer ' . $siteKey,
             'Content-Type'   => 'application/json',
             'Idempotency-Key'=> $submission_id,
         ),
