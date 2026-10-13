@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 function add_action($h,$cb):void{}
+function add_filter($h,$cb,$priority=10,$count=1):void{}
 function sanitize_text_field($s):string{return trim((string)$s);}
 function sanitize_key($s):string{return preg_replace('/[^a-z0-9_-]/','',strtolower((string)$s));}
 function untrailingslashit($s):string{return rtrim($s,'/');}

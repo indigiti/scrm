@@ -195,22 +195,70 @@ php tests/test_layout.php
 ```
 
 Run **DigiOps → sCRM → Check update → Deploy** to apply the latest successful `digiops-release` to `/scrm/`. GitHub builds do not themselves deploy to Cloudways.
-## Multiple schools: automatic school routing
 
-Administrators can create separate school workspaces and use **Schools & Routing** in the sidebar to see school-specific enquiry counts, connected website sources and their counsellor allocation modes. Click **Connect website** for the destination school: SchoolFlow issues a one-time secret API key permanently bound to that school. Enquiries from that WordPress site automatically enter its school's inbox and are allocated to counsellors under the school's assignment policy. The backend does **not** trust a public form's `school_id` to decide routing.
 
-**Separate school websites:** Create a website source in each school and configure its WordPress connector with the corresponding `SCHOOLFLOW_CRM_SITE_KEY`.
+## Multiple schools and automatic school routing
 
-**One WordPress site with multiple school forms:** Add a source and obtain a separate key for each school, then put the following server-side configuration in the shared WordPress website's private `wp-config.php`:
+School administrators can create multiple independent school workspaces. Select **Schools & Routing** in the left navigation to see the connected sources, lead counts, and assignment policy for each school you administer. Choose **Connect website** on the desired school: the website's private `sfsite_...` key is permanently bound to that school. Staff from other schools cannot read its leads, and counsellor assignment follows the *destination school's* least-loaded/round-robin/manual setting. The existing school selector still opens each separate dashboard.
+
+**Different WordPress websites:** Create one school and its own website source/key for each school. Configure `SCHOOLFLOW_CRM_SITE_KEY` on that school's WordPress site. Each inbound submission is routed using the key, never a user-submitted `school_id` or school name.
+
+**One shared WordPress website, multiple school forms:** Create a separate website source/key in each school. In the shared WordPress site's private `wp-config.php` use:
 
 ```php
 define('SCHOOLFLOW_CRM_URL', 'https://stage.digiti.in/scrm');
 define('SCHOOLFLOW_CRM_FORM_KEYS', [
-    123 => 'sfsite_SCHOOL_A_KEY', // Replace 123 with School A's Contact Form 7 ID
-    456 => 'sfsite_SCHOOL_B_KEY', // Replace 456 with School B's Contact Form 7 ID
+    123 => 'sfsite_SCHOOL_A_KEY', // Replace 123 with School A Contact Form 7 ID
+    456 => 'sfsite_SCHOOL_B_KEY', // Replace 456 with School B Contact Form 7 ID
 ]);
 ```
 
-Update the shared site's `wordpress/schoolflow-contact-form-7.php` plugin from the repository (version 1.1+). The plugin chooses the correct key on the WordPress server using the submitted form's ID; if the map is defined, unmapped forms are ignored even if an old default `SCHOOLFLOW_CRM_SITE_KEY` is present. Never expose website API keys in public HTML. Site keys cannot be reassigned to a different school; create a new website source/key instead. Historical leads stay in their original school.
+Activate the updated `wordpress/schoolflow-contact-form-7.php` plugin **on that WordPress website** (this connector is part of the full GitHub source, not the five-file DigiOps release artifact). Unmapped forms are ignored to avoid accidental cross-school routing, even if the old `SCHOOLFLOW_CRM_SITE_KEY` constant is still set. API keys stay on the WordPress server; do not embed them in a public form field. The CRM does not move historical leads if a site's key changes; create a new source for a different school and revoke the old key only when appropriate.
 
-The authenticated `GET /scrm/api/schools/overview` endpoint lists only schools for which the requesting staff member holds the **Admin** role. No website secret, parent contact data, or unrelated school record is returned. Tests cover two schools sharing one WordPress domain, school-specific counsellors and authorization; PHP-only JSON storage remains unchanged.
+The admin-only `GET /scrm/api/schools/overview` endpoint returns counts and *non-secret* website routing information for schools administered by the authenticated user. No MariaDB schema change is required. The route is covered by `tests/test_multischool_routing.php`.
+
+## School Group website — one enquiry form with a campus dropdown (Release #12)
+
+This is distinct from the previous per-Contact-Form-7-ID mapping. A **single parent enquiry form** on a school group's WordPress website can now route a submission to whichever authorized school/campus the parent selects.
+
+### CRM administrator setup
+
+1. In SchoolFlow, create all campuses under **Schools & Routing → Add school**. You must hold the Admin role for each campus to connect it.
+2. In **Schools & Routing → Group websites → Connect group website**, supply the group website name and domain, and check every participating school. SchoolFlow generates **one `sfgroup_...` secret** and a server-side mapping from stable campus codes to school IDs. Copy the key immediately; only its SHA-256 hash is stored.
+3. You can edit campus choices without editing PHP: choose **Edit schools** on the group website card. Remove a school to stop new leads being routed there; existing enquiries and audit logs remain with their original school. Rotate or disable a group key as required.
+4. In WordPress, replace the SchoolFlow Contact Form 7 connector with `wordpress/schoolflow-contact-form-7.php` version **1.2+** from this repository. Put the private group key into the website's **server-side `wp-config.php`**, not into JavaScript or the public form.
+
+```php
+// On the School Group WordPress website only. Replace placeholders.
+define('SCHOOLFLOW_CRM_URL', 'https://stage.digiti.in/scrm');
+define('SCHOOLFLOW_CRM_GROUP_SITE_KEY', 'sfgroup_COPY_THE_GROUP_SECRET_HERE');
+define('SCHOOLFLOW_CRM_GROUP_FORM_IDS', [789]); // Your actual CF7 form ID(s)
+```
+
+5. In the selected Contact Form 7 form, add a required school choice, student and parent details, and guardian consent:
+
+```text
+<label>Preferred school / campus
+[select* school_code]
+</label>
+<label>Student's name [text* student_name]</label>
+<label>Parent / guardian [text* parent_name]</label>
+<label>Phone [tel* phone]</label>
+<label>Applying for class [text grade]</label>
+<label>Email [email email]</label>
+<label>Message [textarea message]</label>
+[acceptance consent] I agree to be contacted about this admission enquiry. [/acceptance]
+[submit "Send enquiry"]
+```
+
+SchoolFlow populates the `school_code` select choices through a private **WordPress-server-to-CRM** request. A 60-second WordPress transient can cache choices; submission validation fetches the latest choices, and the CRM independently checks the mapping again. A school added or removed in SchoolFlow becomes available without manually editing PHP.
+
+**Routing:** WordPress sends the group secret and selected `school_code` (`campus-<ID>`) to `POST /scrm/api/v1/inbound-leads`. The CRM checks that the group key is active, the school is an allowed route, the owner's Admin permission for that campus is still valid, and guardian consent is present. The CRM creates the enquiry and school-specific website source attribution under that school, assigns a counsellor using that school's allocation policy, and logs the event. A forged `school_id`, invalid or removed campus code, and cross-school replay are rejected. The private key is never sent to the parent/browser.
+
+The private `GET /scrm/api/v1/group-schools` accepts only the `Authorization: Bearer sfgroup_...` HTTP header and returns `{ "schools": [{ "code": "campus-1", "name": "School Name" }] }` without exposing keys, parent contacts, or any campus outside the group mapping. Do not call this protected route directly from browser JavaScript.
+
+Existing `SCHOOLFLOW_CRM_SITE_KEY` and per-form `SCHOOLFLOW_CRM_FORM_KEYS` remain supported for separate school websites/forms. A group form is explicitly opted in through `SCHOOLFLOW_CRM_GROUP_FORM_IDS` and can coexist with independently keyed forms.
+
+### Validation and deployment
+
+Tests: `php tests/test_group_routing.php`, `php tests/test_cf7_group.php`, `node tests/check_group_routing.js`, the existing CRM tests, and the DigiOps packaging/CSP checks. There are no new dependencies, migrations, or privileged browser credentials. Deploy the CRM through DigiOps, then **update the WordPress connector separately** on each applicable group WordPress site. Ensure the WordPress server can call the CRM over HTTPS and that `/scrm/api/*` is not cached or stripped of Authorization headers. Run a real test enquiry for every campus after deployment.

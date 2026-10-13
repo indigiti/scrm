@@ -29,10 +29,13 @@ jobs:
           php tests/test_schoolflow_v2.php
           php tests/test_multischool_routing.php
           php tests/test_cf7_multischool.php
+          php tests/test_group_routing.php
+          php tests/test_cf7_group.php
       - name: JavaScript syntax and UI smoke checks
         run: |
           node --check public_html/static/app.js
           node tests/check_frontend_v2.js
+          node tests/check_group_routing.js
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: HTTP JSON object regression test
