@@ -79,3 +79,19 @@ body:has(.drawer-overlay),body:has(.modal-wrap) {overflow:hidden;}
 .report-staff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
 @media(max-width:1100px){.v2-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.v2-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.visit-calendar{grid-template-columns:repeat(3,minmax(0,1fr))}.visit-day{min-height:66px;padding:6px}.family-grid{grid-template-columns:1fr}}
+/* Multi-school website-to-school routing dashboard */
+.route-school-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,355px),1fr));gap:16px}
+.route-school-card{border:1px solid var(--line);border-radius:13px;padding:19px;background:#fff;min-width:0}
+.route-school-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.route-school-head h3{font-size:17px;margin:5px 0 8px;overflow-wrap:anywhere}
+.route-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:15px 0}
+.route-stats span{border-radius:9px;background:#f7f8fc;padding:10px 6px;color:#8992a5;text-align:center;font-size:11px}
+.route-stats strong{display:block;font-size:19px;color:#27304c}
+.route-sources{border-top:1px solid var(--line);margin:15px 0;padding-top:6px}
+.route-source{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.route-source span:first-child{min-width:0}
+.route-source b,.route-source small{display:block;overflow-wrap:anywhere}
+.route-source b{font-size:12px}
+.route-source small{font-size:11px;color:var(--muted)}
+.route-inactive{background:#f5edf0;color:#ae6677}
+@media(max-width:650px){.route-school-head{flex-wrap:wrap}.route-school-card{padding:15px}}

@@ -462,6 +462,33 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             usort($schools,fn($a,$b)=>strcmp($a['name'],$b['name']));
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email']],'schools'=>$schools]];
         }
+        // Admin-only cross-school routing overview; no site keys or unrelated-school data.
+        if ($path==='/api/schools/overview' && $method==='GET') {
+            $adminIds=[];
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $adminIds[$m['school_id']]=true;
+            if (!$adminIds) sf_fail(403,'Only school administrators can see routing');
+            $rows=[];
+            foreach ($s['schools'] as $school) {
+                $sid=$school['id'];
+                if (!isset($adminIds[$sid])) continue;
+                $sites=[];$leads=0;$new=0;$unassigned=0;
+                foreach ($s['sites'] as $site) if ($site['school_id']===$sid) {
+                    $sites[]=['id'=>$site['id'],'name'=>$site['name'],'domain'=>$site['domain'],
+                        'platform'=>$site['platform'],'enabled'=>(bool)$site['enabled']];
+                }
+                foreach ($s['leads'] as $lead) if ($lead['school_id']===$sid) {
+                    $leads++;
+                    if ($lead['status']==='New') $new++;
+                    if (($lead['assigned_to']??null)===null) $unassigned++;
+                }
+                usort($sites,fn($a,$b)=>strcmp($a['name'],$b['name']));
+                $rows[]=['id'=>$sid,'name'=>$school['name'],'leads'=>$leads,'new_leads'=>$new,
+                    'unassigned'=>$unassigned,'sites'=>$sites,
+                    'assignment_mode'=>$s['assignment_modes'][(string)$sid]??'least_loaded'];
+            }
+            usort($rows,fn($a,$b)=>strcmp($a['name'],$b['name']));
+            return [200,$rows];
+        }
         if ($path==='/api/schools' && $method==='POST') {
             $allowed=false;
             foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $allowed=true;

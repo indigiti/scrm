@@ -195,3 +195,22 @@ php tests/test_layout.php
 ```
 
 Run **DigiOps → sCRM → Check update → Deploy** to apply the latest successful `digiops-release` to `/scrm/`. GitHub builds do not themselves deploy to Cloudways.
+## Multiple schools: automatic school routing
+
+Administrators can create separate school workspaces and use **Schools & Routing** in the sidebar to see school-specific enquiry counts, connected website sources and their counsellor allocation modes. Click **Connect website** for the destination school: SchoolFlow issues a one-time secret API key permanently bound to that school. Enquiries from that WordPress site automatically enter its school's inbox and are allocated to counsellors under the school's assignment policy. The backend does **not** trust a public form's `school_id` to decide routing.
+
+**Separate school websites:** Create a website source in each school and configure its WordPress connector with the corresponding `SCHOOLFLOW_CRM_SITE_KEY`.
+
+**One WordPress site with multiple school forms:** Add a source and obtain a separate key for each school, then put the following server-side configuration in the shared WordPress website's private `wp-config.php`:
+
+```php
+define('SCHOOLFLOW_CRM_URL', 'https://stage.digiti.in/scrm');
+define('SCHOOLFLOW_CRM_FORM_KEYS', [
+    123 => 'sfsite_SCHOOL_A_KEY', // Replace 123 with School A's Contact Form 7 ID
+    456 => 'sfsite_SCHOOL_B_KEY', // Replace 456 with School B's Contact Form 7 ID
+]);
+```
+
+Update the shared site's `wordpress/schoolflow-contact-form-7.php` plugin from the repository (version 1.1+). The plugin chooses the correct key on the WordPress server using the submitted form's ID; if the map is defined, unmapped forms are ignored even if an old default `SCHOOLFLOW_CRM_SITE_KEY` is present. Never expose website API keys in public HTML. Site keys cannot be reassigned to a different school; create a new website source/key instead. Historical leads stay in their original school.
+
+The authenticated `GET /scrm/api/schools/overview` endpoint lists only schools for which the requesting staff member holds the **Admin** role. No website secret, parent contact data, or unrelated school record is returned. Tests cover two schools sharing one WordPress domain, school-specific counsellors and authorization; PHP-only JSON storage remains unchanged.
