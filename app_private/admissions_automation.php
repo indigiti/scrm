@@ -55,13 +55,13 @@ function sf_auto_enqueue_due(array &$s):int {
         if(!$lead||$lead['school_id']!==$sid)continue;
         foreach(SF_AUTO_CHANNELS as $channel){
             if(!$policy[$channel] || !sf_auto_consent($lead,$channel) || !sf_auto_connected($s,$sid,$channel))continue;
-            $unique='task:'.($task['guid']??(string)$task['id']).':'.$task['due_date'].':'.$channel;
+            $unique='task:'.($task['guid']??(string)$task['id']).':'.($task['revision']??1).':'.$task['due_date'].':'.$channel;
             $exists=false;
             foreach($s['notification_queue'] as $existing)if(($existing['event_key']??'')===$unique){$exists=true;break;}
             if($exists)continue;
             $s['notification_queue'][]=['id'=>sf_id($s,'notification_queue'),'guid'=>sf_uuid(),
                 'school_id'=>$sid,'lead_id'=>$lead['id'],'task_id'=>$task['id'],
-                'channel'=>$channel,'kind'=>$task['kind'],'task_due_date'=>$task['due_date'],'event_key'=>$unique,
+                'channel'=>$channel,'kind'=>$task['kind'],'task_due_date'=>$task['due_date'],'task_revision'=>$task['revision']??1,'event_key'=>$unique,
                 'status'=>'queued','attempts'=>0,'created_at'=>sf_time()];
             $count++;
         }
@@ -78,7 +78,7 @@ function sf_auto_reserve(array &$s,SchoolFlowStore $store):?array {
         $reason='';
         if(!$policy['enabled']||!$policy[$channel])$reason='School automation policy disabled';
         elseif(!$lead||!$task||$lead['school_id']!==$sid||$task['school_id']!==$sid||$task['status']!=='Open')$reason='Related lead/task inactive';
-        elseif(($task['due_date']??'')!==($entry['task_due_date']??'') || ($task['due_date']??'')>sf_admission_today())$reason='Task was rescheduled or is not yet due';
+        elseif(($task['due_date']??'')!==($entry['task_due_date']??'') || (int)($task['revision']??1)!==(int)($entry['task_revision']??1) || ($task['due_date']??'')>sf_admission_today())$reason='Task was rescheduled or is not yet due';
         elseif(!sf_auto_consent($lead,$channel))$reason='Consent withdrawn or enquiry closed';
         elseif(!sf_auto_connected($s,$sid,$channel))$reason='Messaging provider unconfigured';
         if($reason!==''){
