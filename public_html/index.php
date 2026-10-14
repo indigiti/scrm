@@ -10,6 +10,21 @@ $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $basePath = '/scrm';
 if (!str_starts_with($requestPath, $basePath)) sf_json(['detail'=>'Not found'],404);
 $path = substr($requestPath, strlen($basePath)) ?: '/';
+if (str_starts_with($path,'/api/public/forms/')) {
+    try {
+        $origin=$_SERVER['HTTP_ORIGIN']??'';
+        if (!sf_public_allowed_origin_path(new SchoolFlowStore(),$path,$origin))
+            sf_json(['detail'=>'Website origin not authorized'],403);
+        header('Access-Control-Allow-Origin: '.$origin);
+        header('Vary: Origin');
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Idempotency-Key');
+        header('Access-Control-Max-Age: 300');
+        header('Cache-Control: no-store');
+        if (($_SERVER['REQUEST_METHOD']??'')==='OPTIONS') sf_json(['ok'=>true]);
+    } catch(Throwable $e) { sf_json(['detail'=>'Public form unavailable'],503); }
+}
+
 if ($path !== '/' && !str_starts_with($path, '/')) sf_json(['detail'=>'Not found'],404);
 if ($path === '/' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     header('Content-Type: text/html; charset=utf-8');
@@ -33,7 +48,7 @@ if (($raw??'')!=='') {
     }
 }
 $headers=[];
-foreach (['Authorization'=>'authorization','Idempotency-Key'=>'idempotency-key'] as $header=>$name) {
+foreach (['Authorization'=>'authorization','Idempotency-Key'=>'idempotency-key','Origin'=>'origin'] as $header=>$name) {
     $value=$_SERVER['HTTP_'.strtoupper(str_replace('-','_',$header))]??'';
     if (!$value && $header==='Authorization') $value=$_SERVER['REDIRECT_HTTP_AUTHORIZATION']??'';
     $headers[$name]=$value;

@@ -41,6 +41,21 @@ final class SchoolFlowStore {
             return $result;
         } finally { flock($lock, LOCK_UN); fclose($lock); }
     }
+    /** HMAC signing key for short-lived public form challenges; not a browser credential. */
+    public function publicFormKey(): string {
+        $file=$this->dir.'/public-form.key';
+        if(!is_file($file)) {
+            $handle=@fopen($file,'x');
+            if($handle!==false) {
+                try { @chmod($file,0600);
+                    if(fwrite($handle,random_bytes(32))!==32)throw new RuntimeException('Cannot save public form signing key');
+                } finally { fclose($handle); }
+            }
+        }
+        $key=@file_get_contents($file);
+        if(!is_string($key)||strlen($key)!==32)throw new RuntimeException('Public form key missing or invalid');
+        return $key;
+    }
     /** Encrypt API credentials at rest with an application-local AES-256-GCM key. */
     private function secretKey(): string {
         $file=$this->dir.'/messaging.key';

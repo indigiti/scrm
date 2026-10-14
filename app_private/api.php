@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/messaging.php';
+require_once __DIR__ . '/public_forms.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -122,7 +123,7 @@ function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name
     return $routes;
 }
 function sf_group_public_view(array $s, array $group): array {
-    return ['id'=>$group['id'],'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
+    return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'schools'=>array_map(static fn($r)=>['code'=>$r['code'],'school_id'=>$r['school_id'],
             'name'=>(sf_find($s['schools'],(int)$r['school_id'])['name']??'Unknown school')], $group['routes'])];
 }
@@ -284,6 +285,9 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     $lead = ['id'=>sf_id($s,'leads'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'site_id'=>$siteId,'name'=>$name,'guardian'=>$guardian,
         'phone'=>$phone,'normalized_phone'=>$norm,'email'=>sf_text($p,'email',160),'grade'=>sf_text($p,'grade',80),
         'message'=>sf_text($p,'message',2000),'utm_source'=>sf_text($p,'utm_source',140),'utm_campaign'=>sf_text($p,'utm_campaign',140),
+        'pincode'=>sf_text($p,'pincode',6),'state'=>sf_text($p,'state',100),'city'=>sf_text($p,'city',100),
+        'utm_medium'=>sf_text($p,'utm_medium',140),'utm_term'=>sf_text($p,'utm_term',140),'utm_content'=>sf_text($p,'utm_content',140),
+        'landing_page'=>sf_text($p,'landing_page',500),'referrer'=>sf_text($p,'referrer',500),
         'status'=>'New','assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
         'consent'=>!empty($p['consent']) ? 1:0,'duplicate_of'=>$duplicate,'created_at'=>sf_time(),'updated_at'=>sf_time()];
     $s['leads'][] = $lead;
@@ -472,6 +476,8 @@ function sf_github_owner_verified(string $token): bool {
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
+    if (str_starts_with($path,'/api/public/forms/'))
+        return sf_public_handle($method,$path,$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('#^/api/schools/\d+/communications/(email|whatsapp)/send$#D',$path))
         return sf_provider_send($uri,$payload,$headers,$store,$messageTransport);
     // Public first-run discovery contains no secrets. Setup is available only for a truly empty store.
@@ -654,7 +660,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 $id=sf_id($s,'group_sites');
                 $routes=sf_group_select_schools($s,$uid,$id,$name,$domain,$schoolIds);
                 $key='sfgroup_'.bin2hex(random_bytes(32));
-                $group=['id'=>$id,'owner_id'=>$uid,'name'=>$name,'domain'=>$domain,'key_hash'=>sf_hash($key),
+                $group=['id'=>$id,'guid'=>sf_uuid(),'owner_id'=>$uid,'name'=>$name,'domain'=>$domain,'key_hash'=>sf_hash($key),
                     'enabled'=>true,'routes'=>$routes,'created_at'=>sf_time()];
                 $s['group_sites'][]=$group;
                 foreach($routes as $route)sf_event($s,$route['school_id'],null,$uid,'group_website_connected','Group source #'.$id.' connected');
