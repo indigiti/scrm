@@ -21,6 +21,7 @@ $admissions = phpBody($root . '/app_private/admission_workflow.php');
 $tasks = phpBody($root . '/app_private/admissions_tasks.php');
 $analytics = phpBody($root . '/app_private/admissions_analytics.php');
 $automation = phpBody($root . '/app_private/admissions_automation.php');
+$xlsx = phpBody($root . '/app_private/export_xlsx.php');
 $publicForms = phpBody($root . '/app_private/public_forms.php');
 $api = preg_replace('~^require_once __DIR__ \. \'/store\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/messaging\.php\';\s*~m', '', $api, 1);
@@ -29,6 +30,7 @@ $api = preg_replace('~^require_once __DIR__ \. \'/admission_workflow\.php\';\s*~
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_tasks\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_analytics\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_automation\.php\';\s*~m', '', $api, 1);
+$api = preg_replace('~^require_once __DIR__ \. \'/export_xlsx\.php\';\s*~m', '', $api, 1);
 $gateway = phpBody($root . '/public_html/index.php');
 $gateway = preg_replace('~^require_once dirname\(__DIR__\) \. \'/app_private/api\.php\';\s*~m', '', $gateway, 1);
 $gateway = str_replace("__DIR__ . '/static/index.html'", "__DIR__ . '/static/index.html'", $gateway);
@@ -84,7 +86,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
