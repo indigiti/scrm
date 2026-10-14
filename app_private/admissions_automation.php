@@ -69,7 +69,7 @@ function sf_auto_enqueue_due(array &$s):int {
     return $count;
 }
 function sf_auto_reserve(array &$s,SchoolFlowStore $store):?array {
-    foreach($s['notification_queue']??[] as &$entry){
+    foreach($s['notification_queue'] as &$entry){
         if(($entry['status']??'')!=='queued')continue;
         $sid=$entry['school_id'];$policy=sf_auto_policy($s,$sid);
         $channel=$entry['channel'];
@@ -162,11 +162,11 @@ function sf_auto_reconcile(array &$s,int $sid,int $queueId,int $actor,array $pay
     $status=sf_text($payload,'status',30,4);
     if(!in_array($status,['delivered','read','failed'],true))sf_fail(422,'Invalid reconciliation status');
     $reference=sf_text($payload,'provider_evidence_reference',180,8);
-    foreach($s['notification_queue']??[] as &$entry)if($entry['id']===$queueId && $entry['school_id']===$sid){
+    foreach($s['notification_queue'] as &$entry)if($entry['id']===$queueId && $entry['school_id']===$sid){
         if(!in_array($entry['status'],['accepted','needs_review','delivered','read','failed'],true))sf_fail(409,'Only processed messages can be reconciled');
         $entry['status']=$status;$entry['evidence_reference']=$reference;$entry['reconciled_by']=$actor;
         $entry['reconciled_at']=sf_time();
-        foreach($s['message_attempts']??[] as &$m)if($m['id']===($entry['message_attempt_id']??null)){$m['status']=$status;break;}unset($m);
+        foreach($s['message_attempts'] as &$m)if($m['id']===($entry['message_attempt_id']??null)){$m['status']=$status;break;}unset($m);
         sf_event($s,$sid,$entry['lead_id'],$actor,'automation_delivery_reconciled',
             $entry['channel'].' marked '.$status.' with provider evidence recorded');
         $result=sf_auto_queue_view($entry);unset($entry);return $result;
