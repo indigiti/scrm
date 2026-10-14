@@ -365,3 +365,16 @@ public_html/static/lexicon-form.js`, plus all previous regression and DigiOps
 packaging tests. The GitHub PR workflow validates this feature without
 publishing deployable artifacts. A successful GitHub build alone does *not*
 deploy anything: DigiOps deployment is still a separate operator action.
+
+## Excel admissions enquiry report
+
+From Enquiries or Reports, choose Export Excel. The CRM builds a genuine XLSX workbook in PHP with no Google Apps Script, Composer library or WordPress plugin.
+
+- Admission Enquiries: screenshot-style first nine columns Timestamp, Name, Email, Phone, City, State, Class, Campus, Remarks / Follow-up Notes; plus guardian, stage, temperature, follow-up status/date, counsellor, year, source, PIN, campaign and lead GUID.
+- Follow-up History: complete recorded conversation notes, call outcomes and campus visits, with staff and timestamps where captured.
+- Timestamps are sortable Excel date/time cells in Asia/Kolkata. Phone numbers are text to keep leading zeros. Both sheets have navy headers, filters and a frozen first row.
+- Enquiries exports honor the active search, stage, campus source, counsellor, temperature, contact and due-date filters on the server. Reports exports include all authorized leads at the selected campus.
+- Authentication is required; counsellors export only assigned leads, and administrators/admissions teams export only leads in schools they belong to. Export actions are logged in the CRM audit history.
+- To protect the JSON-backed application, the maximum is 10,000 enquiries and 50,000 history events per export. Narrow filters for larger data sets.
+
+The endpoint is POST /scrm/api/schools/{school_id_or_guid}/exports/admissions.xlsx (authenticated bearer token and JSON filters). Existing notes saved only in an external Google Sheet are not present in SchoolFlow until imported separately.
