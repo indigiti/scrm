@@ -287,8 +287,8 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     $phone = sf_phone(sf_text($p,'phone',40,6));$norm = preg_replace('/\D/','',$phone);
     $duplicate = null;
     foreach ($s['leads'] as $previous) if ($previous['school_id'] === $schoolId &&
-        $previous['normalized_phone'] === $norm && mb_strtolower(trim($previous['name'])) === mb_strtolower(trim($name)) &&
-        mb_strtolower(trim((string)($previous['grade']??''))) === mb_strtolower(trim(sf_text($p,'grade',80)))) {
+        $previous['normalized_phone'] === $norm && strtolower(trim($previous['name'])) === strtolower(trim($name)) &&
+        strtolower(trim((string)($previous['grade']??''))) === strtolower(trim(sf_text($p,'grade',80)))) {
         $duplicate = $previous['id']; break;
     }
     if ($assigned === null) $assigned = sf_assignment_owner($s, $schoolId);
@@ -853,6 +853,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'message'=>'Sibling enquiry','consent'=>$parent['consent']];
                     $created=sf_create_lead($s,$sid,$p,$parent['site_id'],$uid,$parent['assigned_to'],'sibling_enquiry_created');
                     sf_family_explicit_sibling($s,$parent,$created['id'],$uid);
+                    $created=sf_lead_view($s,sf_find($s['leads'],$created['id']));
                     sf_event($s,$sid,$parent['id'],$uid,'sibling_linked','Sibling enquiry #'.$created['id']);
                     return [201,$created];
                 }
