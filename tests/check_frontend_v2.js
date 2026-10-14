@@ -7,7 +7,7 @@ const demo={has_demo_data:false,leads:0,sites:0};
 const data={
 '/api/setup/status':{needs_setup:false},'/api/me':{user:{id:1,name:'Demo Admin',email:'a@example.org'},schools:[{id:1,name:'Test School',role:'Admin'}]},
 '/api/schools/1/leads':[lead],'/api/schools/1/sites':[],'/api/schools/1/members':[{id:1,name:'Demo Admin',role:'Admin',email:'a@example.org'}],
-'/api/schools/1/demo-data':demo,'/api/schools/1/visits':[],'/api/schools/1/tasks':[],'/api/schools/1/automation':{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},'/api/schools/1/automation/queue':[],'/api/schools/1/applications':[],'/api/schools/1/families':[{guardian:lead.guardian,phone:lead.phone,email:lead.email,count:1,children:[{id:1,name:lead.name,grade:lead.grade,status:'New'}]}],
+'/api/schools/1/demo-data':demo,'/api/schools/1/visits':[],'/api/schools/1/tasks':[],'/api/schools/1/automation':{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},'/api/schools/1/automation/queue':[],'/api/schools/1/followup-policy':{retry_days:[1,2,4]},'/api/schools/1/applications':[],'/api/schools/1/families':[{guardian:lead.guardian,phone:lead.phone,email:lead.email,count:1,children:[{id:1,name:lead.name,grade:lead.grade,status:'New'}]}],
 '/api/schools/1/templates':[{id:0,title:'Admissions follow-up',subject:'Hello {parent}',body:'Hi {parent}'}],
 '/api/schools/1/analytics':{total:1,first_contact_pending:1,followups_due:0,conversion_rate:0,by_staff:{1:1}},
 '/api/schools/1/assignment':{mode:'least_loaded'},
