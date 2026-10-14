@@ -291,3 +291,77 @@ Enquiry send actions enforce staff role/school/lead visibility, parent consent, 
 ### Checks
 
 Run `php tests/test_release_audit.php` to verify legacy GUID backfill, immutable identifiers, cross-school permissions, encrypted provider keys, simulated provider dispatch, retry protection, consent enforcement, demo-only prevention and complete demo cleanup. The existing PHP, WordPress mapping, JS render, HTTP JSON, CSP and responsive layout checks remain in the CI workflow. DigiOps still publishes **only** the five public runtime files, never credentials or school records. Connectivity requires Cloudways outbound HTTPS access and PHP OpenSSL/cURL extensions.
+
+
+## Native public popup: single head script (no Google Apps Script / WordPress plugin)
+
+This is a **new public SchoolFlow intake method**. The existing authenticated
+server-to-server WordPress connectors stay available for legacy installations.
+The native embed requires only a script tag in the public school's site header.
+
+1. In SchoolFlow → **Schools & Routing → Group websites**, create or select the
+   correct group website, enter its **HTTPS website domain** (for example
+   `lexiconedu.in`), and select the allowed campuses. The administrator must
+   still be an active admin of each destination school.
+2. Use **Copy head script** on that group card and paste it inside the website
+   HTML `<head>`. The displayed `data-schoolflow-group` is a **public UUID**,
+   not a private API key. Do **not** place `sfgroup_...` or `sfsite_...`
+   secrets in HTML or JavaScript.
+3. Remove any prior HFCM/Google Apps Script enquiry snippet or WordPress plugin
+   instance responsible for the **same** popup to prevent double submissions.
+4. On the website, verify the side tab, logo, 10-second auto-popup, the
+   **Solve: A + B** CAPTCHA, six-digit PIN lookup, campus choices, consent and
+   thank-you redirect. Confirm one test enquiry reaches **only the selected
+   campus**, with expected source, assignment and location metadata.
+5. Do not enable real parent traffic until browser CORS, SSL, anti-spam, backups
+   and consent language have been validated in staging.
+
+Sample (the UUID is an example **not a working configured group**):
+
+```html
+<script defer
+  src="https://stage.digiti.in/scrm/static/lexicon-form.js?v=1"
+  data-schoolflow-group="00000000-0000-4000-8000-000000000000">
+</script>
+```
+
+Optional `data-thank-you` and `data-logo` attributes override the default
+Lexicon acknowledgement page and logo. The loader fetches its companion CSS
+from SchoolFlow automatically; the website needs only that one script tag.
+
+### Security and API
+
+- Browser: `GET /scrm/api/public/forms/{group_uuid}/config` returns **only**
+  allowed campus names/codes; `GET /challenge` issues a short-lived
+  HMAC-signed math question; `GET /pin/{six_digits}` looks up the India Post
+  postal directory via fixed HTTPS on the SchoolFlow server and caches results.
+- Browser: `POST /scrm/api/public/forms/{group_uuid}/enquiries` records the
+  validated enquiry and returns a lead UUID. The endpoint checks HTTPS
+  website Origin against the configured group domain (apex/www), active campus
+  mapping, CAPTCHA, duplicate submission ID, 10-digit mobile number, parent
+  consent, honeypot and per-origin/IP/group rate limits. These checks are
+  server-side and must **not** be bypassed by embedding private keys.
+- A public form identifier is deliberately *not* authentication. Origin can be
+  forged by non-browser clients; HMAC CAPTCHA is elementary anti-spam, not a
+  substitute for WAF / managed bot protection, rate monitoring, and operational
+  review. Consider a stronger challenge for high-traffic or abused sites.
+- PIN lookup has a manual State/City fallback if the directory is temporarily
+  unavailable. External lookup availability requires outbound HTTPS and cURL.
+  The directory receives the PIN only; **parent/student details are submitted
+  directly to SchoolFlow**, not to an intermediary service.
+- New enquiry fields (`pincode`, `state`, `city`, `utm_medium`, `utm_term`,
+  `utm_content`, `landing_page`, `referrer`) persist with the school-scoped
+  JSON lead. Existing school IDs, UUIDs and records are preserved.
+- A 32-byte HMAC key is created at `private_html/scrm/data/public-form.key`.
+  Store it outside webroot, with owner-only permissions. Do not deploy the key
+  into the public artifact. Rotating or losing it only invalidates outstanding
+  10-minute form challenges.
+- Same-origin or other domains cannot use the endpoint unless specifically
+  listed in the group connection. If the WordPress site's hostname changes,
+  update the group website domain in SchoolFlow before changing the embed.
+
+Tests: `php tests/test_public_forms.php`, `node --check
+public_html/static/lexicon-form.js`, plus all previous regression and DigiOps
+packaging tests. The GitHub PR workflow validates this feature without
+publishing deployable artifacts. A successful GitHub build alone does *not*
+deploy anything: DigiOps deployment is still a separate operator action.
