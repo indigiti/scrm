@@ -8,7 +8,7 @@ const routes=[{id:1,name:'ABC Group Website',domain:'group.test',enabled:true,sc
 const data={
  '/api/setup/status':{needs_setup:false},'/api/me':{user:{id:1,name:'Group admin'},schools},
  '/api/schools/1/leads':[],'/api/schools/1/sites':[],'/api/schools/1/members':[],
- '/api/schools/1/demo-data':{leads:0,sites:0,has_demo_data:false},'/api/schools/1/visits':[],'/api/schools/1/tasks':[],'/api/schools/1/automation':{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},'/api/schools/1/automation/queue':[],'/api/schools/1/applications':[],
+ '/api/schools/1/demo-data':{leads:0,sites:0,has_demo_data:false},'/api/schools/1/visits':[],'/api/schools/1/tasks':[],'/api/schools/1/automation':{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},'/api/schools/1/automation/queue':[],'/api/schools/1/followup-policy':{retry_days:[1,2,4]},'/api/schools/1/applications':[],
  '/api/schools/1/families':[],'/api/schools/1/templates':[],'/api/schools/1/analytics':{},'/api/schools/1/assignment':{mode:'least_loaded'},
  '/api/schools/1/communications':{email:{provider:'off',connected:false},whatsapp:{provider:'off',connected:false}},
  '/api/schools/overview':schools.map(s=>({id:s.id,name:s.name,leads:0,new_leads:0,unassigned:0,sites:[],assignment_mode:'least_loaded'})),
