@@ -48,20 +48,20 @@ function sf_auto_queue_view(array $entry):array {
 function sf_auto_enqueue_due(array &$s):int {
     $count=0;$s['notification_queue']=$s['notification_queue']??[];
     foreach($s['tasks']??[] as $task){
-        if(($task['status']??'')!=='Open' || ($task['due_date']??'')>sf_admission_today())continue;
+        if(($task['status']??'')!=='Open' || empty($task['due_date']) || ($task['due_date']??'')>sf_admission_today())continue;
         $sid=(int)$task['school_id'];$policy=sf_auto_policy($s,$sid);
         if(!$policy['enabled']||!in_array($task['kind'],$policy['task_kinds'],true))continue;
         $lead=sf_find($s['leads'],(int)$task['lead_id']);
         if(!$lead||$lead['school_id']!==$sid)continue;
         foreach(SF_AUTO_CHANNELS as $channel){
             if(!$policy[$channel] || !sf_auto_consent($lead,$channel) || !sf_auto_connected($s,$sid,$channel))continue;
-            $unique='task:'.($task['guid']??(string)$task['id']).':'.$channel;
+            $unique='task:'.($task['guid']??(string)$task['id']).':'.$task['due_date'].':'.$channel;
             $exists=false;
             foreach($s['notification_queue'] as $existing)if(($existing['event_key']??'')===$unique){$exists=true;break;}
             if($exists)continue;
             $s['notification_queue'][]=['id'=>sf_id($s,'notification_queue'),'guid'=>sf_uuid(),
                 'school_id'=>$sid,'lead_id'=>$lead['id'],'task_id'=>$task['id'],
-                'channel'=>$channel,'kind'=>$task['kind'],'event_key'=>$unique,
+                'channel'=>$channel,'kind'=>$task['kind'],'task_due_date'=>$task['due_date'],'event_key'=>$unique,
                 'status'=>'queued','attempts'=>0,'created_at'=>sf_time()];
             $count++;
         }
@@ -78,6 +78,7 @@ function sf_auto_reserve(array &$s,SchoolFlowStore $store):?array {
         $reason='';
         if(!$policy['enabled']||!$policy[$channel])$reason='School automation policy disabled';
         elseif(!$lead||!$task||$lead['school_id']!==$sid||$task['school_id']!==$sid||$task['status']!=='Open')$reason='Related lead/task inactive';
+        elseif(($task['due_date']??'')!==($entry['task_due_date']??'') || ($task['due_date']??'')>sf_admission_today())$reason='Task was rescheduled or is not yet due';
         elseif(!sf_auto_consent($lead,$channel))$reason='Consent withdrawn or enquiry closed';
         elseif(!sf_auto_connected($s,$sid,$channel))$reason='Messaging provider unconfigured';
         if($reason!==''){
