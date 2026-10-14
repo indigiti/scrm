@@ -37,7 +37,15 @@ function sf_xlsx_sheet(array $headers,array $rows,array $widths,int $dateColumn=
     $all=array_merge([$headers],$rows);
     foreach($all as $index=>$row){
         $rowNum=$index+1;$header=$index===0;
-        $xml.='<row r="'.$rowNum.'"'.($header?' ht="27" customHeight="1"':'').'>';
+        $rowHeight=19;
+        if(!$header){
+            $noteText=(string)($row[$notesColumn]??'');
+            $lineCount=max(1,substr_count($noteText,"\n")+1,
+                (int)ceil(strlen($noteText)/max(20,(int)(($widths[$notesColumn]??65)*0.85))));
+            $rowHeight=min(105,max(19,$lineCount*18));
+        }
+        $xml.='<row r="'.$rowNum.'"'.($header?' ht="27" customHeight="1"':
+            ($rowHeight>19?' ht="'.$rowHeight.'" customHeight="1"':'')).'>';
         foreach($headers as $col=>$ignored){
             $value=$row[$col]??'';
             $ref=sf_xlsx_col($col).$rowNum;
