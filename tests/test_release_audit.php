@@ -58,9 +58,22 @@ try {
  $detail=callRelease('GET','/api/schools/1/leads/'.$lead['guid'])[1];
  ar(count($detail['messages'])===2,'outbound history visible in enquiry sidebar');
  ar(count(array_filter($detail['audit']['events'],fn($a)=>$a['action']==='message_accepted'))===2,'accepted sends audited');
+ // Regression: existing real contacts (including another campus) must never become demo contacts.
+ $realContacts=$db->transaction(fn($s)=>array_values(array_map(
+    fn($l)=>$l['normalized_phone'],array_filter($s['leads'],fn($l)=>empty($l['is_demo']))
+ )));
  $d=callRelease('POST','/api/schools/1/demo-data/seed');
  ar($d[0]===201&&$d[1]['leads']===18,'full seed created');
  $snap=$db->transaction(fn($s)=>$s);
+ $demoLeads=array_values(array_filter($snap['leads'],fn($l)=>!empty($l['is_demo'])&&$l['school_id']===1));
+ ar(count($demoLeads)===18,'all fictional enquiries in the selected school');
+ foreach($demoLeads as $dl){
+     ar(str_starts_with($dl['normalized_phone'],'9100000'),'demo phone remains fictional');
+     ar(!in_array($dl['normalized_phone'],$realContacts,true),'demo must not inherit real or cross-campus contacts');
+ }
+ ar($demoLeads[0]['normalized_phone']===$demoLeads[1]['normalized_phone'] &&
+    $demoLeads[1]['normalized_phone']===$demoLeads[12]['normalized_phone'],
+    'fictional sibling records share only fictional contact details');
  ar(count(array_filter($snap['calls'],fn($c)=>!empty($c['is_demo'])))>=8,'demo calls generated');
  ar(count(array_filter($snap['visits'],fn($v)=>!empty($v['is_demo'])))>=3,'demo visits generated');
  $demoId=array_values(array_filter($snap['leads'],fn($l)=>!empty($l['is_demo'])))[0];
