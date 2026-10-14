@@ -5,6 +5,7 @@ require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/admission_workflow.php';
 require_once __DIR__ . '/admissions_tasks.php';
+require_once __DIR__ . '/admissions_analytics.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -267,13 +268,14 @@ function sf_valid_datetime(string $v): string {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/D',$v)) sf_fail(422,'Use YYYY-MM-DDTHH:MM local time');
     sf_date(substr($v,0,10));return $v;
 }
-function sf_parent_key(array $l): string {return (string)($l['normalized_phone']??preg_replace('/\D/','',(string)($l['phone']??'')));}
+function sf_parent_key(array $l): string {return !empty($l['family_guid'])?'G:'.$l['family_guid']:'P:'.(string)($l['normalized_phone']??preg_replace('/\D/','',(string)($l['phone']??'')));}
 function sf_family_view(array $s,int $schoolId,array $lead,int $uid,string $role): array {
     $key=sf_parent_key($lead);$children=[];
     foreach(sf_visible_leads($s,$schoolId,$uid,$role) as $l) if($key!=='' && sf_parent_key($l)===$key) {
         $children[]=['id'=>$l['id'],'name'=>$l['name'],'grade'=>$l['grade'],'status'=>$l['status']];
     }
     return ['guardian'=>$lead['guardian'],'phone'=>$lead['phone'],'email'=>$lead['email'],
+        'family_guid'=>$lead['family_guid']??null,'link_status'=>!empty($lead['family_guid'])?'Explicitly linked':'Unverified phone grouping',
         'children'=>$children,'count'=>count($children)];
 }
 function sf_visit_view(array $v,array $s): array {
@@ -284,9 +286,14 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     $name = sf_text($p,'student_name',140,2);$guardian = sf_text($p,'parent_name',140,2);
     $phone = sf_phone(sf_text($p,'phone',40,6));$norm = preg_replace('/\D/','',$phone);
     $duplicate = null;
-    foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && $lead['normalized_phone'] === $norm) { $duplicate = $lead['id']; break; }
+    foreach ($s['leads'] as $previous) if ($previous['school_id'] === $schoolId &&
+        $previous['normalized_phone'] === $norm && mb_strtolower(trim($previous['name'])) === mb_strtolower(trim($name)) &&
+        mb_strtolower(trim((string)($previous['grade']??''))) === mb_strtolower(trim(sf_text($p,'grade',80)))) {
+        $duplicate = $previous['id']; break;
+    }
     if ($assigned === null) $assigned = sf_assignment_owner($s, $schoolId);
-    $lead = ['id'=>sf_id($s,'leads'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'site_id'=>$siteId,'name'=>$name,'guardian'=>$guardian,
+    $familyGuid=sf_family_create_profile($s,$schoolId,$guardian,$phone,sf_text($p,'email',160));
+    $lead = ['id'=>sf_id($s,'leads'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'site_id'=>$siteId,'family_guid'=>$familyGuid,'name'=>$name,'guardian'=>$guardian,
         'phone'=>$phone,'normalized_phone'=>$norm,'email'=>sf_text($p,'email',160),'grade'=>sf_text($p,'grade',80),
         'message'=>sf_text($p,'message',2000),'utm_source'=>sf_text($p,'utm_source',140),'utm_campaign'=>sf_text($p,'utm_campaign',140),
         'pincode'=>sf_text($p,'pincode',6),'state'=>sf_text($p,'state',100),'city'=>sf_text($p,'city',100),
@@ -820,7 +827,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                             'Documents Pending'=>'Documents Pending','Under Review'=>'Under Review',
                             'Offer Issued'=>'Offer Issued','Admission Confirmed'=>'Admission Confirmed','Enrolled'=>'Enrolled'];
                         foreach($s['leads'] as &$row)if($row['id']===$saved['lead_id']){
-                            if(isset($stages[$status]))$row['status']=$stages[$status];
+                            $previousStage=$row['status'];if(isset($stages[$status]))$row['status']=$stages[$status];
+                            if($previousStage!==$row['status'])sf_stage_history_add($s,$row,$previousStage,$row['status'],$uid);
+                            if($status==='Submitted')sf_admission_recommend($row,'Hot','Application formally submitted','application');
                             $row['updated_at']=sf_time();break;
                         }unset($row);
                         sf_event($s,$sid,$saved['lead_id'],$uid,'application_status_changed',$status.($fees?' · fee verified':''));
@@ -843,6 +852,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'email'=>$parent['email'],'grade'=>sf_text($payload,'grade',80),
                         'message'=>'Sibling enquiry','consent'=>$parent['consent']];
                     $created=sf_create_lead($s,$sid,$p,$parent['site_id'],$uid,$parent['assigned_to'],'sibling_enquiry_created');
+                    sf_family_explicit_sibling($s,$parent,$created['id'],$uid);
                     sf_event($s,$sid,$parent['id'],$uid,'sibling_linked','Sibling enquiry #'.$created['id']);
                     return [201,$created];
                 }
@@ -863,7 +873,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $visit=['id'=>sf_id($s,'visits'),'school_id'=>$sid,'lead_id'=>$lid,'staff_id'=>$staff,
                         'starts_at'=>$start,'purpose'=>sf_text($payload,'purpose',120,2),
                         'status'=>'Scheduled','created_at'=>sf_time()];
-                    $s['visits'][]=$visit;sf_task_schedule($s,$l,'Campus Visit',substr($start,0,10),$uid);sf_event($s,$sid,$lid,$uid,'visit_booked',$start.' · '.$visit['purpose']);
+                    $s['visits'][]=$visit;sf_task_schedule($s,$l,'Campus Visit',substr($start,0,10),$uid);
+                    foreach($s['leads'] as &$row)if($row['id']===$lid){sf_admission_recommend($row,'Warm','Campus visit booked; intent needs confirmation','visit');break;}unset($row);
+                    sf_event($s,$sid,$lid,$uid,'visit_booked',$start.' · '.$visit['purpose']);
                     return [201,sf_visit_view($visit,$s)];
                 }
                 if($method==='PATCH'&&$rid!==null){
@@ -907,8 +919,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if($l['status']==='New'&&empty($l['last_contact_at']))$pending++;
                     if(!empty($l['followup_date'])&&$l['followup_date']<=sf_admission_today()&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
                 }
-                return [200,['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
-                    'first_contact_pending'=>$pending,'followups_due'=>$due,'open_tasks'=>count(array_filter($s['tasks']??[],fn($t)=>$t['school_id']===$sid&&$t['status']==='Open'&&in_array($t['lead_id'],array_column($visible,'id'),true))), 'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff]];
+                return [200,array_merge(['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
+                    'first_contact_pending'=>$pending,'followups_due'=>$due,'open_tasks'=>count(array_filter($s['tasks']??[],fn($t)=>$t['school_id']===$sid&&$t['status']==='Open'&&in_array($t['lead_id'],array_column($visible,'id'),true))), 'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff], sf_analytics_enrichment($s,$visible,$sid))];
             }
             sf_fail(404,'Not found');
         }
@@ -1073,8 +1085,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         if ($role==='Counsellor' && $changes['assigned_to']!==$uid) sf_fail(403,'Counsellors cannot reassign leads');
                     }
                     foreach ($s['leads'] as &$l) if ($l['id']===$itemId) {
+                        $previousStage=$l['status'];
                         foreach ($changes as $k=>$v) if (($l[$k]??null)!==$v) {sf_audit($s,$schoolId,$itemId,$uid,'update_'.$k,$k==='temperature_reason'?'Classification reason recorded':(($l[$k]??'(none)').' → '.($v??'(none)')));$l[$k]=$v;}
-                        $l['updated_at']=sf_time();$updated=$l;break;
+                        $l['updated_at']=sf_time();$updated=$l;
+                        sf_stage_history_add($s,$l,$previousStage,$l['status'],$uid);break;
                     } unset($l);
                     if(array_key_exists('followup_date',$changes))sf_task_sync_followup($s,$updated,$uid);
                     return [200,sf_lead_view($s,$updated)];
@@ -1098,6 +1112,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $s['calls'][]=$entry;
                     foreach($s['leads'] as &$v)if($v['id']===$itemId){
                         $v['last_call_outcome']=$outcome;sf_admission_call_update($v,$outcome,sf_time());
+                        if($outcome==='Interested')sf_admission_recommend($v,'Warm','Parent confirmed interest','call');
+                        if($outcome==='Not Interested')sf_admission_recommend($v,'Cold','Parent explicitly declined interest','call');
+                        if($outcome==='Callback Requested')sf_admission_recommend($v,'Warm','Parent requested a callback','call');
                         $updatedLead=$v;
                         if($next!=='')$v['followup_date']=$next;
                         $v['updated_at']=sf_time();break;
