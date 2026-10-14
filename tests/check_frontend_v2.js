@@ -11,6 +11,7 @@ const data={
 '/api/schools/1/templates':[{id:0,title:'Admissions follow-up',subject:'Hello {parent}',body:'Hi {parent}'}],
 '/api/schools/1/analytics':{total:1,first_contact_pending:1,followups_due:0,conversion_rate:0,by_staff:{1:1}},
 '/api/schools/1/assignment':{mode:'least_loaded'},
+'/api/schools/1/communications':{email:{provider:'off',connected:false},whatsapp:{provider:'off',connected:false}},
 '/api/schools/1/leads/1':{lead,family:{guardian:lead.guardian,phone:lead.phone,email:lead.email,count:1,children:[{id:1,name:lead.name,grade:lead.grade,status:'New'}]},calls:[],visits:[],activities:[],audit:{events:[]}},
 '/api/schools/1/leads/1/view':{ok:true}
 };
