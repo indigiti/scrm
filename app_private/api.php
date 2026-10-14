@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
+require_once __DIR__ . '/admission_workflow.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -216,7 +217,7 @@ function sf_lead_view(array $s, array $lead): array {
     $lead['assigned_name'] = $owner['name'] ?? null;
     $lead['last_contact_at'] = $lead['last_contact_at'] ?? '';
     $lead['last_call_outcome'] = $lead['last_call_outcome'] ?? '';
-    return $lead;
+    return sf_admission_view($lead);
 }
 function sf_lead_allowed(array $s, int $schoolId, int $leadId, int $userId, string $role): array {
     $lead = sf_find($s['leads'], $leadId);
@@ -288,7 +289,9 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         'pincode'=>sf_text($p,'pincode',6),'state'=>sf_text($p,'state',100),'city'=>sf_text($p,'city',100),
         'utm_medium'=>sf_text($p,'utm_medium',140),'utm_term'=>sf_text($p,'utm_term',140),'utm_content'=>sf_text($p,'utm_content',140),
         'landing_page'=>sf_text($p,'landing_page',500),'referrer'=>sf_text($p,'referrer',500),
-        'status'=>'New','assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
+        'status'=>'New','temperature'=>'Unrated','temperature_suggestion'=>'Unrated',
+        'contact_state'=>'Pending Contact','contact_attempts'=>0,'last_successful_contact_at'=>'',
+        'academic_year'=>sf_text($p,'academic_year',7),'assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
         'consent'=>!empty($p['consent']) ? 1:0,'duplicate_of'=>$duplicate,'created_at'=>sf_time(),'updated_at'=>sf_time()];
     $s['leads'][] = $lead;
     sf_audit($s,$schoolId,$lead['id'],$actor,$action,$duplicate ? 'Potential duplicate' : '');
@@ -821,7 +824,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $byStaff[(string)($l['assigned_to']??'unassigned')]=($byStaff[(string)($l['assigned_to']??'unassigned')]??0)+1;
                     if($l['status']==='Enrolled')$enrolled++;
                     if($l['status']==='New'&&empty($l['last_contact_at']))$pending++;
-                    if(!empty($l['followup_date'])&&$l['followup_date']<=gmdate('Y-m-d')&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
+                    if(!empty($l['followup_date'])&&$l['followup_date']<=sf_admission_today()&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
                 }
                 return [200,['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
                     'first_contact_pending'=>$pending,'followups_due'=>$due,'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff]];
@@ -978,6 +981,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if ($sub==='' && $method==='PATCH') {
                     $changes=[];
                     foreach (['status','assigned_to','followup_date'] as $k) if (array_key_exists($k,$payload)) $changes[$k]=$payload[$k];
+                    $changes=array_merge($changes,sf_admission_extra_changes($payload));
                     if (!$changes) sf_fail(422,'Nothing to update');
                     if (array_key_exists('status',$changes) && !in_array($changes['status'],SF_STAGES,true)) sf_fail(422,'Invalid stage');
                     if (array_key_exists('followup_date',$changes)) $changes['followup_date']=sf_date($changes['followup_date']);
@@ -986,7 +990,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         if ($role==='Counsellor' && $changes['assigned_to']!==$uid) sf_fail(403,'Counsellors cannot reassign leads');
                     }
                     foreach ($s['leads'] as &$l) if ($l['id']===$itemId) {
-                        foreach ($changes as $k=>$v) if ($l[$k]!==$v) {sf_audit($s,$schoolId,$itemId,$uid,'update_'.$k,($l[$k]??'(none)').' → '.($v??'(none)'));$l[$k]=$v;}
+                        foreach ($changes as $k=>$v) if (($l[$k]??null)!==$v) {sf_audit($s,$schoolId,$itemId,$uid,'update_'.$k,$k==='temperature_reason'?'Classification reason recorded':(($l[$k]??'(none)').' → '.($v??'(none)')));$l[$k]=$v;}
                         $l['updated_at']=sf_time();$updated=$l;break;
                     } unset($l);
                     return [200,sf_lead_view($s,$updated)];
@@ -1009,7 +1013,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'actor_id'=>$uid,'outcome'=>$outcome,'note'=>$note,'created_at'=>sf_time(), 'followup_date'=>$next];
                     $s['calls'][]=$entry;
                     foreach($s['leads'] as &$v)if($v['id']===$itemId){
-                        $v['last_call_outcome']=$outcome;$v['last_contact_at']=sf_time();
+                        $v['last_call_outcome']=$outcome;sf_admission_call_update($v,$outcome,sf_time());
                         if($next!=='')$v['followup_date']=$next;
                         $v['updated_at']=sf_time();break;
                     }unset($v);

@@ -31,6 +31,7 @@ jobs:
           php tests/test_cf7_multischool.php
           php tests/test_group_routing.php
           php tests/test_release_audit.php
+          php tests/test_admission_classification.php
           php tests/test_public_forms.php
           php tests/test_cf7_group.php
       - name: JavaScript syntax and UI smoke checks
