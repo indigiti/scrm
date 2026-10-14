@@ -262,3 +262,32 @@ Existing `SCHOOLFLOW_CRM_SITE_KEY` and per-form `SCHOOLFLOW_CRM_FORM_KEYS` remai
 ### Validation and deployment
 
 Tests: `php tests/test_group_routing.php`, `php tests/test_cf7_group.php`, `node tests/check_group_routing.js`, the existing CRM tests, and the DigiOps packaging/CSP checks. There are no new dependencies, migrations, or privileged browser credentials. Deploy the CRM through DigiOps, then **update the WordPress connector separately** on each applicable group WordPress site. Ensure the WordPress server can call the CRM over HTTPS and that `/scrm/api/*` is not cached or stripped of Authorization headers. Run a real test enquiry for every campus after deployment.
+
+
+## Release #13: audit, immutable GUIDs, complete demo and official messaging APIs
+
+### IDs and backwards compatibility
+
+All persisted records now receive an immutable RFC 4122-style UUID v4 (`guid`), including legacy records on the first write under the same exclusive JSON lock. **Numeric `id` fields and foreign keys are deliberately retained** to preserve deployed WordPress connectors, historic audit records, groups, school relationships and existing browser actions. School-scoped API routes accept a school UUID, and enquiry GET/PATCH/audit/call routes additionally accept the enquiry UUID; new enquiries expose `guid` immediately. Do not treat identifiers as authorization: tenant membership and assigned counsellor checks are still enforced. A later version can migrate other external URL paths to UUIDs once existing integrations are known. Never regenerate GUIDs during demo re-seeding, backup restoration or deployment.
+
+### Full demo regeneration
+
+On each school's Dashboard, **Clear demo data** removes only explicitly `is_demo` enquiries, sample web sources, their calls, scheduled visits, simulated communication previews and two demo email templates. The append-only audit history remains. **Add demo data** regenerates 18 fictional pupils with all seven admissions stages, follow-up dates, three disabled sites, linked sibling/family profiles, sample call outcomes, campus visits, conversation history, example email templates, and `demo_preview` messaging entries. No demo contact is ever sent to an external provider, and real parents/users/schools are not cleared. Demo phone numbers and `.invalid` emails are deliberately non-routable. Clear must be explicitly confirmed with `CLEAR DEMO`. You can repeat the clear-and-add cycle.
+
+### Official email API (Resend)
+
+Each school admin can open **Communications** and choose *Resend*, provide a domain-verified `from` email address and its Resend sending API key, then save. Staff with visibility of a consented real enquiry may use **Send email via API** from the enquiry drawer with an existing school email template (or default text). The email is sent by the PHP backend using `POST https://api.resend.com/emails`, never from the browser, with a unique idempotency key. Resend requires a verified sender domain and API key. See <https://resend.com/docs/api-reference/emails/send-email> and <https://resend.com/docs/dashboard/domains/introduction>. A successful API response means **accepted**, not delivered, and is logged with provider ID. No automated background email sending is enabled.
+
+### Official WhatsApp Cloud API (Meta)
+
+Each school admin can choose *Meta Cloud API*, enter the WhatsApp Business **phone number ID**, permanent/long-lived system-user access token, and an **approved no-variable WhatsApp template** name and language (for example `hello_world`, `en_US`). Staff can explicitly select **Send WhatsApp template** for a consented real parent with an international-format telephone number. The backend sends a template message using `POST https://graph.facebook.com/v24.0/{phone-number-id}/messages`. Note that templates with required header/body/button variables are not supported by this version; use approved templates without variables. A Meta accepted response is not a delivered/read receipt. See the official Meta collection <https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api> and verify your Meta Business permissions, account setup and messaging policy. Messages may incur Meta/provider charges.
+
+### Credential handling / failure boundaries
+
+Provider access tokens are encrypted with OpenSSL AES-256-GCM before storage in private JSON. An independently generated 32-byte key is stored at **`private_html/scrm/data/messaging.key`** (0600). Treat both this key and `store.json` as sensitive and **back up both together**. Restoring only `store.json` cannot decrypt provider credentials. Secrets are never returned to API consumers, placed in the public release, or copied into the CRM audit log. This is encryption at rest, not a replacement for Cloudways access control and secure backups.
+
+Enquiry send actions enforce staff role/school/lead visibility, parent consent, non-demo destinations, input and daily per-user send limits, and an idempotency UUID to prevent double clicks. The server records *pending → accepted/failed* and provider reference; provider timeouts or failures should be reconciled with the provider dashboard before retrying using a new request ID. The installed CRM does **not** yet process provider webhook delivery/read updates, scheduled cron reminders, inbound WhatsApp replies or arbitrary custom API endpoints; adding a custom adapter requires a vetted server-side endpoint allowlist and signed authentication (never a caller-supplied URL). Manual `wa.me` and `mailto:` drafts continue to work when API providers are unconfigured.
+
+### Checks
+
+Run `php tests/test_release_audit.php` to verify legacy GUID backfill, immutable identifiers, cross-school permissions, encrypted provider keys, simulated provider dispatch, retry protection, consent enforcement, demo-only prevention and complete demo cleanup. The existing PHP, WordPress mapping, JS render, HTTP JSON, CSP and responsive layout checks remain in the CI workflow. DigiOps still publishes **only** the five public runtime files, never credentials or school records. Connectivity requires Cloudways outbound HTTPS access and PHP OpenSSL/cURL extensions.

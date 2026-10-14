@@ -30,6 +30,7 @@ jobs:
           php tests/test_multischool_routing.php
           php tests/test_cf7_multischool.php
           php tests/test_group_routing.php
+          php tests/test_release_audit.php
           php tests/test_cf7_group.php
       - name: JavaScript syntax and UI smoke checks
         run: |
@@ -51,6 +52,7 @@ jobs:
           php -l dist/digiops-release/index.php
           test -f dist/digiops-release/.htaccess
           test -f dist/digiops-release/static/app.js
+          ! grep -Eq "require_once.*(app_private|messaging.php)" dist/digiops-release/index.php
           ! grep -q '/static/app.js' dist/digiops-release/static/index.html || grep -q '/scrm/static/app.js' dist/digiops-release/static/index.html
           ! find dist/digiops-release -type f \( -name '*.json' -o -name '*password*' -o -name '*.env' \) | grep .
       - name: Upload DigiOps deployment artifact

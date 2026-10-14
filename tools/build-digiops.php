@@ -16,7 +16,9 @@ function phpBody(string $file): string {
 }
 $store = phpBody($root . '/app_private/store.php');
 $api = phpBody($root . '/app_private/api.php');
+$messaging = phpBody($root . '/app_private/messaging.php');
 $api = preg_replace('~^require_once __DIR__ \. \'/store\.php\';\s*~m', '', $api, 1);
+$api = preg_replace('~^require_once __DIR__ \. \'/messaging\.php\';\s*~m', '', $api, 1);
 $gateway = phpBody($root . '/public_html/index.php');
 $gateway = preg_replace('~^require_once dirname\(__DIR__\) \. \'/app_private/api\.php\';\s*~m', '', $gateway, 1);
 $gateway = str_replace("__DIR__ . '/static/index.html'", "__DIR__ . '/static/index.html'", $gateway);
@@ -63,7 +65,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);

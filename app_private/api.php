@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/store.php';
+require_once __DIR__ . '/messaging.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -12,6 +13,24 @@ class SFError extends RuntimeException {
 function sf_fail(int $status, string $message): never { throw new SFError($status, $message); }
 function sf_time(): string { return gmdate('Y-m-d\TH:i:s+00:00'); }
 function sf_hash(string $s): string { return hash('sha256', $s); }
+function sf_uuid(): string { return SchoolFlowStore::guid(); }
+/** GUID public reference with legacy numeric identifier support during migration. */
+function sf_record_id(array $s,string $table,int|string $reference,?int $schoolId=null): int {
+    if(is_int($reference)||(is_string($reference)&&ctype_digit($reference))){
+        $id=(int)$reference;
+    }else{
+        if(!is_string($reference)||!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD',$reference))sf_fail(404,'Record not found');
+        $id=0;
+        foreach($s[$table]??[] as $row)if(($row['guid']??null)===$reference){$id=$row['id']??0;break;}
+    }
+    if(!$id)sf_fail(404,'Record not found');
+    if($schoolId!==null){
+        $row=sf_find($s[$table]??[],$id);
+        if(!$row||($row['school_id']??null)!==$schoolId)sf_fail(404,'Record not found');
+    }
+    return $id;
+}
+
 function sf_id(array &$s, string $table): int {
     $s['counters'][$table] = ($s['counters'][$table] ?? 0) + 1;
     return $s['counters'][$table];
@@ -213,7 +232,7 @@ function sf_validate_assignment(array $s, int $schoolId, mixed $id): ?int {
 }
 function sf_auto_owner(array $s, int $schoolId): ?int {
     $loads = [];
-    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor') $loads[$m['user_id']] = 0;
+    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && isset($loads[$lead['assigned_to'] ?? -1]) && !in_array($lead['status'], ['Enrolled','Lost'], true)) $loads[$lead['assigned_to']]++;
     if (!$loads) return null;
     asort($loads, SORT_NUMERIC);
@@ -262,7 +281,7 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     $duplicate = null;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && $lead['normalized_phone'] === $norm) { $duplicate = $lead['id']; break; }
     if ($assigned === null) $assigned = sf_assignment_owner($s, $schoolId);
-    $lead = ['id'=>sf_id($s,'leads'),'school_id'=>$schoolId,'site_id'=>$siteId,'name'=>$name,'guardian'=>$guardian,
+    $lead = ['id'=>sf_id($s,'leads'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'site_id'=>$siteId,'name'=>$name,'guardian'=>$guardian,
         'phone'=>$phone,'normalized_phone'=>$norm,'email'=>sf_text($p,'email',160),'grade'=>sf_text($p,'grade',80),
         'message'=>sf_text($p,'message',2000),'utm_source'=>sf_text($p,'utm_source',140),'utm_campaign'=>sf_text($p,'utm_campaign',140),
         'status'=>'New','assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
@@ -330,9 +349,48 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
         $leadId=$lead['id'];
         $leadIndex=count($s['leads'])-1;
         $s['leads'][$leadIndex]['is_demo']=true;
+        // Related sample history exercises the 2.0 calls/visits/family dashboards.
+        if($i===1 || $i===12){
+            $first=$s['leads'][0];
+            $s['leads'][$leadIndex]['guardian']=$first['guardian'];
+            $s['leads'][$leadIndex]['phone']=$first['phone'];
+            $s['leads'][$leadIndex]['normalized_phone']=$first['normalized_phone'];
+        }
+        if(in_array($stage,['Contacted','Counselling','Visit Scheduled','Applied','Enrolled'],true)){
+            $s['calls']=$s['calls']??[];
+            $s['calls'][]=['id'=>sf_id($s,'calls'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'lead_id'=>$leadId,
+                'actor_id'=>$assigned,'outcome'=>'Interested','note'=>'DEMO call: family requested admission details.',
+                'created_at'=>sf_time(),'followup_date'=>$p['followup_date'],'is_demo'=>true];
+            $s['leads'][$leadIndex]['last_call_outcome']='Interested';
+            $s['leads'][$leadIndex]['last_contact_at']=sf_time();
+        }
+        if($stage==='Visit Scheduled'||$stage==='Counselling'){
+            $s['visits']=$s['visits']??[];
+            $s['visits'][]=['id'=>sf_id($s,'visits'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'lead_id'=>$leadId,
+                'staff_id'=>$assigned,'purpose'=>'DEMO campus tour','starts_at'=>gmdate('Y-m-d\TH:i',strtotime('+'.(2+$i%8).' days 10:00')),
+                'status'=>'Scheduled','created_at'=>sf_time(),'is_demo'=>true];
+        }
         $s['leads'][$leadIndex]['status']=$stage;
         $s['leads'][$leadIndex]['created_at']=gmdate('Y-m-d\TH:i:s+00:00',strtotime('-'.($i%12+1).' days'));
         sf_audit($s,$schoolId,$leadId,$adminId,'note','DEMO NOTE: Example counselling discussion; not an actual family or enquiry.');
+    }
+    // Demo message history is explicitly synthetic: no real provider request or delivery occurred.
+    $s['message_attempts']=$s['message_attempts']??[];
+    foreach(array_slice($s['leads'],-count($rows),5) as $sample){
+        $s['message_attempts'][]=['id'=>sf_id($s,'message_attempts'),'guid'=>sf_uuid(),
+            'school_id'=>$schoolId,'lead_id'=>$sample['id'],'actor_id'=>$adminId,
+            'channel'=>count($s['message_attempts'])%2?'email':'whatsapp',
+            'status'=>'demo_preview','provider_id'=>'','created_at'=>sf_time(),'is_demo'=>true];
+    }
+    $s['email_templates']=$s['email_templates']??[];
+    foreach([
+        ['DEMO: Admission enquiry acknowledgement','Thank you for enquiring at {school}',
+         'Dear {parent},\n\nThank you for your interest in {school} for {student}. Our admissions team will contact you.'],
+        ['DEMO: Campus visit reminder','Visit reminder — {school}',
+         'Hello {parent},\n\nWe look forward to seeing {student} at {school}.']
+    ] as [$title,$subject,$body]) {
+        $s['email_templates'][]=['id'=>sf_id($s,'email_templates'),'guid'=>sf_uuid(),'school_id'=>$schoolId,
+            'title'=>$title,'subject'=>$subject,'body'=>$body,'is_demo'=>true,'created_at'=>sf_time()];
     }
     return array_merge(sf_demo_status($s,$schoolId),['created'=>true]);
 }
@@ -341,6 +399,8 @@ function sf_demo_clear(array &$s, int $schoolId): array {
     foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) $removedLeadIds[$l['id']]=true;
     $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($removedLeadIds[$l['id']])));
     $s['activities']=array_values(array_filter($s['activities'],fn($a)=>!isset($removedLeadIds[$a['lead_id'] ?? -1])));
+    foreach(['calls','visits','message_attempts'] as $related)if(isset($s[$related]))
+        $s[$related]=array_values(array_filter($s[$related],fn($x)=>!isset($removedLeadIds[$x['lead_id']??-1])));
     // Preserve real submissions even if they refer to a demo lead or a demo source.
     foreach ($s['leads'] as &$l) if ($l['school_id']===$schoolId && isset($removedLeadIds[$l['duplicate_of'] ?? -1])) $l['duplicate_of']=null;
     unset($l);
@@ -355,6 +415,8 @@ function sf_demo_clear(array &$s, int $schoolId): array {
     unset($site);
     $s['sites']=array_values(array_filter($s['sites'],fn($site)=>!isset($removedSiteIds[$site['id']])));
     $s['receipts']=array_values(array_filter($s['receipts'],fn($r)=>!isset($removedLeadIds[$r['lead_id']]) && !isset($removedSiteIds[$r['site_id']])));
+    if(isset($s['email_templates']))$s['email_templates']=array_values(array_filter($s['email_templates'],
+        fn($t)=>!($t['school_id']===$schoolId&&!empty($t['is_demo']))));
     return ['removed_leads'=>count($removedLeadIds),'removed_sites'=>count($removedSiteIds),'kept_demo_sites_with_real_leads'=>$keptSites];
 }
 
@@ -404,9 +466,11 @@ function sf_github_owner_verified(string $token): bool {
 }
 
 /** Route return form: [HTTP status, data]. All mutations run inside exclusive file lock. */
-function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null): array {
+function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
+    if($method==='POST' && preg_match('#^/api/schools/\d+/communications/(email|whatsapp)/send$#D',$path))
+        return sf_provider_send($uri,$payload,$headers,$store,$messageTransport);
     // Public first-run discovery contains no secrets. Setup is available only for a truly empty store.
     if ($path === '/api/setup/status' && $method === 'GET') {
         return $store->transaction(static function (array $s): array {
@@ -447,7 +511,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $user = ['id'=>sf_id($s,'users'),'name'=>$name,'email'=>$email,
                 'password_hash'=>password_hash($password, PASSWORD_DEFAULT),
                 'active'=>true,'created_at'=>sf_time()];
-            $schoolRow = ['id'=>sf_id($s,'schools'),'name'=>$school,'created_at'=>sf_time()];
+            $schoolRow = ['id'=>sf_id($s,'schools'),'guid'=>sf_uuid(),'name'=>$school,'created_at'=>sf_time()];
             $s['users'][] = $user;
             $s['schools'][] = $schoolRow;
             $s['memberships'][] = ['school_id'=>$schoolRow['id'],'user_id'=>$user['id'],'role'=>'Admin'];
@@ -531,8 +595,23 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     if (!str_starts_with($path, '/api/')) sf_fail(404,'Not found');
     $auth=$headers['authorization']??'';
     $write=$method !== 'GET';
-    return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri) {
+    return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri,$store) {
         $user=sf_session($s,$auth);$uid=$user['id'];
+        // School URLs accept GUIDs without changing legacy numeric IDs or internal relations.
+        if(preg_match('#^/api/schools/([0-9a-f-]{36})(/.*)?$#iD',$path,$sr)){
+            $canonical=sf_record_id($s,'schools',$sr[1]);
+            $path='/api/schools/'.$canonical.($sr[2]??'');
+        }
+        // Configuration is school-scoped; keys are encrypted and never returned by GET.
+        if(preg_match('#^/api/schools/(\d+)/communications$#D',$path,$cm)){
+            $sid=(int)$cm[1];sf_membership($s,$sid,$uid);
+            if($method==='GET')return [200,sf_provider_view($s,$sid)];
+            if($method==='PATCH'){
+                sf_membership($s,$sid,$uid,['Admin']);
+                return [200,sf_provider_set($s,$store,$sid,$uid,$payload)];
+            }
+            sf_fail(404,'Not found');
+        }
         if ($path==='/api/auth/logout' && $method==='POST') {
             $hash=sf_hash(substr($auth,7));
             $s['sessions']=array_values(array_filter($s['sessions'],fn($ss)=>$ss['token_hash']!==$hash));
@@ -638,7 +717,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $allowed=true;
             if (!$allowed) sf_fail(403,'Only an existing school admin can create a school');
             $name=sf_text($payload,'name',140,3);
-            $school=['id'=>sf_id($s,'schools'),'name'=>$name,'created_at'=>sf_time()];
+            $school=['id'=>sf_id($s,'schools'),'guid'=>sf_uuid(),'name'=>$name,'created_at'=>sf_time()];
             $s['schools'][]=$school;$s['memberships'][]=['user_id'=>$uid,'school_id'=>$school['id'],'role'=>'Admin'];
             sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
@@ -740,8 +819,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             }
             sf_fail(404,'Not found');
         }
-        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|seed|clear))?(?:/(rotate-key|notes|audit|view|calls|contact-action))?$#D',$path,$m)) sf_fail(404,'Not found');
-        $schoolId=(int)$m[1];$area=$m[2];$itemId=isset($m[3]) && $m[3]!==''?(int)$m[3]:null;
+        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|[0-9a-fA-F-]{36}|seed|clear))?(?:/(rotate-key|notes|audit|view|calls|contact-action))?$#D',$path,$m)) sf_fail(404,'Not found');
+        $schoolId=(int)$m[1];$area=$m[2];
+        $itemRef=$m[3]??'';
+        $itemId=$itemRef!==''&&ctype_digit($itemRef)?(int)$itemRef:null;
+        if($area==='leads'&&$itemRef!==''&&$itemId===null)
+            $itemId=sf_record_id($s,'leads',$itemRef,$schoolId);
         $sub=$m[4]??'';
         $role=sf_membership($s,$schoolId,$uid);
         if ($area==='audit') {
@@ -808,7 +891,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             if ($itemId===null && $method==='POST') {
                 $name=sf_text($payload,'name',140,2);$domain=sf_text($payload,'domain',180,3);$platform=sf_text($payload,'platform',60) ?: 'WordPress';
                 $key='sfsite_'.bin2hex(random_bytes(32));
-                $site=['id'=>sf_id($s,'sites'),'school_id'=>$schoolId,'name'=>$name,'domain'=>$domain,'platform'=>$platform,
+                $site=['id'=>sf_id($s,'sites'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'name'=>$name,'domain'=>$domain,'platform'=>$platform,
                     'key_hash'=>sf_hash($key),'enabled'=>1,'created_at'=>sf_time()];
                 $s['sites'][]=$site;
                 sf_event($s,$schoolId,null,$uid,'website_connected','Source #'.$site['id'].' connected');
@@ -830,7 +913,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
-                        $enabled=$_GET['enabled']??null;
+                        $enabled=parse_url($uri,PHP_URL_QUERY);
+                        parse_str(is_string($enabled)?$enabled:'',$siteQuery);$enabled=$siteQuery['enabled']??null;
                         if (!in_array($enabled,['true','false','1','0'],true)) sf_fail(422,'enabled query parameter required');
                         $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
                         sf_event($s,$schoolId,null,$uid,'website_status_changed','Source #'.$itemId.($v['enabled']?' enabled':' disabled'));
@@ -868,10 +952,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     }
                     usort($activities,fn($a,$b)=>$b['id']<=>$a['id']);
                     $calls=array_values(array_filter($s['calls']??[],fn($v)=>$v['school_id']===$schoolId&&$v['lead_id']===$itemId));
+                    $messages=array_values(array_filter($s['message_attempts']??[],fn($v)=>$v['school_id']===$schoolId&&$v['lead_id']===$itemId));
+                    $messages=array_map(static function($x){unset($x['request_id']);return $x;},$messages);
                     $visits=array_values(array_filter($s['visits']??[],fn($v)=>$v['school_id']===$schoolId&&$v['lead_id']===$itemId));
                     usort($calls,fn($a,$b)=>$b['id']<=>$a['id']);
                     return [200,['lead'=>sf_lead_view($s,$lead),'family'=>sf_family_view($s,$schoolId,$lead,$uid,$role),
-                        'calls'=>array_slice($calls,0,50),'visits'=>array_map(fn($v)=>sf_visit_view($v,$s),$visits),
+                        'calls'=>array_slice($calls,0,50),'messages'=>array_slice(array_reverse($messages),0,20),'visits'=>array_map(fn($v)=>sf_visit_view($v,$s),$visits),
                         'activities'=>array_slice($activities,0,100),
                         'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
                 }
