@@ -28,6 +28,7 @@ function sf_task_schedule(array &$s,array $lead,string $kind,string $date,?int $
     $s['tasks']=$s['tasks']??[];
     foreach($s['tasks'] as &$task)if($task['school_id']===$lead['school_id'] &&
         $task['lead_id']===$lead['id'] && $task['kind']===$kind && $task['status']==='Open'){
+        if($task['due_date']!==$date)$task['revision']=(int)($task['revision']??1)+1;
         $task['due_date']=$date;
         $task['assigned_to']=$lead['assigned_to']??null;
         $task['updated_at']=sf_time();
@@ -36,7 +37,7 @@ function sf_task_schedule(array &$s,array $lead,string $kind,string $date,?int $
     $task=['id'=>sf_id($s,'tasks'),'guid'=>sf_uuid(),'school_id'=>$lead['school_id'],
       'lead_id'=>$lead['id'],'assigned_to'=>$lead['assigned_to']??null,
       'kind'=>$kind,'title'=>$kind==='First Contact'?'Contact parent about new enquiry':($kind==='Follow-up'?'Follow up with parent':$kind),
-      'due_date'=>$date,'status'=>'Open','created_at'=>sf_time(),'updated_at'=>sf_time()];
+      'due_date'=>$date,'revision'=>1,'status'=>'Open','created_at'=>sf_time(),'updated_at'=>sf_time()];
     $s['tasks'][]=$task;
     sf_event($s,$lead['school_id'],$lead['id'],$actor,'task_created',$kind.' due '.$date);
     return $task;
