@@ -37,6 +37,7 @@ jobs:
           php tests/test_admissions_automation.php
           php tests/test_admissions_post_audit.php
           php tests/test_admissions_schedule_revision.php
+          php tests/test_admissions_export_xlsx.php
           php tests/test_public_forms.php
           php tests/test_cf7_group.php
       - name: JavaScript syntax and UI smoke checks
@@ -49,6 +50,8 @@ jobs:
         run: php tools/build-digiops.php
       - name: HTTP JSON object regression test
         run: php tests/test_http_json.php
+      - name: XLSX binary HTTP response regression test
+        run: php tests/test_http_xlsx.php
       - name: Layout / drawer CSS regression check
         run: php tests/test_layout.php
       - name: CSP / external-script regression check
