@@ -336,6 +336,7 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
         ['Neil Das','Maya Das','Grade 5','Visit Scheduled',6,1],
         ['Zoya Mirza','Saba Mirza','Grade 7','Applied',-1,2],
     ];
+    $firstDemoContact = null;
     foreach ($rows as $i => [$student,$guardian,$grade,$stage,$followOffset,$siteIndex]) {
         // 00000-prefixed phone values and example.invalid emails are never contactable.
         $phone=sprintf('+91 00000 %05d',10000+$i);
@@ -349,12 +350,14 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
         $leadId=$lead['id'];
         $leadIndex=count($s['leads'])-1;
         $s['leads'][$leadIndex]['is_demo']=true;
-        // Related sample history exercises the 2.0 calls/visits/family dashboards.
-        if($i===1 || $i===12){
-            $first=$s['leads'][0];
-            $s['leads'][$leadIndex]['guardian']=$first['guardian'];
-            $s['leads'][$leadIndex]['phone']=$first['phone'];
-            $s['leads'][$leadIndex]['normalized_phone']=$first['normalized_phone'];
+        // Keep example siblings in one fictional family, never copy a real or cross-campus contact.
+        if($i===0) $firstDemoContact=[
+            'guardian'=>$s['leads'][$leadIndex]['guardian'],
+            'phone'=>$s['leads'][$leadIndex]['phone'],
+            'normalized_phone'=>$s['leads'][$leadIndex]['normalized_phone'],
+        ];
+        if(($i===1 || $i===12) && $firstDemoContact!==null){
+            foreach($firstDemoContact as $field=>$value) $s['leads'][$leadIndex][$field]=$value;
         }
         if(in_array($stage,['Contacted','Counselling','Visit Scheduled','Applied','Enrolled'],true)){
             $s['calls']=$s['calls']??[];
