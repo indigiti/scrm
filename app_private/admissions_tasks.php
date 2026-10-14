@@ -76,3 +76,40 @@ function sf_application_can_enrol(array $s,int $sid,int $leadId): bool {
     return $application!==null && !empty($application['fee_recorded']) &&
         in_array(($application['status']??''),['Admission Confirmed','Enrolled'],true);
 }
+
+/** Configurable retry cadence, applied only after actual unsuccessful call attempts. */
+function sf_followup_policy(array $s,int $sid):array {
+    $p=$s['followup_policies'][(string)$sid]??[];
+    return ['retry_days'=>$p['retry_days']??[1,2,4]];
+}
+function sf_followup_set_policy(array &$s,int $sid,int $actor,array $payload):array {
+    $days=$payload['retry_days']??null;
+    if(!is_array($days)||!array_is_list($days)||count($days)!==3)sf_fail(422,'Configure three retry intervals');
+    foreach($days as $interval)if(!is_int($interval)||$interval<1||$interval>30)sf_fail(422,'Retry intervals must be 1–30 days');
+    $s['followup_policies'][(string)$sid]=['retry_days'=>$days];
+    sf_event($s,$sid,null,$actor,'followup_policy_changed','School contact retry cadence updated');
+    return sf_followup_policy($s,$sid);
+}
+function sf_task_auto_retry(array &$s,int $sid,int $lid,int $actor):void {
+    $policy=sf_followup_policy($s,$sid);
+    foreach($s['leads'] as &$l)if($l['id']===$lid && $l['school_id']===$sid){
+        if(in_array($l['status'],['Lost','Enrolled','Not Eligible','Duplicate / Invalid'],true))break;
+        $today=sf_admission_today();
+        if(!empty($l['followup_date']) && $l['followup_date']>$today)break; // preserve an already planned callback
+        $attempt=max(1,(int)($l['contact_attempts_without_answer']??1));
+        $offset=$policy['retry_days'][min(2,$attempt-1)];
+        $date=(new DateTimeImmutable($today,new DateTimeZone('Asia/Kolkata')))->modify('+'.$offset.' days')->format('Y-m-d');
+        $l['followup_date']=$date;$l['updated_at']=sf_time();$copy=$l;
+        sf_event($s,$sid,$lid,$actor,'followup_retry_scheduled','Unanswered call retry due '.$date);
+        break;
+    }unset($l);
+    if(isset($copy))sf_task_sync_followup($s,$copy,$actor);
+}
+
+function sf_task_cancel_for_closed_lead(array &$s,int $sid,int $lid,int $actor):void {
+    $any=false;
+    foreach($s['tasks']??[] as &$task)if($task['school_id']===$sid && $task['lead_id']===$lid && $task['status']==='Open'){
+        $task['status']='Cancelled';$task['updated_at']=sf_time();$any=true;
+    }unset($task);
+    if($any)sf_event($s,$sid,$lid,$actor,'tasks_closed','Open tasks cancelled when lead became terminal');
+}

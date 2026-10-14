@@ -20,6 +20,7 @@ $messaging = phpBody($root . '/app_private/messaging.php');
 $admissions = phpBody($root . '/app_private/admission_workflow.php');
 $tasks = phpBody($root . '/app_private/admissions_tasks.php');
 $analytics = phpBody($root . '/app_private/admissions_analytics.php');
+$automation = phpBody($root . '/app_private/admissions_automation.php');
 $publicForms = phpBody($root . '/app_private/public_forms.php');
 $api = preg_replace('~^require_once __DIR__ \. \'/store\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/messaging\.php\';\s*~m', '', $api, 1);
@@ -27,12 +28,22 @@ $api = preg_replace('~^require_once __DIR__ \. \'/public_forms\.php\';\s*~m', ''
 $api = preg_replace('~^require_once __DIR__ \. \'/admission_workflow\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_tasks\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_analytics\.php\';\s*~m', '', $api, 1);
+$api = preg_replace('~^require_once __DIR__ \. \'/admissions_automation\.php\';\s*~m', '', $api, 1);
 $gateway = phpBody($root . '/public_html/index.php');
 $gateway = preg_replace('~^require_once dirname\(__DIR__\) \. \'/app_private/api\.php\';\s*~m', '', $gateway, 1);
 $gateway = str_replace("__DIR__ . '/static/index.html'", "__DIR__ . '/static/index.html'", $gateway);
 
 $cli = <<<'CLI'
 if (PHP_SAPI === 'cli') {
+    if (($argv[1] ?? '') === 'automation-run' && $argc === 2) {
+        try {
+            $result=sf_auto_run(new SchoolFlowStore());
+            echo json_encode($result,JSON_THROW_ON_ERROR)."\n";
+            exit(0);
+        } catch (Throwable $e) {
+            fwrite(STDERR,"Automation worker error; inspect private server logs.\n");exit(1);
+        }
+    }
     // The browser cannot create an admin without a secret printed privately over Cloudways SSH.
     if (($argv[1] ?? '') === 'setup-code' && $argc === 2) {
         try {
@@ -73,7 +84,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
