@@ -865,6 +865,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         }unset($row);
                         sf_event($s,$sid,$saved['lead_id'],$uid,'application_status_changed',$status.($fees?' · fee verified':''));
                         if($status==='Submitted')sf_task_schedule($s,sf_find($s['leads'],$saved['lead_id']),'Application Review',sf_admission_today(),$uid);
+                        if($status==='Enrolled')sf_task_cancel_for_closed_lead($s,$sid,$saved['lead_id'],$uid);
                         return [200,$saved];
                     }unset($app);
                     sf_fail(404,'Application not found');
@@ -1109,6 +1110,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     foreach (['status','assigned_to','followup_date'] as $k) if (array_key_exists($k,$payload)) $changes[$k]=$payload[$k];
                     $changes=array_merge($changes,sf_admission_extra_changes($payload));
                     if(array_key_exists('deferred_until',$payload))$changes['deferred_until']=sf_date($payload['deferred_until']);
+                    if(($changes['status']??'')==='On Hold / Deferred' && !empty($changes['deferred_until']))$changes['followup_date']=$changes['deferred_until'];
                     foreach(['consent_email','consent_whatsapp'] as $ch)if(array_key_exists($ch,$payload)){
                         if(!is_bool($payload[$ch]))sf_fail(422,'Channel consent must be boolean');
                         if($payload[$ch] && (empty($lead['consent'])||!empty($lead['is_demo'])))sf_fail(422,'Parent contact consent is required');
@@ -1136,6 +1138,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     } unset($l);
                     if(array_key_exists('followup_date',$changes))sf_task_sync_followup($s,$updated,$uid);
                     if(($changes['status']??'')==='On Hold / Deferred' && !empty($updated['deferred_until']))sf_task_schedule($s,$updated,'Follow-up',$updated['deferred_until'],$uid);
+                    if(in_array($updated['status'],['Lost','Enrolled','Not Eligible','Duplicate / Invalid'],true))sf_task_cancel_for_closed_lead($s,$schoolId,$itemId,$uid);
                     return [200,sf_lead_view($s,$updated)];
                 }
                 if ($sub==='contact-action' && $method==='POST') {
