@@ -635,6 +635,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $canonical=sf_record_id($s,'schools',$sr[1]);
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
+        if(preg_match('#^/api/schools/(\d+)/followup-policy$#D',$path,$pm)){
+            $sid=(int)$pm[1];sf_membership($s,$sid,$uid,['Admin']);
+            if($method==='GET')return [200,sf_followup_policy($s,$sid)];
+            if($method==='PATCH')return [200,sf_followup_set_policy($s,$sid,$uid,$payload)];
+            sf_fail(405,'Follow-up policy method not allowed');
+        }
         // School-scoped opt-in automation: policy, status and evidence-based reconciliation.
         if(preg_match('#^/api/schools/(\d+)/automation(?:/(queue))?(?:/(\d+)/(reconcile))?$#D',$path,$am)){
             $sid=(int)$am[1];sf_membership($s,$sid,$uid,['Admin']);
@@ -1102,6 +1108,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $changes=[];
                     foreach (['status','assigned_to','followup_date'] as $k) if (array_key_exists($k,$payload)) $changes[$k]=$payload[$k];
                     $changes=array_merge($changes,sf_admission_extra_changes($payload));
+                    if(array_key_exists('deferred_until',$payload))$changes['deferred_until']=sf_date($payload['deferred_until']);
                     foreach(['consent_email','consent_whatsapp'] as $ch)if(array_key_exists($ch,$payload)){
                         if(!is_bool($payload[$ch]))sf_fail(422,'Channel consent must be boolean');
                         if($payload[$ch] && (empty($lead['consent'])||!empty($lead['is_demo'])))sf_fail(422,'Parent contact consent is required');
@@ -1113,6 +1120,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
 
                     if (!$changes) sf_fail(422,'Nothing to update');
                     if (array_key_exists('status',$changes) && !in_array($changes['status'],SF_STAGES,true)) sf_fail(422,'Invalid stage');
+                    if (($changes['status']??'')==='On Hold / Deferred' && empty($changes['deferred_until']) && empty($lead['deferred_until']))sf_fail(422,'Deferred review date required');
                     if (($changes['status']??'')==='Lost' && $lead['status']!=='Lost' && empty($changes['lost_reason']) && empty($lead['lost_reason']))sf_fail(422,'Lost reason required');
                     if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled' && !sf_application_can_enrol($s,$schoolId,$itemId))sf_fail(422,'Confirmed application and recorded fee required before enrollment');
                     if (array_key_exists('followup_date',$changes)) $changes['followup_date']=sf_date($changes['followup_date']);
@@ -1127,6 +1135,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         sf_stage_history_add($s,$l,$previousStage,$l['status'],$uid);break;
                     } unset($l);
                     if(array_key_exists('followup_date',$changes))sf_task_sync_followup($s,$updated,$uid);
+                    if(($changes['status']??'')==='On Hold / Deferred' && !empty($updated['deferred_until']))sf_task_schedule($s,$updated,'Follow-up',$updated['deferred_until'],$uid);
                     return [200,sf_lead_view($s,$updated)];
                 }
                 if ($sub==='contact-action' && $method==='POST') {
@@ -1157,6 +1166,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     }unset($v);
                     if(!empty($updatedLead['last_successful_contact_at']))sf_task_complete_kind($s,$schoolId,$itemId,'First Contact',$uid);
                     if($next!=='')sf_task_sync_followup($s,$updatedLead,$uid);
+                    elseif(in_array($outcome,['No Answer','Busy'],true))sf_task_auto_retry($s,$schoolId,$itemId,$uid);
                     sf_event($s,$schoolId,$itemId,$uid,'call_logged',$outcome.($next?' · next '.$next:''));
                     return [201,$entry];
                 }
