@@ -4,8 +4,9 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/admission_workflow.php';
+require_once __DIR__ . '/admissions_tasks.php';
 
-const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost'];
+const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
 const SF_TTL = 43200;
 
@@ -217,7 +218,9 @@ function sf_lead_view(array $s, array $lead): array {
     $lead['assigned_name'] = $owner['name'] ?? null;
     $lead['last_contact_at'] = $lead['last_contact_at'] ?? '';
     $lead['last_call_outcome'] = $lead['last_call_outcome'] ?? '';
-    return sf_admission_view($lead);
+    $lead=sf_admission_view($lead);
+    $lead['admission_phase']=sf_admission_phase((string)($lead['status']??'New'));
+    return $lead;
 }
 function sf_lead_allowed(array $s, int $schoolId, int $leadId, int $userId, string $role): array {
     $lead = sf_find($s['leads'], $leadId);
@@ -295,6 +298,8 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         'consent'=>!empty($p['consent']) ? 1:0,'duplicate_of'=>$duplicate,'created_at'=>sf_time(),'updated_at'=>sf_time()];
     $s['leads'][] = $lead;
     sf_audit($s,$schoolId,$lead['id'],$actor,$action,$duplicate ? 'Potential duplicate' : '');
+    sf_task_schedule($s,$lead,'First Contact',sf_admission_today(),$actor);
+    if(!empty($lead['followup_date']))sf_task_sync_followup($s,$lead,$actor);
     return sf_lead_view($s, $lead);
 }
 /** Demo records have an explicit flag and are always scoped to one school. */
@@ -735,7 +740,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
         // CRM 2.0 school-scoped modules: backwards compatible with existing store.json.
-        if (preg_match('#^/api/schools/(\d+)/(assignment|visits|families|templates|analytics)(?:/(\d+))?(?:/(siblings))?$#D',$path,$ext)) {
+        if (preg_match('#^/api/schools/(\d+)/(assignment|visits|families|templates|analytics|tasks|applications)(?:/(\d+))?(?:/(siblings))?$#D',$path,$ext)) {
             $sid=(int)$ext[1];$kind=$ext[2];$rid=isset($ext[3])?(int)$ext[3]:null;
             $role=sf_membership($s,$sid,$uid);
             $visible=sf_visible_leads($s,$sid,$uid,$role);
@@ -749,6 +754,82 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     sf_event($s,$sid,null,$uid,'assignment_policy_changed',$mode);
                     return [200,['mode'=>$mode]];
                 }
+            }
+            if($kind==='tasks') {
+                $s['tasks']=$s['tasks']??[];
+                if($method==='GET' && $rid===null){
+                    $visibleIds=array_column($visible,'id');$result=[];
+                    foreach($s['tasks'] as $task)if($task['school_id']===$sid && in_array($task['lead_id'],$visibleIds,true))$result[]=sf_task_present($task,$s);
+                    usort($result,static fn($a,$b)=>strcmp($a['due_date'],$b['due_date']));
+                    return [200,array_slice($result,0,2000)];
+                }
+                if($method==='POST'&&$rid===null){
+                    $lid=(int)($payload['lead_id']??0);$lead=sf_lead_allowed($s,$sid,$lid,$uid,$role);
+                    $kindValue=sf_text($payload,'kind',40,3);
+                    $date=sf_date($payload['due_date']??null);
+                    return [201,sf_task_present(sf_task_schedule($s,$lead,$kindValue,$date,$uid),$s)];
+                }
+                if($method==='PATCH'&&$rid!==null) {
+                    $status=sf_text($payload,'status',20,4);
+                    if(!in_array($status,SF_TASK_STATUSES,true))sf_fail(422,'Invalid task status');
+                    foreach($s['tasks'] as &$task)if($task['id']===$rid && $task['school_id']===$sid){
+                        sf_lead_allowed($s,$sid,$task['lead_id'],$uid,$role);
+                        if($role==='Counsellor'&&($task['assigned_to']??null)!==$uid)sf_fail(403,'Task is not assigned to you');
+                        $task['status']=$status;$task['updated_at']=sf_time();
+                        if($status==='Completed')$task['completed_at']=sf_time();
+                        $saved=$task;unset($task);
+                        sf_event($s,$sid,$saved['lead_id'],$uid,'task_status_changed',$status.' · '.$saved['kind']);
+                        return [200,sf_task_present($saved,$s)];
+                    }unset($task);
+                    sf_fail(404,'Task not found');
+                }
+                sf_fail(405,'Task method not allowed');
+            }
+            if($kind==='applications') {
+                $s['applications']=$s['applications']??[];
+                if($method==='GET'&&$rid===null){
+                    $ids=array_column($visible,'id');
+                    return [200,array_values(array_filter($s['applications'],fn($a)=>$a['school_id']===$sid&&in_array($a['lead_id'],$ids,true)))];
+                }
+                if($method==='POST'&&$rid===null){
+                    $lid=(int)($payload['lead_id']??0);$lead=sf_lead_allowed($s,$sid,$lid,$uid,$role);
+                    if(sf_application_for_lead($s,$sid,$lid)!==null)sf_fail(409,'Application already exists');
+                    $application=['id'=>sf_id($s,'applications'),'guid'=>sf_uuid(),'school_id'=>$sid,
+                        'lead_id'=>$lid,'status'=>'Started','fee_recorded'=>false,'created_at'=>sf_time(),'updated_at'=>sf_time()];
+                    $s['applications'][]=$application;
+                    foreach($s['leads'] as &$row)if($row['id']===$lid){$row['status']='Application Started';$row['updated_at']=sf_time();break;}unset($row);
+                    sf_event($s,$sid,$lid,$uid,'application_started','Application record created');
+                    return [201,$application];
+                }
+                if($method==='PATCH'&&$rid!==null){
+                    $status=sf_text($payload,'status',30,3);
+                    if(!in_array($status,SF_APPLICATION_STATUSES,true))sf_fail(422,'Invalid application status');
+                    foreach($s['applications'] as &$app)if($app['id']===$rid&&$app['school_id']===$sid){
+                        sf_lead_allowed($s,$sid,$app['lead_id'],$uid,$role);
+                        $fees=(bool)($app['fee_recorded']??false);
+                        if(array_key_exists('fee_recorded',$payload)){
+                            sf_membership($s,$sid,$uid,['Admin','Admissions']);
+                            if(!is_bool($payload['fee_recorded']))sf_fail(422,'Fee confirmation must be boolean');
+                            $fees=$payload['fee_recorded'];
+                        }
+                        if($status==='Enrolled' && (!$fees || !in_array($app['status'],['Admission Confirmed','Enrolled'],true)))
+                            sf_fail(422,'Admission must be confirmed and fee recorded before enrollment');
+                        $app['status']=$status;$app['fee_recorded']=$fees;$app['updated_at']=sf_time();
+                        $saved=$app;unset($app);
+                        $stages=['Started'=>'Application Started','Submitted'=>'Application Submitted',
+                            'Documents Pending'=>'Documents Pending','Under Review'=>'Under Review',
+                            'Offer Issued'=>'Offer Issued','Admission Confirmed'=>'Admission Confirmed','Enrolled'=>'Enrolled'];
+                        foreach($s['leads'] as &$row)if($row['id']===$saved['lead_id']){
+                            if(isset($stages[$status]))$row['status']=$stages[$status];
+                            $row['updated_at']=sf_time();break;
+                        }unset($row);
+                        sf_event($s,$sid,$saved['lead_id'],$uid,'application_status_changed',$status.($fees?' · fee verified':''));
+                        if($status==='Submitted')sf_task_schedule($s,sf_find($s['leads'],$saved['lead_id']),'Application Review',sf_admission_today(),$uid);
+                        return [200,$saved];
+                    }unset($app);
+                    sf_fail(404,'Application not found');
+                }
+                sf_fail(405,'Application method not allowed');
             }
             if($kind==='families') {
                 if($method==='GET' && $rid===null) {
@@ -782,7 +863,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $visit=['id'=>sf_id($s,'visits'),'school_id'=>$sid,'lead_id'=>$lid,'staff_id'=>$staff,
                         'starts_at'=>$start,'purpose'=>sf_text($payload,'purpose',120,2),
                         'status'=>'Scheduled','created_at'=>sf_time()];
-                    $s['visits'][]=$visit;sf_event($s,$sid,$lid,$uid,'visit_booked',$start.' · '.$visit['purpose']);
+                    $s['visits'][]=$visit;sf_task_schedule($s,$l,'Campus Visit',substr($start,0,10),$uid);sf_event($s,$sid,$lid,$uid,'visit_booked',$start.' · '.$visit['purpose']);
                     return [201,sf_visit_view($visit,$s)];
                 }
                 if($method==='PATCH'&&$rid!==null){
@@ -827,7 +908,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if(!empty($l['followup_date'])&&$l['followup_date']<=sf_admission_today()&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
                 }
                 return [200,['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
-                    'first_contact_pending'=>$pending,'followups_due'=>$due,'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff]];
+                    'first_contact_pending'=>$pending,'followups_due'=>$due,'open_tasks'=>count(array_filter($s['tasks']??[],fn($t)=>$t['school_id']===$sid&&$t['status']==='Open'&&in_array($t['lead_id'],array_column($visible,'id'),true))), 'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff]];
             }
             sf_fail(404,'Not found');
         }
@@ -984,6 +1065,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $changes=array_merge($changes,sf_admission_extra_changes($payload));
                     if (!$changes) sf_fail(422,'Nothing to update');
                     if (array_key_exists('status',$changes) && !in_array($changes['status'],SF_STAGES,true)) sf_fail(422,'Invalid stage');
+                    if (($changes['status']??'')==='Lost' && $lead['status']!=='Lost' && empty($changes['lost_reason']) && empty($lead['lost_reason']))sf_fail(422,'Lost reason required');
+                    if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled' && !sf_application_can_enrol($s,$schoolId,$itemId))sf_fail(422,'Confirmed application and recorded fee required before enrollment');
                     if (array_key_exists('followup_date',$changes)) $changes['followup_date']=sf_date($changes['followup_date']);
                     if (array_key_exists('assigned_to',$changes)) {
                         $changes['assigned_to']=sf_validate_assignment($s,$schoolId,$changes['assigned_to']);
@@ -993,6 +1076,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         foreach ($changes as $k=>$v) if (($l[$k]??null)!==$v) {sf_audit($s,$schoolId,$itemId,$uid,'update_'.$k,$k==='temperature_reason'?'Classification reason recorded':(($l[$k]??'(none)').' → '.($v??'(none)')));$l[$k]=$v;}
                         $l['updated_at']=sf_time();$updated=$l;break;
                     } unset($l);
+                    if(array_key_exists('followup_date',$changes))sf_task_sync_followup($s,$updated,$uid);
                     return [200,sf_lead_view($s,$updated)];
                 }
                 if ($sub==='contact-action' && $method==='POST') {
@@ -1014,9 +1098,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $s['calls'][]=$entry;
                     foreach($s['leads'] as &$v)if($v['id']===$itemId){
                         $v['last_call_outcome']=$outcome;sf_admission_call_update($v,$outcome,sf_time());
+                        $updatedLead=$v;
                         if($next!=='')$v['followup_date']=$next;
                         $v['updated_at']=sf_time();break;
                     }unset($v);
+                    if(!empty($updatedLead['last_successful_contact_at']))sf_task_complete_kind($s,$schoolId,$itemId,'First Contact',$uid);
+                    if($next!=='')sf_task_sync_followup($s,$updatedLead,$uid);
                     sf_event($s,$schoolId,$itemId,$uid,'call_logged',$outcome.($next?' · next '.$next:''));
                     return [201,$entry];
                 }
