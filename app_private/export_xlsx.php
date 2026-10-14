@@ -152,7 +152,8 @@ function sf_export_matches(array $lead,array $filters):bool{
     }
     $ts=(string)($lead['created_at']??'');
     if(($filters['from']??'')!==''||($filters['to']??'')!==''){
-        $date=substr((new DateTimeImmutable($ts))->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d'),0,10);
+        try {$date=(new DateTimeImmutable($ts))->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d');}
+        catch(Throwable) {return false;}
         if(($filters['from']??'')!=='' && $date<$filters['from'])return false;
         if(($filters['to']??'')!=='' && $date>$filters['to'])return false;
     }
@@ -170,6 +171,17 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
         if(!is_string($filters[$name]??''))sf_fail(422,'Invalid report filter');
     }
     foreach(['from','to'] as $d)if(($filters[$d]??'')!=='')sf_date($filters[$d]);
+    $limits=[
+        'status'=>array_merge(['All'],SF_STAGES),
+        'temperature'=>array_merge(['All'],SF_TEMPERATURES),
+        'contact'=>['All','Pending','Contacted'],
+        'due'=>['All','Overdue','Today','Upcoming','Unscheduled'],
+    ];
+    foreach($limits as $key=>$choices)if(isset($filters[$key]) && !in_array($filters[$key],$choices,true))
+        sf_fail(422,'Invalid report filter');
+    foreach(['site','assigned'] as $key)if(isset($filters[$key]) &&
+        !preg_match('/^(All|Unassigned|[1-9][0-9]*)$/D',$filters[$key]))sf_fail(422,'Invalid report filter');
+
     if(($filters['from']??'')!==''&&($filters['to']??'')!==''&&$filters['from']>$filters['to'])
         sf_fail(422,'Report start date must precede end date');
     if(strlen((string)($filters['search']??''))>100)sf_fail(422,'Report search too long');
