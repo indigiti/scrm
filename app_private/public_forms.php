@@ -94,7 +94,13 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g))]];
         });
     }
-    if($action==='challenge' && $method==='GET')return [200,sf_public_challenge($store,$guid,$origin)];
+    if($action==='challenge' && $method==='GET') {
+        $ipKey=substr(hash('sha256',$ip),0,20);
+        $store->transaction(static function (array &$s) use($ipKey,$guid): void {
+            sf_limit($s,'public-captcha:'.$guid.':'.$ipKey,60,3600);
+        },true);
+        return [200,sf_public_challenge($store,$guid,$origin)];
+    }
     if(str_starts_with($action,'pin/') && $method==='GET') {
         $pin=substr($action,4);
         $ipKey=substr(hash('sha256',$ip),0,20);
@@ -115,6 +121,10 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         return [200,$found];
     }
     if($action==='enquiries' && $method==='POST') {
+        $ipAttempt=substr(hash('sha256',$ip),0,20);
+        $store->transaction(static function (array &$s) use ($group,$ipAttempt): void {
+            sf_limit($s,'public-attempt:'.$group['id'].':'.$ipAttempt,30,3600);
+        },true);
         $idem=(string)($headers['idempotency-key']??'');
         if(!preg_match('/^[a-zA-Z0-9_-]{12,100}$/D',$idem))sf_fail(422,'Submission ID missing');
         // Honeypot: must remain blank. No private API key can be supplied by this caller.
