@@ -501,7 +501,7 @@ function sf_github_owner_verified(string $token): bool {
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
-    if($method==='POST' && preg_match('#^/api/schools/(\\d+|[0-9a-f-]{36})/exports/admissions\\.xlsx$#iD',$path,$exportMatch))
+    if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
     if (str_starts_with($path,'/api/public/forms/'))
         return sf_public_handle($method,$path,$payload,$headers,$ip,$store);
