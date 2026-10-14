@@ -50,6 +50,14 @@ try {
     ex_call('POST',$base.'/leads/'.$one['id'].'/calls',['outcome'=>'Callback Requested','note'=>'Call back in October']);
     [$c,$export]=ex_call('POST',$base.'/exports/admissions.xlsx');
     ex_check($c===200 && is_string($export)&&str_starts_with($export,"PK\x03\x04"),'binary XLSX returned');
+    // Validate the central directory and CRC, not just local ZIP headers.
+    $fixture=$dir.'/verified-sample.xlsx';
+    file_put_contents($fixture,$export);
+    if(is_executable('/usr/bin/unzip') && function_exists('exec')){
+        $out=[];$exit=1;
+        exec('/usr/bin/unzip -t '.escapeshellarg($fixture).' 2>&1',$out,$exit);
+        ex_check($exit===0,'external ZIP integrity check (central directory and CRC)');
+    }
     $parts=ex_unzip($export);
     foreach(['[Content_Types].xml','xl/workbook.xml','xl/styles.xml','xl/worksheets/sheet1.xml','xl/worksheets/sheet2.xml'] as $path)
         ex_check(isset($parts[$path]),'required OOXML part '.$path);
