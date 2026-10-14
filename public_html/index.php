@@ -56,7 +56,7 @@ foreach (['Authorization'=>'authorization','Idempotency-Key'=>'idempotency-key',
 try {
     $store=new SchoolFlowStore();
     [$status,$data]=sf_handle($_SERVER['REQUEST_METHOD']??'GET',$path . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING']!=='' ? '?'.$_SERVER['QUERY_STRING'] : ''), $payload,$headers, $_SERVER['REMOTE_ADDR']??'unknown',$store);
-    if($status===200 && is_string($data) && preg_match('#^/api/schools/(\\d+|[0-9a-f-]{36})/exports/admissions\\.xlsx$#iD',$path)) {
+    if($status===200 && is_string($data) && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path)) {
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="schoolflow-admissions-'.gmdate('Ymd').'.xlsx"');
         header('Content-Length: '.strlen($data));
