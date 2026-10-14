@@ -105,3 +105,11 @@ function sf_task_auto_retry(array &$s,int $sid,int $lid,int $actor):void {
     }unset($l);
     if(isset($copy))sf_task_sync_followup($s,$copy,$actor);
 }
+
+function sf_task_cancel_for_closed_lead(array &$s,int $sid,int $lid,int $actor):void {
+    $any=false;
+    foreach($s['tasks']??[] as &$task)if($task['school_id']===$sid && $task['lead_id']===$lid && $task['status']==='Open'){
+        $task['status']='Cancelled';$task['updated_at']=sf_time();$any=true;
+    }unset($task);
+    if($any)sf_event($s,$sid,$lid,$actor,'tasks_closed','Open tasks cancelled when lead became terminal');
+}
