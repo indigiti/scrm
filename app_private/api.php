@@ -423,7 +423,14 @@ function sf_demo_clear(array &$s, int $schoolId): array {
     foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) $removedLeadIds[$l['id']]=true;
     $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($removedLeadIds[$l['id']])));
     $s['activities']=array_values(array_filter($s['activities'],fn($a)=>!isset($removedLeadIds[$a['lead_id'] ?? -1])));
-    foreach(['calls','visits','message_attempts'] as $related)if(isset($s[$related]))
+    // Only remove parent profiles no longer referenced by any real or remaining lead.
+    $familyRefs=[];
+    foreach($s['leads'] as $lead)if(!empty($lead['family_guid']))$familyRefs[$lead['family_guid']]=true;
+    if(isset($s['parent_profiles']))$s['parent_profiles']=array_values(array_filter(
+        $s['parent_profiles'],fn($p)=>isset($familyRefs[$p['guid']])
+    ));
+
+    foreach(['calls','visits','tasks','applications','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
         $s[$related]=array_values(array_filter($s[$related],fn($x)=>!isset($removedLeadIds[$x['lead_id']??-1])));
     // Preserve real submissions even if they refer to a demo lead or a demo source.
     foreach ($s['leads'] as &$l) if ($l['school_id']===$schoolId && isset($removedLeadIds[$l['duplicate_of'] ?? -1])) $l['duplicate_of']=null;
