@@ -48,7 +48,6 @@ try {
     ex_check($c===201,'second lead created');
     ex_call('POST',$base.'/leads/'.$one['id'].'/notes',['text'=>'Parent requested a campus tour & forms <next week>']);
     ex_call('POST',$base.'/leads/'.$one['id'].'/calls',['outcome'=>'Callback Requested','note'=>'Call back in October']);
-    ex_call('POST',$base.'/leads/'.$one['id'].'/visits',['purpose'=>'Tour']); // Unsupported route: do not require.
     [$c,$export]=ex_call('POST',$base.'/exports/admissions.xlsx');
     ex_check($c===200 && is_string($export)&&str_starts_with($export,"PK\x03\x04"),'binary XLSX returned');
     $parts=ex_unzip($export);
