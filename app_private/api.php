@@ -7,6 +7,7 @@ require_once __DIR__ . '/admission_workflow.php';
 require_once __DIR__ . '/admissions_tasks.php';
 require_once __DIR__ . '/admissions_analytics.php';
 require_once __DIR__ . '/admissions_automation.php';
+require_once __DIR__ . '/export_xlsx.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -500,6 +501,8 @@ function sf_github_owner_verified(string $token): bool {
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
+    if($method==='POST' && preg_match('#^/api/schools/(\\d+|[0-9a-f-]{36})/exports/admissions\\.xlsx$#iD',$path,$exportMatch))
+        return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
     if (str_starts_with($path,'/api/public/forms/'))
         return sf_public_handle($method,$path,$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('#^/api/schools/\d+/communications/(email|whatsapp)/send$#D',$path))
