@@ -82,7 +82,7 @@ try{
  staff_ok(staff_api('POST',$b.'/members/'.$id.'/reset-password')[0]===409,'campus admin cannot reset shared password');
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['email'=>'global-change@example.org'])[0]===409,'campus admin cannot change shared identity');
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['enabled'=>false])[0]===200,'local campus disabled while shared account remains');
- staff_ok(staff_api('GET',$b.'/leads',[],$loggedIn['token'])[0]===403,'disabled membership denied');
+ staff_ok(staff_api('GET',$b.'/leads',[],$loggedIn['token'])[0]===401,'existing session revoked on campus disable');
  [$st,$otherLogin]=staff_api('POST','/api/auth/login',['email'=>'coordinator@example.org','password'=>'CompletelyNewSecurePass2!']);
  staff_ok($st===200,'shared-account password remains usable after campus disable');
  staff_ok(staff_api('GET','/api/schools/2/leads',[],$otherLogin['token'])[0]===200,
