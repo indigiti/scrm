@@ -919,8 +919,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         sf_lead_allowed($s,$sid,$v['lead_id'],$uid,$role);
                         $status=sf_text($payload,'status',30,3);
                         if(!in_array($status,['Scheduled','Completed','No Show','Cancelled'],true))sf_fail(422,'Invalid visit status');
-                        $v['status']=$status;sf_event($s,$sid,$v['lead_id'],$uid,'visit_status_changed',$status);
-                        return [200,sf_visit_view($v,$s)];
+                        $v['status']=$status;
+                        $visitLeadId=(int)$v['lead_id'];
+                        $savedVisit=$v;unset($v);
+                        sf_event($s,$sid,$visitLeadId,$uid,'visit_status_changed',$status);
+                        sf_task_resolve_visit($s,$sid,$visitLeadId,$status,$uid);
+                        return [200,sf_visit_view($savedVisit,$s)];
                     }unset($v);sf_fail(404,'Visit not found');
                 }
             }
@@ -1139,6 +1143,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         $l['updated_at']=sf_time();$updated=$l;
                         sf_stage_history_add($s,$l,$previousStage,$l['status'],$uid);break;
                     } unset($l);
+                    if(array_key_exists('assigned_to',$changes) && ($lead['assigned_to']??null)!==($updated['assigned_to']??null))
+                        sf_task_reassign_open($s,$schoolId,$itemId,$updated['assigned_to']??null,$uid);
                     if(array_key_exists('followup_date',$changes))sf_task_sync_followup($s,$updated,$uid);
                     if(($changes['status']??'')==='On Hold / Deferred' && !empty($updated['deferred_until']))sf_task_schedule($s,$updated,'Follow-up',$updated['deferred_until'],$uid);
                     if(in_array($updated['status'],['Lost','Enrolled','Not Eligible','Duplicate / Invalid'],true))sf_task_cancel_for_closed_lead($s,$schoolId,$itemId,$uid);
@@ -1166,9 +1172,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         if($outcome==='Interested')sf_admission_recommend($v,'Warm','Parent confirmed interest','call');
                         if($outcome==='Not Interested')sf_admission_recommend($v,'Cold','Parent explicitly declined interest','call');
                         if($outcome==='Callback Requested')sf_admission_recommend($v,'Warm','Parent requested a callback','call');
-                        $updatedLead=$v;
                         if($next!=='')$v['followup_date']=$next;
-                        $v['updated_at']=sf_time();break;
+                        $v['updated_at']=sf_time();$updatedLead=$v;break;
                     }unset($v);
                     if(!empty($updatedLead['last_successful_contact_at']))sf_task_complete_kind($s,$schoolId,$itemId,'First Contact',$uid);
                     if($next!=='')sf_task_sync_followup($s,$updatedLead,$uid);
