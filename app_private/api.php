@@ -827,7 +827,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
-        if(preg_match('#^/api/schools/(\\d+)$#D',$path,$schoolMatch) && $method==='PATCH'){
+        if(preg_match('#^/api/schools/(\d+)$#D',$path,$schoolMatch) && $method==='PATCH'){
             $sid=(int)$schoolMatch[1];sf_membership($s,$sid,$uid,['Admin']);
             $name=sf_text($payload,'name',140,3);
             foreach($s['schools'] as &$school)if($school['id']===$sid){
