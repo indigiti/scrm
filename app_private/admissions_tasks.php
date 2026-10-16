@@ -43,7 +43,8 @@ function sf_task_schedule(array &$s,array $lead,string $kind,string $date,?int $
     return $task;
 }
 function sf_task_complete_kind(array &$s,int $sid,int $lid,string $kind,?int $actor=null):void {
-    foreach($s['tasks']??[] as &$t)if($t['school_id']===$sid&&$t['lead_id']===$lid&&$t['kind']===$kind&&$t['status']==='Open'){
+    $s['tasks']=$s['tasks']??[];
+    foreach($s['tasks'] as &$t)if($t['school_id']===$sid&&$t['lead_id']===$lid&&$t['kind']===$kind&&$t['status']==='Open'){
        $t['status']='Completed';$t['completed_at']=sf_time();$t['updated_at']=sf_time();
        sf_event($s,$sid,$lid,$actor,'task_completed',$kind);
     }unset($t);
@@ -52,7 +53,8 @@ function sf_task_sync_followup(array &$s,array $lead,?int $actor=null):void {
     $date=(string)($lead['followup_date']??'');
     if($date!=='')sf_task_schedule($s,$lead,'Follow-up',$date,$actor);
     else{
-        foreach($s['tasks']??[] as &$task)if($task['school_id']===$lead['school_id'] &&
+        $s['tasks']=$s['tasks']??[];
+    foreach($s['tasks'] as &$task)if($task['school_id']===$lead['school_id'] &&
            $task['lead_id']===$lead['id'] && $task['kind']==='Follow-up' && $task['status']==='Open'){
             $task['status']='Cancelled';$task['updated_at']=sf_time();
         }unset($task);
@@ -109,8 +111,35 @@ function sf_task_auto_retry(array &$s,int $sid,int $lid,int $actor):void {
 
 function sf_task_cancel_for_closed_lead(array &$s,int $sid,int $lid,int $actor):void {
     $any=false;
-    foreach($s['tasks']??[] as &$task)if($task['school_id']===$sid && $task['lead_id']===$lid && $task['status']==='Open'){
+    $s['tasks']=$s['tasks']??[];
+    foreach($s['tasks'] as &$task)if($task['school_id']===$sid && $task['lead_id']===$lid && $task['status']==='Open'){
         $task['status']='Cancelled';$task['updated_at']=sf_time();$any=true;
     }unset($task);
     if($any)sf_event($s,$sid,$lid,$actor,'tasks_closed','Open tasks cancelled when lead became terminal');
+}
+
+function sf_task_reassign_open(array &$s,int $sid,int $lid,?int $owner,int $actor):void {
+    $changed=0;
+    foreach($s['tasks'] as &$task)if(($task['school_id']??null)===$sid &&
+        ($task['lead_id']??null)===$lid && ($task['status']??'')==='Open' &&
+        ($task['assigned_to']??null)!==$owner){
+        $task['assigned_to']=$owner;$task['updated_at']=sf_time();$changed++;
+    }unset($task);
+    if($changed>0)sf_event($s,$sid,$lid,$actor,'open_tasks_reassigned',
+        $changed.' action(s) moved with the assigned counsellor');
+}
+function sf_task_resolve_visit(array &$s,int $sid,int $lid,string $status,int $actor):void {
+    if(!in_array($status,['Completed','No Show','Cancelled'],true))return;
+    $openVisit=false;
+    foreach($s['visits']??[] as $visit)if(($visit['school_id']??null)===$sid &&
+        ($visit['lead_id']??null)===$lid && ($visit['status']??'')==='Scheduled'){$openVisit=true;break;}
+    if($openVisit)return; // another scheduled visit remains
+    $s['tasks']=$s['tasks']??[];
+    foreach($s['tasks'] as &$task)if(($task['school_id']??null)===$sid &&
+        ($task['lead_id']??null)===$lid && ($task['kind']??'')==='Campus Visit' && ($task['status']??'')==='Open'){
+        $task['status']=$status==='Completed'?'Completed':'Cancelled';
+        $task['updated_at']=sf_time();
+        if($status==='Completed')$task['completed_at']=sf_time();
+        sf_event($s,$sid,$lid,$actor,'visit_task_resolved',$status);
+    }unset($task);
 }
