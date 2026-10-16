@@ -127,3 +127,9 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,input:focus-v
 @media(max-width:800px){.phase-pipeline{min-width:920px;grid-template-columns:repeat(5,minmax(176px,1fr))}.worklist-head{flex-wrap:wrap}}
 @media(max-width:520px){.next-action-strip{font-size:13px}.detail-jump{gap:6px}.detail-jump a{padding:6px 10px}.phase-pipeline{min-width:880px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Historical import review and explicit confirmation. */
+.import-confirm{display:flex;gap:10px;align-items:flex-start;margin:16px 0;color:#303751;font-size:14px}
+.import-confirm input{margin-top:3px;accent-color:#6255e9;min-width:18px;min-height:18px}
+[data-action="import-commit"]:disabled{opacity:.5;cursor:not-allowed}
+[data-import-map]{font-size:14px;min-height:40px}
