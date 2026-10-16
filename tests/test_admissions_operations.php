@@ -37,6 +37,7 @@ try{
  oc(orq('PATCH',$base.'/leads/'.$id.'/documents',['type'=>'Birth Certificate','status'=>'Verified','note'=>'Validated at reception'])[0]===200,'admissions admin verifies');
  $docs=orq('GET',$base.'/leads/'.$id.'/documents')[1];
  oc($docs[0]['status']==='Verified','document verified status persisted');
+ oc(orq('PATCH',$base.'/leads/'.$id.'/documents',['type'=>'Birth Certificate','status'=>'Pending'],'counsellor')[0]===403,'counsellor cannot downgrade a verified document');
  oc(orq('GET',$base.'/leads/'.$id.'/documents',[],'other')[0]===403,'other-campus document access denied');
  oc(orq('PATCH',$base.'/seat-plans',['academic_year'=>'2027-28','grade'=>'I','capacity'=>1])[0]===200,'grade/year capacity configured');
  oc(orq('PATCH',$base.'/seat-plans',['academic_year'=>'2027-28','grade'=>'I','capacity'=>-1])[0]===422,'invalid seat capacity rejected');
@@ -50,6 +51,7 @@ try{
   oc(orq('PATCH',$base.'/applications/'.$app['id'],['status'=>'Admission Confirmed'])[0]===200,'admission offer confirmed');
  }
  oc(orq('PATCH',$base.'/applications/'.$apps[0]['id'],['status'=>'Enrolled','fee_recorded'=>true])[0]===200,'first student consumes one seat');
+ oc(orq('PATCH',$base.'/leads/'.$id,['academic_year'=>'2028-29'])[0]===409,'cannot change enrolled year to bypass capacity');
  oc(orq('PATCH',$base.'/applications/'.$apps[1]['id'],['status'=>'Enrolled','fee_recorded'=>true])[0]===409,'capacity blocks second enrollment');
  $seats=orq('GET',$base.'/seat-plans')[1];
  oc(count($seats)===1&&$seats[0]['remaining']===0&&$seats[0]['enrolled']===1,'remaining seats reflected in report');
