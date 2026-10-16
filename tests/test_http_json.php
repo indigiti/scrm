@@ -77,7 +77,24 @@ try {
     ht_assert($status === 200 && $result['removed_leads'] === 18, 'allow legitimate nonempty JSON object');
     [$status, $result] = ht_req($port, 'POST', $endpoint, '{}', 'json-test-token');
     ht_assert($status === 201 && $result['leads'] === 18, 'accept compact empty object {} after clear');
-    echo "PASS: DigiOps HTTP accepts {}, rejects [], and demo seed/clear works\n";
+    // The importer must accept an actual spreadsheet above the ordinary 32 KB JSON limit.
+    $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,Remarks\n";
+    for($i=0;$i<100;$i++){
+        $csv.="03/09/2026 10:30:00 AM,Sample Student $i,parent$i@example.org,9898".str_pad((string)$i,6,'0',STR_PAD_LEFT).",Pune,Maharashtra,I,Test School,\"".str_repeat('School visit requested ',18)."\"\n";
+    }
+    $upload=json_encode(['filename'=>'historical.csv','base64'=>base64_encode($csv)],JSON_THROW_ON_ERROR);
+    ht_assert(strlen($upload)>32768,'regression fixture exceeds prior gateway limit');
+    [$status,$preview]=ht_req($port,'POST','/scrm/api/schools/1/imports/preview',$upload,'json-test-token');
+    ht_assert($status===200&&$preview['valid']===100,'bounded CSV upload passes the packaged HTTP gateway');
+    [$status,$committed]=ht_req($port,'POST','/scrm/api/schools/1/imports/commit',
+        json_encode(['filename'=>'historical.csv','base64'=>base64_encode($csv),
+            'preview_guid'=>$preview['preview_guid'],'mapping'=>$preview['mapping'],'confirm'=>true],JSON_THROW_ON_ERROR),
+        'json-test-token');
+    ht_assert($status===201&&$committed['imported']===100,'real-size import commit passes HTTP body limit');
+    [$status,$tooLarge]=ht_req($port,'POST','/scrm/api/schools/1/demo-data/seed',
+        json_encode(['filler'=>str_repeat('x',33000)],JSON_THROW_ON_ERROR),'json-test-token');
+    ht_assert($status===413,'ordinary API endpoints retain the stricter request limit');
+    echo "PASS: DigiOps HTTP accepts {}, rejects [], and demo seed/clear and bounded historical import work\n";
 } finally {
     if (is_resource($proc)) {proc_terminate($proc);proc_close($proc);}
     foreach (glob($tmp . '/data/*') ?: [] as $f) @unlink($f);

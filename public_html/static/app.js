@@ -27,7 +27,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},visitMonth:new Date().toISOString().slice(0,7)};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7)};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -45,7 +45,7 @@ const stat=(name,val,info,ico,cls='')=>`<div class="stat"><div class="stat-top">
 const stageBadge=s=>`<span class="stage-tag stage-${esc(String(s).replaceAll(' ','-'))}">${esc(s)}</span>`;
 const btn=(text,action,cls='',extra='')=>`<button class="btn ${cls}" data-action="${action}" ${extra}>${text}</button>`;
 const option=(value,text,selected)=>`<option value="${esc(value)}" ${String(value)===String(selected)?'selected':''}>${esc(text)}</option>`;
-const memberOptions=selected=>`<option value="">Unassigned / Auto-assign</option>`+state.members.map(m=>option(m.id,m.name+' · '+m.role,selected)).join('');
+const memberOptions=selected=>`<option value="">Unassigned / Auto-assign</option>`+state.members.filter(m=>m.enabled!==false).map(m=>option(m.id,m.name+' · '+m.role,selected)).join('');
 const siteOptions=selected=>`<option value="">Manual entry</option>`+state.sites.map(s=>option(s.id,s.name,selected)).join('');
 const input=(label,name,type='text',value='',required=false)=>`<div class="form-field"><label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" ${required?'required':''}></label></div>`;
 const select=(label,name,options)=>`<div class="form-field"><label>${esc(label)}<select name="${name}">${options}</select></label></div>`;
@@ -70,6 +70,7 @@ async function initialize(){
  if(!state.token){render();return;}
  try{state.me=await api('/api/me');state.schoolId=Number(sessionStorage.getItem('schoolflow_school'))||state.me.schools[0]?.id;
  if(!state.me.schools.find(s=>s.id===state.schoolId))state.schoolId=state.me.schools[0]?.id;
+ if(state.me.user.must_change_password){render();return;}
  await reload();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
@@ -160,7 +161,7 @@ function tasksPage(){const rows=ext.tasks||[];return `<div class="page-card"><h2
 function followups(){let rows=state.leads.filter(l=>l.followup_date&&!['Lost','Enrolled'].includes(l.status)).sort((a,b)=>a.followup_date.localeCompare(b.followup_date));
  return `${pageHead('Follow-ups','Prioritise calls, school visits and counselling sessions.',btn('＋ New enquiry','new-lead','primary'))}<div class="stats" style="margin:0 0 22px">${stat('Due or overdue',rows.filter(l=>l.followup_date<=day()).length,'Priority contact list','◷','orange')}${stat('Scheduled',rows.filter(l=>l.followup_date>day()).length,'Future follow-ups','▣','blue')}${stat('Active enquiries',state.leads.filter(l=>!['Lost','Enrolled'].includes(l.status)).length,'Still in admissions journey','♧')}${stat('Counsellors',state.members.filter(m=>m.role==='Counsellor').length,'Available staff','♙','green')}</div>${rows.length?`<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Due date</th><th>Student</th><th>Contact</th><th>Stage</th><th>Assigned to</th><th>Actions</th></tr></thead><tbody>${rows.map(l=>`<tr><td><b style="color:${l.followup_date<=day()?'#dc8855':'#56607a'}">${esc(dateFmt(l.followup_date))}</b></td><td><b>${esc(l.name)}</b><small class="muted" style="display:block">${esc(l.grade)}</small></td><td>${esc(l.phone)}</td><td>${stageBadge(l.status)}</td><td>${esc(l.assigned_name||'Unassigned')}</td><td><div class="button-row">${btn('Open','view-lead','small',`data-id="${l.id}"`)}${l.consent&&l.email?btn('✉ Reminder draft','email-draft','small',`data-id="${l.id}"`):''}${btn('✓ Done','done-followup','small',`data-id="${l.id}"`)}</div></td></tr>`).join('')}</tbody></table></div></div>`:'<div class="empty-state"><b>No scheduled follow-ups</b><p>Add a follow-up date to an enquiry to see it here.</p></div>'}`;
 }
-function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
+function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${btn('Edit','edit-site','small',`data-id="${s.id}"`)}${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
 function groupSchoolChecks(chosen=[]){
  const admins=state.me?.schools.filter(x=>x.role==='Admin')||[];
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
@@ -179,10 +180,39 @@ function routingPage(){
  <div class="route-stats"><span><strong>${Number(sc.leads)}</strong>Enquiries</span><span><strong>${Number(sc.new_leads)}</strong>New</span><span><strong>${Number(sc.unassigned)}</strong>Unassigned</span></div>
  <p class="muted-note">Counsellor allocation: <strong>${esc(sc.assignment_mode.replaceAll('_',' '))}</strong></p>
  <div class="route-sources">${sc.sites.map(site=>`<div class="route-source"><span><b>${esc(site.name)}</b><small>${esc(site.domain)}</small></span><span class="badge ${site.enabled?'':'route-inactive'}">${site.enabled?'Active':'Disabled'}</span></div>`).join('')||'<p class="muted-note">No website connected.</p>'}</div>
- <div class="button-row"><button class="btn small" data-action="route-open" data-school-id="${Number(sc.id)}">Open school</button><button class="btn primary small" data-action="route-connect" data-school-id="${Number(sc.id)}">＋ Connect website</button></div></section>`).join('')}</div>`;
+ <div class="button-row"><button class="btn small" data-action="edit-school" data-school-id="${Number(sc.id)}">Edit school</button><button class="btn small" data-action="route-open" data-school-id="${Number(sc.id)}">Open school</button><button class="btn primary small" data-action="route-connect" data-school-id="${Number(sc.id)}">＋ Connect website</button></div></section>`).join('')}</div>`;
 }
 
-function teamPage(){return `${pageHead('Team & permissions','Separate, authenticated staff accounts for each school.',isAdmin()?btn('＋ Add staff member','new-member','primary'):'')}<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Team member</th><th>Work email</th><th>Role</th><th>Active leads</th></tr></thead><tbody>${state.members.map(m=>`<tr><td><div class="name-cell"><div class="small-avatar">${initials(m.name)}</div><b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="role-label">${esc(m.role)}</span></td><td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td></tr>`).join('')}</tbody></table></div></div>${isAdmin()?`<section class="page-card" style="margin-top:18px"><h3>Automatic enquiry assignment</h3><p class="muted-note">Applies to new WordPress and manual enquiries without an explicit assignee. Existing assignments do not change.</p><form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}<button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}<div class="footer-tip" style="margin-top:17px">Admin: all leads and administration. Admissions: all school leads, no credential management. Counsellor: only leads assigned to their account. All checks are enforced on the server, not only in the interface.</div>`;}
+function teamPage(){
+ const can=isAdmin();
+ return `${pageHead('Team & permissions','Edit, suspend and restore school-scoped staff access.',can?btn('＋ Add staff member','new-member','primary'):'')}
+ ${ext.resetResult?`<div class="page-card" role="status"><h3>One-time temporary password</h3>
+ <p>For ${esc(ext.resetResult.name)}. Share it through a secure channel. Staff must change it at next login.</p>
+ <div class="staff-temp-secret">${esc(ext.resetResult.password)}</div>
+ <button class="btn small" data-action="copy-staff-password">Copy password</button>
+ <button class="btn small" data-action="dismiss-staff-password">Dismiss password</button></div>`:''}
+ <div class="panel"><div class="table-scroll"><table class="lead-table">
+ <thead><tr><th>Team member</th><th>Work email</th><th>Role</th><th>Access</th><th>Active leads</th>${can?'<th>Actions</th>':''}</tr></thead><tbody>
+ ${state.members.map(m=>`<tr><td><div class="name-cell"><div class="small-avatar">${initials(m.name)}</div><b>${esc(m.name)}</b></div></td>
+ <td>${esc(m.email)}</td><td><span class="role-label">${esc(m.role)}</span></td>
+ <td><span class="badge ${m.enabled===false?'status-inactive':'status-active'}">${m.enabled===false?'Disabled':'Active'}</span>${m.shared_account?'<small class="muted-note"> · Multi-school</small>':''}</td>
+ <td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td>
+ ${can?`<td><div class="staff-actions">
+ ${btn('Edit','edit-staff','small',`data-id="${Number(m.id)}"`)}
+ ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${m.shared_account||m.id===state.me.user.id?'disabled title="Use a central administrator or your own password settings"':''}`)}
+ ${m.id===state.me.user.id?'':btn(m.enabled===false?'Reactivate':'Disable',m.enabled===false?'enable-staff':'disable-staff','small',`data-id="${Number(m.id)}"`)}
+ </div></td>`:''}</tr>`).join('')||'<tr><td colspan="6">No staff members</td></tr>'}
+ </tbody></table></div></div>
+ <section class="page-card" style="margin-top:18px"><h3>My account</h3>
+ <p class="muted-note">Change your own password securely. All sessions will be signed out after the change.</p>
+ ${btn('Change my password','change-my-password','small')}
+ </section>
+ ${can?`<section class="page-card" style="margin-top:18px"><h3>Automatic enquiry assignment</h3>
+ <p class="muted-note">Disabled counsellors are excluded and their open tasks become unassigned for reassignment.</p>
+ <form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}
+ <button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}
+ <div class="footer-tip" style="margin-top:17px">Admin: school-wide access and staff administration. Admissions: all school leads. Counsellor: assigned leads only. Multi-school account credentials cannot be reset or edited by an individual campus administrator.</div>`;
+}
 function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_counts||{},phases=a.by_phase||{},reasons=a.lost_reasons||{};return `<div class="stats" style="margin:0 0 18px">${stat("Hot Leads",temps.Hot||0,"Qualified high-priority enquiries","♨","orange")}${stat("Applications Submitted",a.applications_submitted||0,"Verified submissions","▣","blue")}${stat("Visits Scheduled",a.visits_scheduled||0,"Planned campus visits","▤")}${stat("Overdue Tasks",a.overdue_tasks||0,"Needs counsellor action","◷","orange")}</div><div class="panel" style="padding:16px;margin-bottom:18px"><h3>Lead temperature distribution</h3>${Object.entries(temps).map(([k,v])=>`<span class="badge" style="margin:4px">${esc(k)} · ${Number(v)}</span>`).join("")}<h3>Admissions phases</h3>${Object.entries(phases).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")}<h3>Lost reasons</h3>${Object.entries(reasons).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")||"<div class=muted-note>No recorded lost reasons</div>"}</div>`;} 
 
 const IMPORT_FIELDS=[
@@ -280,7 +310,22 @@ function modalFrame(title,subtitle,inner){return `<div class="modal-wrap" data-a
 function modal(){if(!state.modal)return '';
  if(state.modal==='new-lead')return modalFrame('New enquiry','Add a phone call, walk-in or manually received lead.',`<form id="leadForm"><div class="two-cols">${input('Student name','student_name','text','',true)}${input('Parent / guardian name','parent_name','text','',true)}${input('Contact number','phone','tel','',true)}${input('Interested class','grade','text','',false)}${input('Email (optional)','email','email')}${input('Follow-up date','followup_date','date')}${select('Website source','site_id',siteOptions())}${role()==='Counsellor'?'':select('Assign to','assigned_to',memberOptions())}</div><div class="form-field"><label>Additional message</label><textarea name="message" placeholder="Reason for enquiry, preferred campus, admission details..."></textarea></div><label style="font-size:12px;color:#657087"><input type="checkbox" name="consent" value="true"> Parent has consented to be contacted</label><div class="button-row" style="margin-top:20px;justify-content:flex-end">${btn('Cancel','close-modal') }<button class="btn primary" type="submit">Save enquiry</button></div></form>`);
  if(state.modal==='new-site')return modalFrame('Connect website','Create a separate secret integration for each site.',`<form id="siteForm">${input('Website / form name','name','text','',true)}${input('Website domain','domain','text','',true)}${select('Platform','platform',['WordPress','Custom website','Landing page','Other'].map(s=>option(s,s,'WordPress')).join(''))}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Create API key</button></div></form>`);
- if(state.modal==='new-member')return modalFrame('Add staff account','Create access for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password')}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">If the email already has a SchoolFlow account, it is linked to this school without changing that user's password.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
+ if(state.modal==='edit-staff'){
+   const staff=state.members.find(m=>m.id===ext.editMemberId);
+   if(!staff)return '';
+   return modalFrame('Edit staff account','Update school role and account details.',`<form id="editStaffForm">
+   ${input('Full name','name','text',staff.name,true)}
+   ${input('Work email','email','email',staff.email,true)}
+   ${select('School role','role',['Counsellor','Admissions','Admin'].map(r=>option(r,r,staff.role)).join(''))}
+   <p class="muted-note">Multi-school identities must be edited centrally. Role changes revoke existing sessions.</p>
+   <div class="button-row">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">Save staff changes</button></div></form>`);
+ }
+ if(state.modal==='change-my-password')return modalFrame('Change my password','All existing sessions will be revoked after saving.',`<form id="ownPasswordForm">
+   ${input('Current password','current_password','password','',true)}
+   ${input('New password (12+ characters)','new_password','password','',true)}
+   ${input('Confirm new password','confirm_password','password','',true)}
+   <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Change password</button></div></form>`);
+ if(state.modal==='new-member')return modalFrame('Add staff account','Create access for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">If the email already has a SchoolFlow account, it is linked to this school without changing that user's password.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
  if(state.modal==='book-visit')return modalFrame('Book school visit','Schedule a parent campus tour or admissions consultation.',`<form id="visitForm">${select('Student enquiry','lead_id',state.leads.map(l=>option(l.id,l.name+' · '+l.guardian,state.visitLeadId||state.detail?.lead?.id)).join(''))}${input('Visit date and time','starts_at','datetime-local','',true)}${input('Purpose','purpose','text','Campus tour',true)}${role()==='Counsellor'?'':select('Assigned staff','staff_id',memberOptions(state.detail?.lead?.assigned_to))}<button class="btn primary" type="submit">Book visit</button></form>`);
  if(state.modal==='new-template'||state.modal==='edit-template'){
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
@@ -289,6 +334,20 @@ function modal(){if(!state.modal)return '';
  if(state.modal==='new-group'||state.modal==='edit-group'){
    const g=state.modal==='edit-group'?ext.groupSites.find(x=>x.id===ext.editGroupId):null;
    return modalFrame(g?'Edit group website':'Connect group website','Choose the schools available in the parent enquiry dropdown.',`<form id="groupSiteForm">${input('Group website name','name','text',g?.name||'',true)}${input('Website domain','domain','text',g?.domain||'',true)}${groupSchoolChecks(g?.schools.map(x=>x.school_id)||[])}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">${g?'Save school routes':'Create group key'}</button></div></form>`);
+ }
+ if(state.modal==='edit-site'){
+  const site=state.sites.find(x=>x.id===ext.editSiteId);if(!site)return '';
+  return modalFrame('Edit website','Update website details without changing its API key.',`<form id="editSiteForm">
+  ${input('Website name','name','text',site.name,true)}
+  ${input('Domain','domain','text',site.domain,true)}
+  ${select('Platform','platform',['WordPress','Custom website','Landing page','Other'].map(v=>option(v,v,site.platform)).join(''))}
+  <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Save website</button></div></form>`);
+ }
+ if(state.modal==='edit-school'){
+  const sc=(ext.schoolsOverview||[]).find(x=>x.id===ext.editSchoolId);if(!sc)return '';
+  return modalFrame('Edit school','Rename the school without changing its records, routes or GUID.',`<form id="editSchoolForm">
+  ${input('School name','name','text',sc.name,true)}
+  <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Save school</button></div></form>`);
  }
  if(state.modal==='new-school')return modalFrame('Add school workspace','Create another separate school with the current admin as its administrator.',`<form id="schoolForm">${input('New school name','name','text','',true)}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Create school</button></div></form>`);
  return '';
@@ -304,6 +363,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 <button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div><h3 class="section-title">Parent messaging consent</h3><form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form><h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}<section class="drawer-audit" aria-label="Enquiry audit log"><h3 class="section-title">Audit log</h3><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${auditEntries(d.audit?.events||[])}${d.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section></div></div></div>`;
 }
 function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Connecting to SchoolFlow…</h2><p>Checking your application setup.</p></div></div>';return;}if(state.setup.needs_setup||!state.token||!state.me){root.innerHTML=loginPage();return;}
+ if(state.me.user.must_change_password){
+  root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Change temporary password</h2><p>Your administrator reset your password. You must choose a new password before accessing school records.</p>'+
+  '<form id="mandatoryPasswordForm">'+input('Temporary password','current_password','password','',true)+
+  input('New password (12+ characters)','new_password','password','',true)+
+  input('Confirm new password','confirm_password','password','',true)+
+  '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
+ }
  const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning};
  const addSchool=canManageSchools() && state.page!=='Schools & Routing'?`<button class="btn small" data-action="new-school" style="margin-left:8px">＋ Add school</button>`:'';
  root.innerHTML=`<div class="app">${nav()}<div class="main">${topbar()}<main class="content"><div style="text-align:right;margin-bottom:12px">${addSchool}</div>${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
@@ -389,17 +455,57 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    ext.lastImport=null;await reload();toast('Imported batch rolled back');
   });return;
  }
+ if(action==='edit-site'){
+  if(!isAdmin())return;
+  ext.editSiteId=Number(el.dataset.id);state.modal='edit-site';render();return;
+ }
+ if(action==='edit-school'){
+  const sid=Number(el.dataset.schoolId);
+  if(!state.me.schools.some(x=>x.id===sid&&x.role==='Admin'))return toast('Only that school administrator can edit it',true);
+  ext.editSchoolId=sid;state.modal='edit-school';render();return;
+ }
+ if(action==='edit-staff'){
+  if(!isAdmin())return;
+  ext.editMemberId=Number(el.dataset.id);state.modal='edit-staff';render();return;
+ }
+ if(action==='disable-staff'||action==='enable-staff'){
+  if(!isAdmin())return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
+  const enabled=action==='enable-staff';
+  if(!confirm((enabled?'Restore school access for ':'Disable school access for ')+staff.name+'?'+
+     (enabled?'':' Their open enquiries and tasks will be unassigned. Their active sessions will be revoked.')))return;
+  perform(async()=>{
+   await api('/api/schools/'+state.schoolId+'/members/'+staff.id,'PATCH',{enabled});
+   ext.resetResult=null;await reload();toast(staff.name+(enabled?' reactivated':' disabled for this school'));
+  });return;
+ }
+ if(action==='reset-staff'){
+  if(!isAdmin())return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
+  if(!confirm('Reset password for '+staff.name+' and revoke all their sessions?'))return;
+  perform(async()=>{
+   const result=await api('/api/schools/'+state.schoolId+'/members/'+staff.id+'/reset-password','POST',{});
+   ext.resetResult={password:result.temporary_password,name:staff.name};
+   render();toast('Temporary password generated. Copy it now.');
+  });return;
+ }
+ if(action==='dismiss-staff-password'){ext.resetResult=null;render();return;}
+ if(action==='copy-staff-password'){
+  if(ext.resetResult?.password)navigator.clipboard.writeText(ext.resetResult.password).then(()=>toast('Copied securely')).catch(()=>toast('Copy password manually',true));
+  return;
+ }
+ if(action==='change-my-password'){state.modal='change-my-password';render();return;}
  if(action==='task-complete'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/tasks/'+Number(el.dataset.id),'PATCH',{status:'Completed'});await reload();toast('Task completed');});return;}
  if(action==='create-application'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/applications','POST',{lead_id:Number(el.dataset.id)});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+Number(el.dataset.id));render();toast('Application started');});return;}
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
- if(action==='nav'||action==='go-enquiries'){state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
+ if(action==='nav'||action==='go-enquiries'){if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
    if(state.page==='Schools & Routing' && canManageSchools()){perform(loadRouting);}
    render();return;}
  if(action==='route-open'||action==='route-connect'){
    const sid=Number(el.dataset.schoolId);
    if(!canManageSchools() || !state.me.schools.some(s=>s.id===sid&&s.role==='Admin'))return;
-   state.schoolId=sid;sessionStorage.setItem('schoolflow_school',String(sid));
+   state.schoolId=sid;ext.resetResult=null;sessionStorage.setItem('schoolflow_school',String(sid));
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
@@ -504,11 +610,11 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
 }
  if(action==='new-template'){state.modal='new-template';state.editTemplateId=null;render();return;}
  if(action==='edit-template'){state.modal='edit-template';state.editTemplateId=Number(el.dataset.id);render();return;}
- if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
+ if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}ext.resetResult=null;state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
 });
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
@@ -531,7 +637,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      await reload();toast('Administrator created. Welcome to SchoolFlow.');
    }catch(e){state.error=e.message;render();}
  });return;}
- if(f.id==='loginForm'){perform(async()=>{state.error='';let result=await api('/api/auth/login','POST',fd);state.token=result.token;sessionStorage.setItem('schoolflow_session',state.token);state.me=await api('/api/me');state.schoolId=state.me.schools[0]?.id;await reload();toast('Signed in successfully');});return;}
+ if(f.id==='loginForm'){perform(async()=>{state.error='';let result=await api('/api/auth/login','POST',fd);state.token=result.token;sessionStorage.setItem('schoolflow_session',state.token);state.me=await api('/api/me');state.schoolId=state.me.schools[0]?.id;if(state.me.user.must_change_password){render();return;}await reload();toast('Signed in successfully');});return;}
 
  if(f.id==='seatPlanForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/seat-plans','PATCH',{academic_year:fd.academic_year,grade:fd.grade,capacity:Number(fd.capacity)});await reload();toast('Seat capacity saved');});return;}
  if(f.id==='responseSlaForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/response-sla','PATCH',{first_contact_minutes:Number(fd.first_contact_minutes)});await reload();toast('First-contact SLA updated');});return;}
@@ -567,6 +673,30 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      render();toast('Provider settings saved. Use a consented real enquiry to send a test.');});return;
  }
  if(f.id==='siteForm'){perform(async()=>{let result=await api(`/api/schools/${state.schoolId}/sites`,'POST',fd);state.key=result.api_key;state.modal='';state.page='Websites & Forms';await reload();toast('Website connected. Save its API key.');});return;}
+ if(f.id==='editSiteForm'){perform(async()=>{
+   await api('/api/schools/'+state.schoolId+'/sites/'+ext.editSiteId,'PATCH',{name:fd.name,domain:fd.domain,platform:fd.platform});
+   state.modal='';ext.editSiteId=null;await reload();toast('Website details updated');
+  });return;}
+ if(f.id==='editSchoolForm'){perform(async()=>{
+   await api('/api/schools/'+ext.editSchoolId,'PATCH',{name:fd.name});
+   state.me=await api('/api/me');await loadRouting();state.modal='';ext.editSchoolId=null;await reload();toast('School name updated');
+  });return;}
+ if(f.id==='editStaffForm'){
+  perform(async()=>{
+   const id=ext.editMemberId;if(!id)throw new Error('Choose a staff member');
+   await api('/api/schools/'+state.schoolId+'/members/'+id,'PATCH',{name:fd.name,email:fd.email,role:fd.role});
+   state.modal='';ext.editMemberId=null;ext.resetResult=null;await reload();toast('Staff account updated');
+  });return;
+ }
+ if(f.id==='ownPasswordForm'||f.id==='mandatoryPasswordForm'){
+  perform(async()=>{
+   if(fd.new_password!==fd.confirm_password)throw new Error('Passwords do not match');
+   if(fd.new_password.length<12)throw new Error('Use at least 12 characters');
+   await api('/api/me/password','POST',{current_password:fd.current_password,new_password:fd.new_password});
+   state.token='';state.me=null;state.modal='';sessionStorage.removeItem('schoolflow_session');
+   render();toast('Password changed. Sign in again.');
+  });return;
+ }
  if(f.id==='memberForm'){perform(async()=>{await api(`/api/schools/${state.schoolId}/members`,'POST',fd);state.modal='';await reload();toast('Team member added');});return;}
  if(f.id==='schoolForm'){perform(async()=>{let result=await api('/api/schools','POST',fd);state.me=await api('/api/me');state.schoolId=result.id;sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.modal='';state.page='Dashboard';await reload();toast('School workspace created');});return;}
  if(f.id==='editLeadForm'){perform(async()=>{let leadId=state.detail.lead.id;let payload={status:fd.status,followup_date:fd.followup_date,contact_state:fd.contact_state,academic_year:fd.academic_year,lost_reason:fd.lost_reason,deferred_until:fd.deferred_until,current_school:fd.current_school,date_of_birth:fd.date_of_birth};if(fd.temperature!==(state.detail.lead.temperature||'Unrated')){payload.temperature=fd.temperature;payload.temperature_reason=fd.temperature_reason;}if(role()!=='Counsellor')payload.assigned_to=fd.assigned_to?Number(fd.assigned_to):null;await api(`/api/schools/${state.schoolId}/leads/${leadId}`,'PATCH',payload);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${leadId}`);render();toast('Enquiry updated');});return;}

@@ -10,6 +10,7 @@ require_once __DIR__ . '/admissions_automation.php';
 require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
+require_once __DIR__ . '/staff_management.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -72,6 +73,7 @@ function sf_find(array $rows, int $id): ?array {
 }
 function sf_membership(array $s, int $schoolId, int $userId, array $roles = []): string {
     foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['user_id'] === $userId) {
+        if(!sf_staff_enabled($m) || !(sf_user($s,$userId)['active']??false))sf_fail(403,'This school account is disabled');
         if ($roles && !in_array($m['role'], $roles, true)) sf_fail(403, 'Your role does not permit this action');
         return $m['role'];
     }
@@ -95,7 +97,7 @@ function sf_group_campuses(array $s, array $group): array {
         if (!$school || !$site || empty($site['enabled'])) continue;
         // An owner who has lost school-admin membership cannot keep routing data there.
         $authorized=false;
-        foreach ($s['memberships'] as $m) if ($m['school_id']===$school['id'] && $m['user_id']===$group['owner_id'] && $m['role']==='Admin') {$authorized=true;break;}
+        foreach ($s['memberships'] as $m) if ($m['school_id']===$school['id'] && $m['user_id']===$group['owner_id'] && $m['role']==='Admin' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false)) {$authorized=true;break;}
         if($authorized) $out[]=['code'=>$route['code'],'name'=>$school['name'],'school_id'=>$school['id'],'site_id'=>$site['id']];
     }
     return $out;
@@ -242,7 +244,7 @@ function sf_validate_assignment(array $s, int $schoolId, mixed $id): ?int {
 }
 function sf_auto_owner(array $s, int $schoolId): ?int {
     $loads = [];
-    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
+    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && isset($loads[$lead['assigned_to'] ?? -1]) && !in_array($lead['status'], ['Enrolled','Lost'], true)) $loads[$lead['assigned_to']]++;
     if (!$loads) return null;
     asort($loads, SORT_NUMERIC);
@@ -254,7 +256,7 @@ function sf_assignment_owner(array &$s, int $schoolId): ?int {
     if ($policy === 'manual') return null;
     if ($policy !== 'round_robin') return sf_auto_owner($s,$schoolId);
     $people=[];
-    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor') {
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor' && sf_staff_enabled($m)) {
         $user=sf_user($s,$m['user_id']);if ($user && $user['active']) $people[]=$user['id'];
     }
     sort($people,SORT_NUMERIC);
@@ -338,7 +340,7 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
     }
     // Real staff members may be used as assignment targets; no demo login accounts are created.
     $owners=[];
-    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && in_array($m['role'],['Counsellor','Admissions'],true)) $owners[]=$m['user_id'];
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && sf_staff_enabled($m) && in_array($m['role'],['Counsellor','Admissions'],true)) $owners[]=$m['user_id'];
     if (!$owners) $owners=[$adminId];
     $rows = [
         ['Aarav Mehta','Rohan Mehta','Grade 1','New',-1,0],
@@ -572,6 +574,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $pass=sf_text($payload,'password',1024,1);
             $user=null;
             foreach ($s['users'] as $u) if ($u['email']===$email && $u['active']) { $user=$u;break; }
+            if($user && !array_filter($s['memberships'],fn($m)=>$m['user_id']===$user['id'] && sf_staff_enabled($m)))$user=null;
             if (!$user || !password_verify($pass,$user['password_hash'])) {
                 if ($user) foreach ($s['memberships'] as $m) if ($m['user_id']===$user['id']) sf_event($s,$m['school_id'],null,$user['id'],'login_failed','Incorrect password');
                 return [401, ['detail'=>'Incorrect email or password']];
@@ -639,12 +642,22 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     $write=$method !== 'GET';
     return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri,$store) {
         $user=sf_session($s,$auth);$uid=$user['id'];
+        if(!empty($user['must_change_password']) && !in_array($path,['/api/me','/api/me/password','/api/auth/logout'],true))
+            sf_fail(403,'Change your temporary password before using the CRM');
+        if($path==='/api/me/password' && $method==='POST')return [200,sf_staff_change_own_password($s,$uid,$payload)];
         // School URLs accept GUIDs without changing legacy numeric IDs or internal relations.
         if(preg_match('#^/api/schools/([0-9a-f-]{36})(/.*)?$#iD',$path,$sr)){
             $canonical=sf_record_id($s,'schools',$sr[1]);
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
+        if(preg_match('#^/api/schools/(\d+)/members/(\d+)(?:/(reset-password))?$#D',$path,$staffMatch)){
+            $sid=(int)$staffMatch[1];$target=(int)$staffMatch[2];
+            if($method==='PATCH' && empty($staffMatch[3]))return [200,sf_staff_update($s,$sid,$uid,$target,$payload)];
+            if($method==='POST' && ($staffMatch[3]??'')==='reset-password')
+                return [200,sf_staff_reset_password($s,$sid,$uid,$target)];
+            sf_fail(405,'Team member operation is not supported');
+        }
         if(preg_match('#^/api/schools/(\d+)/leads/(\d+)/documents$#D',$path,$dm)){
             $sid=(int)$dm[1];$leadId=(int)$dm[2];
             $role=sf_membership($s,$sid,$uid);
@@ -706,12 +719,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         if ($path==='/api/me' && $method==='GET') {
             $schools=[];
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid) {
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && sf_staff_enabled($m)) {
                 $school=sf_find($s['schools'],$m['school_id']);
                 if ($school) $schools[]=['id'=>$school['id'],'name'=>$school['name'],'role'=>$m['role']];
             }
             usort($schools,fn($a,$b)=>strcmp($a['name'],$b['name']));
-            return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email']],'schools'=>$schools]];
+            return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
         if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key))?$#D',$path,$gm)) {
@@ -719,7 +732,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
             $authorizedSchools=[];
-            foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin') $authorizedSchools[]=$member['school_id'];
+            foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin' && sf_staff_enabled($member)) $authorizedSchools[]=$member['school_id'];
             if(!$authorizedSchools) sf_fail(403,'School administrator access required');
             if($method==='GET' && $groupId===null) {
                 $visible=[];
@@ -774,7 +787,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         // Never expose site bearer keys or leads from unrelated schools.
         if ($path==='/api/schools/overview' && $method==='GET') {
             $adminIds=[];
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $adminIds[$m['school_id']]=true;
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin' && sf_staff_enabled($m)) $adminIds[$m['school_id']]=true;
             if (!$adminIds) sf_fail(403,'Only school administrators can see routing');
             $rows=[];
             foreach ($s['schools'] as $school) {
@@ -806,13 +819,24 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         if ($path==='/api/schools' && $method==='POST') {
             $allowed=false;
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $allowed=true;
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin' && sf_staff_enabled($m)) $allowed=true;
             if (!$allowed) sf_fail(403,'Only an existing school admin can create a school');
             $name=sf_text($payload,'name',140,3);
             $school=['id'=>sf_id($s,'schools'),'guid'=>sf_uuid(),'name'=>$name,'created_at'=>sf_time()];
             $s['schools'][]=$school;$s['memberships'][]=['user_id'=>$uid,'school_id'=>$school['id'],'role'=>'Admin'];
             sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
+        }
+        if(preg_match('#^/api/schools/(\d+)$#D',$path,$schoolMatch) && $method==='PATCH'){
+            $sid=(int)$schoolMatch[1];sf_membership($s,$sid,$uid,['Admin']);
+            $name=sf_text($payload,'name',140,3);
+            foreach($s['schools'] as &$school)if($school['id']===$sid){
+                $school['name']=$name;$school['updated_at']=sf_time();
+                $saved=$school;break;
+            }unset($school);
+            if(!isset($saved))sf_fail(404,'School not found');
+            sf_event($s,$sid,null,$uid,'school_updated','School name updated');
+            return [200,['id'=>$sid,'name'=>$name]];
         }
         // CRM 2.0 school-scoped modules: backwards compatible with existing store.json.
         if (preg_match('#^/api/schools/(\d+)/(assignment|visits|families|templates|analytics|tasks|applications)(?:/(\d+))?(?:/(siblings))?$#D',$path,$ext)) {
@@ -1047,25 +1071,21 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(404,'Not found');
         }
         if ($area==='members' && $itemId===null) {
-            if ($method==='GET') {
-                $rows=[];
-                foreach ($s['memberships'] as $member) if ($member['school_id']===$schoolId) {
-                    $p=sf_user($s,$member['user_id']);
-                    if($p)$rows[]=['id'=>$p['id'],'name'=>$p['name'],'email'=>$p['email'],'role'=>$member['role']];
-                }
-                usort($rows,fn($a,$b)=>strcmp($a['name'],$b['name']));return [200,$rows];
-            }
-            if ($method==='POST') {
+            if($method==='GET')return [200,sf_staff_view($s,$schoolId)];
+            if($method==='POST'){
                 sf_membership($s,$schoolId,$uid,['Admin']);
                 $name=sf_text($payload,'name',140,2);$email=sf_email(sf_text($payload,'email',254,3));
                 $newRole=sf_text($payload,'role',30,3);
-                if (!in_array($newRole,SF_ROLES,true)) sf_fail(422,'Invalid staff role');
-                foreach ($s['users'] as $p) if ($p['email']===$email) sf_fail(409,'Email already registered; verified multi-school invitations are not yet supported');
+                if(!in_array($newRole,SF_ROLES,true))sf_fail(422,'Invalid staff role');
+                foreach($s['users'] as $existing)if(strcasecmp($existing['email'],$email)===0)
+                    sf_fail(409,'Email already registered. Linking accounts across schools requires separate verification');
                 $pass=sf_text($payload,'password',1024,12);
-                $new=['id'=>sf_id($s,'users'),'name'=>$name,'email'=>$email,'password_hash'=>password_hash($pass,PASSWORD_DEFAULT),'active'=>true,'created_at'=>sf_time()];
-                $s['users'][]=$new;$s['memberships'][]=['school_id'=>$schoolId,'user_id'=>$new['id'],'role'=>$newRole];
-                sf_audit($s,$schoolId,null,$uid,'member_added','user:'.$new['id']);
-                return [201,['id'=>$new['id'],'name'=>$name,'email'=>$email,'role'=>$newRole,'existing_account'=>false]];
+                $new=['id'=>sf_id($s,'users'),'guid'=>sf_uuid(),'name'=>$name,'email'=>$email,
+                    'password_hash'=>password_hash($pass,PASSWORD_DEFAULT),'active'=>true,'created_at'=>sf_time()];
+                $s['users'][]=$new;
+                $s['memberships'][]=['guid'=>sf_uuid(),'school_id'=>$schoolId,'user_id'=>$new['id'],'role'=>$newRole,'enabled'=>true];
+                sf_event($s,$schoolId,null,$uid,'member_added','Staff #'.$new['id'].' role '.$newRole);
+                return [201,['id'=>$new['id'],'name'=>$name,'email'=>$email,'role'=>$newRole,'enabled'=>true]];
             }
         }
         if ($area==='sites') {
@@ -1103,12 +1123,28 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
-                        $enabled=parse_url($uri,PHP_URL_QUERY);
-                        parse_str(is_string($enabled)?$enabled:'',$siteQuery);$enabled=$siteQuery['enabled']??null;
-                        if (!in_array($enabled,['true','false','1','0'],true)) sf_fail(422,'enabled query parameter required');
-                        $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
-                        sf_event($s,$schoolId,null,$uid,'website_status_changed','Source #'.$itemId.($v['enabled']?' enabled':' disabled'));
-                        return [200,['ok'=>true,'enabled'=>(bool)$v['enabled']]];
+                        $query=parse_url($uri,PHP_URL_QUERY);
+                        parse_str(is_string($query)?$query:'',$siteQuery);
+                        $enabled=$siteQuery['enabled']??null;
+                        if(array_key_exists('enabled',$payload)){
+                            if(!is_bool($payload['enabled']))sf_fail(422,'enabled must be boolean');
+                            $enabled=$payload['enabled']?'true':'false';
+                        }
+                        if($enabled!==null){
+                            if(!in_array($enabled,['true','false','1','0'],true))sf_fail(422,'Invalid enabled value');
+                            $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
+                        }
+                        $changed=false;
+                        foreach(['name'=>140,'domain'=>180,'platform'=>60] as $field=>$max)if(array_key_exists($field,$payload)){
+                            $value=sf_text($payload,$field,$max,$field==='platform'?1:2);
+                            $v[$field]=$value;$changed=true;
+                        }
+                        if($enabled===null && !$changed)sf_fail(422,'Provide website details or enabled status');
+                        $v['updated_at']=sf_time();
+                        sf_event($s,$schoolId,null,$uid,$changed?'website_updated':'website_status_changed',
+                            'Source #'.$itemId.' '.($v['enabled']?'active':'disabled'));
+                        return [200,['ok'=>true,'id'=>$itemId,'enabled'=>(bool)$v['enabled'],
+                            'name'=>$v['name'],'domain'=>$v['domain'],'platform'=>$v['platform']]];
                     }
                 } unset($v);
             }
