@@ -719,12 +719,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         if ($path==='/api/me' && $method==='GET') {
             $schools=[];
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid) {
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && sf_staff_enabled($m)) {
                 $school=sf_find($s['schools'],$m['school_id']);
                 if ($school) $schools[]=['id'=>$school['id'],'name'=>$school['name'],'role'=>$m['role']];
             }
             usort($schools,fn($a,$b)=>strcmp($a['name'],$b['name']));
-            return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email']],'schools'=>$schools]];
+            return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
         if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key))?$#D',$path,$gm)) {
@@ -732,7 +732,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
             $authorizedSchools=[];
-            foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin') $authorizedSchools[]=$member['school_id'];
+            foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin' && sf_staff_enabled($member)) $authorizedSchools[]=$member['school_id'];
             if(!$authorizedSchools) sf_fail(403,'School administrator access required');
             if($method==='GET' && $groupId===null) {
                 $visible=[];
@@ -787,7 +787,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         // Never expose site bearer keys or leads from unrelated schools.
         if ($path==='/api/schools/overview' && $method==='GET') {
             $adminIds=[];
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $adminIds[$m['school_id']]=true;
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin' && sf_staff_enabled($m)) $adminIds[$m['school_id']]=true;
             if (!$adminIds) sf_fail(403,'Only school administrators can see routing');
             $rows=[];
             foreach ($s['schools'] as $school) {
@@ -819,7 +819,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         if ($path==='/api/schools' && $method==='POST') {
             $allowed=false;
-            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin') $allowed=true;
+            foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && $m['role']==='Admin' && sf_staff_enabled($m)) $allowed=true;
             if (!$allowed) sf_fail(403,'Only an existing school admin can create a school');
             $name=sf_text($payload,'name',140,3);
             $school=['id'=>sf_id($s,'schools'),'guid'=>sf_uuid(),'name'=>$name,'created_at'=>sf_time()];
@@ -1060,25 +1060,21 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(404,'Not found');
         }
         if ($area==='members' && $itemId===null) {
-            if ($method==='GET') {
-                $rows=[];
-                foreach ($s['memberships'] as $member) if ($member['school_id']===$schoolId) {
-                    $p=sf_user($s,$member['user_id']);
-                    if($p)$rows[]=['id'=>$p['id'],'name'=>$p['name'],'email'=>$p['email'],'role'=>$member['role']];
-                }
-                usort($rows,fn($a,$b)=>strcmp($a['name'],$b['name']));return [200,$rows];
-            }
-            if ($method==='POST') {
+            if($method==='GET')return [200,sf_staff_view($s,$schoolId)];
+            if($method==='POST'){
                 sf_membership($s,$schoolId,$uid,['Admin']);
                 $name=sf_text($payload,'name',140,2);$email=sf_email(sf_text($payload,'email',254,3));
                 $newRole=sf_text($payload,'role',30,3);
-                if (!in_array($newRole,SF_ROLES,true)) sf_fail(422,'Invalid staff role');
-                foreach ($s['users'] as $p) if ($p['email']===$email) sf_fail(409,'Email already registered; verified multi-school invitations are not yet supported');
+                if(!in_array($newRole,SF_ROLES,true))sf_fail(422,'Invalid staff role');
+                foreach($s['users'] as $existing)if(strcasecmp($existing['email'],$email)===0)
+                    sf_fail(409,'Email already registered. Linking accounts across schools requires separate verification');
                 $pass=sf_text($payload,'password',1024,12);
-                $new=['id'=>sf_id($s,'users'),'name'=>$name,'email'=>$email,'password_hash'=>password_hash($pass,PASSWORD_DEFAULT),'active'=>true,'created_at'=>sf_time()];
-                $s['users'][]=$new;$s['memberships'][]=['school_id'=>$schoolId,'user_id'=>$new['id'],'role'=>$newRole];
-                sf_audit($s,$schoolId,null,$uid,'member_added','user:'.$new['id']);
-                return [201,['id'=>$new['id'],'name'=>$name,'email'=>$email,'role'=>$newRole,'existing_account'=>false]];
+                $new=['id'=>sf_id($s,'users'),'guid'=>sf_uuid(),'name'=>$name,'email'=>$email,
+                    'password_hash'=>password_hash($pass,PASSWORD_DEFAULT),'active'=>true,'created_at'=>sf_time()];
+                $s['users'][]=$new;
+                $s['memberships'][]=['guid'=>sf_uuid(),'school_id'=>$schoolId,'user_id'=>$new['id'],'role'=>$newRole,'enabled'=>true];
+                sf_event($s,$schoolId,null,$uid,'member_added','Staff #'.$new['id'].' role '.$newRole);
+                return [201,['id'=>$new['id'],'name'=>$name,'email'=>$email,'role'=>$newRole,'enabled'=>true]];
             }
         }
         if ($area==='sites') {
