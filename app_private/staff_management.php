@@ -55,7 +55,8 @@ function sf_staff_update(array &$s,int $sid,int $actor,int $target,array $p):arr
             !in_array($lead['status'],['Enrolled','Lost','Not Eligible','Duplicate / Invalid'],true)){
             $lead['assigned_to']=null;$lead['updated_at']=sf_time();$moved++;
         }unset($lead);
-        foreach($s['tasks']??[] as &$task)if($task['school_id']===$sid&&($task['assigned_to']??null)===$target &&
+        $s['tasks']=$s['tasks']??[];
+        foreach($s['tasks'] as &$task)if($task['school_id']===$sid&&($task['assigned_to']??null)===$target &&
             ($task['status']??'')==='Open'){$task['assigned_to']=null;$task['updated_at']=sf_time();}unset($task);
         if($moved)sf_event($s,$sid,null,$actor,'staff_leads_unassigned',$moved.' open enquiries available for reassignment');
     }
