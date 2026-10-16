@@ -28,7 +28,7 @@ try{
  $mock=static function($channel,$body,$nonce)use(&$count){$count++;return ['ok'=>true,'provider_id'=>'provider-test-'.$count];};
  $result=sf_auto_run($store,$mock);
  dc($count===0 && $result['enqueued']===0,'disabled by default means zero sends');
- $policy=['enabled'=>true,'email'=>true,'whatsapp'=>false,'task_kinds'=>['First Contact'],'max_daily'=>5];
+ $policy=['enabled'=>true,'email'=>true,'whatsapp'=>false,'task_kinds'=>['First Contact'],'max_daily'=>5,'send_start'=>'00:00','send_end'=>'23:59'];
  dc(dr('PATCH',$prefix.'/automation',$policy)[0]===200,'administrator enabled narrowly scoped policy');
  sf_auto_run($store,$mock);
  dc($count===0,'generic contact consent is not sufficient for automated email');
