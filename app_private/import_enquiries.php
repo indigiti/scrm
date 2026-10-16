@@ -171,6 +171,10 @@ function sf_import_rows(array $table,array $map,string $schoolName):array{
         $campus=$r['campus']??'';
         if($campus!==''&&!str_contains(strtolower($schoolName),strtolower($campus))&&!str_contains(strtolower($campus),strtolower($schoolName)))
             $issues[]='Campus does not match selected school';
+        $year=$r['academic_year']??'';
+        if($year!=='' && (!preg_match('/^20[2-9][0-9]-[0-9]{2}$/D',$year) ||
+            (int)substr($year,5,2)!==(((int)substr($year,2,2)+1)%100)))
+            $issues[]='Invalid academic year';
         $date=sf_import_timestamp($r['timestamp']??'');
         if(!empty($r['timestamp'])&&$date===null)$issues[]='Cannot interpret timestamp';
         $r['normalized_phone']=$phone;
@@ -248,7 +252,7 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
             $lead=sf_create_lead($s,$sid,[
                 'student_name'=>$r['name'],'parent_name'=>!empty($r['guardian'])?$r['guardian']:'Parent / guardian',
                 'phone'=>$r['phone'],'email'=>$r['email']??'','grade'=>$r['grade']??'',
-                'city'=>$r['city']??'','state'=>$r['state']??'','academic_year'=>'',
+                'city'=>$r['city']??'','state'=>$r['state']??'','academic_year'=>$r['academic_year']??'',
                 'consent'=>false,'message'=>'Historical spreadsheet import'
             ],null,$uid,null,'historical_import');
             $leadId=$lead['id'];$added[]=$leadId;
@@ -301,6 +305,9 @@ function sf_import_rollback(SchoolFlowStore $store,string $auth,int|string $scho
         $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($ids[$l['id']])));
         foreach(['activities','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $table)
             if(isset($s[$table]))$s[$table]=array_values(array_filter($s[$table],fn($r)=>!isset($ids[$r['lead_id']??0])));
+        // A sibling created after the import may now reference the same family.
+        // Never remove a parent profile while any surviving student uses it.
+        foreach($s['leads'] as $survivor)unset($families[$survivor['family_guid']??'']);
         if(isset($s['parent_profiles']))$s['parent_profiles']=array_values(array_filter(
             $s['parent_profiles'],fn($p)=>!isset($families[$p['guid']??''])));
         $s['import_batches'][$idx]['status']='rolled_back';
