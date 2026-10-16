@@ -101,3 +101,29 @@ body:has(.drawer-overlay),body:has(.modal-wrap) {overflow:hidden;}
 .group-school-choice legend{font-size:12px;font-weight:700;padding:0 5px;color:#566077}
 .group-school-choice label{display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer}
 .group-school-choice input{width:16px;height:16px;accent-color:#6456e8}
+
+/* 2026 Admissions UX: grouped menu, priority queue, compact phase pipeline. */
+.nav[aria-label]{gap:3px}
+.nav[aria-label] .nav-section{margin:13px 0 3px}
+.phase-pipeline{display:grid;grid-template-columns:repeat(5,minmax(190px,1fr));gap:12px;align-items:stretch;min-width:1060px}
+.phase-column{min-width:0;display:flex;flex-direction:column;gap:9px;min-height:200px;padding:14px;border:1px solid #e4e8f2;border-radius:13px;background:#fafbfe}
+.phase-header{align-items:center}
+.phase-count{font-weight:750;padding:3px 9px;background:#e9eaff;border-radius:20px}
+.phase-card{white-space:normal;outline-offset:3px;background:#fff}
+.phase-card small{display:block;margin-top:5px;overflow-wrap:anywhere}
+.phase-legend{font-size:13px;color:#5d6582;margin:9px 0 15px}
+.worklist-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px}
+.worklist-head h2{font-size:18px;margin:0}
+.work-lead-button{display:block;width:100%;padding:13px;text-align:left;background:#fff;border:1px solid #e4e8f2;border-radius:9px;margin-top:8px;font-size:14px;color:#27344a}
+.work-lead-button:hover,.work-lead-button:focus-visible{border-color:#6255e9;background:#f9f9ff}
+.next-action-strip{display:grid;gap:4px;margin-bottom:12px;padding:13px 15px;background:#f3f5ff;border-left:3px solid #6255e9;border-radius:9px;font-size:14px}
+.next-action-strip strong{font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.detail-jump{position:sticky;top:0;z-index:2;background:#fff;display:flex;gap:10px;padding:8px 0 12px;flex-wrap:wrap}
+.detail-jump a{border:1px solid #dfe3f3;border-radius:20px;padding:7px 13px;font-weight:650;font-size:13px;text-decoration:none}
+.detail-jump a:hover,.detail-jump a:focus-visible{border-color:#6255e9;background:#f3f2ff}
+.form-field label{display:grid;gap:6px}
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #6255e9;outline-offset:2px}
+.nav button{min-height:40px}
+@media(max-width:800px){.phase-pipeline{min-width:920px;grid-template-columns:repeat(5,minmax(176px,1fr))}.worklist-head{flex-wrap:wrap}}
+@media(max-width:520px){.next-action-strip{font-size:13px}.detail-jump{gap:6px}.detail-jump a{padding:6px 10px}.phase-pipeline{min-width:880px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
