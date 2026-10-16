@@ -33,6 +33,7 @@ jobs:
           php tests/test_release_audit.php
           php tests/test_admission_classification.php
           php tests/test_admissions_tasks.php
+          php tests/test_admissions_stabilization.php
           php tests/test_admissions_analytics.php
           php tests/test_admissions_automation.php
           php tests/test_admissions_post_audit.php
