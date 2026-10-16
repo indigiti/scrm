@@ -84,7 +84,7 @@ function sf_import_xlsx(string $binary):array{
 }
 function sf_import_csv(string $content):array{
     $content=preg_replace('/^\xEF\xBB\xBF/','',$content)??$content;
-    if(!mb_check_encoding($content,'UTF-8'))sf_fail(422,'Please export your CSV as UTF-8');
+    if(!preg_match('//u',$content))sf_fail(422,'Please export your CSV as UTF-8');
     $sep=substr_count(strtok($content,"\n"),"\t")>substr_count(strtok($content,"\n"),",")?"\t":",";
     $h=fopen('php://temp','w+');if(!$h)sf_fail(503,'Cannot read spreadsheet');
     try{
@@ -138,6 +138,7 @@ function sf_import_header_map(array $headers,mixed $provided):array{
         }
     }
     foreach(['name','phone'] as $required)if(!isset($map[$required]))sf_fail(422,'Map required column: '.$required);
+    if(!isset($map['remarks']) && count($headers)>=9 && trim((string)($headers[8]??''))==='')$map['remarks']=8;
     if(count(array_unique($map))!==count($map))sf_fail(422,'Each imported field requires its own spreadsheet column');
     return $map;
 }
@@ -245,7 +246,7 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
         foreach($rows as $r){
             if(sf_import_find_duplicate($s,$sid,$r)){$skipped++;continue;}
             $lead=sf_create_lead($s,$sid,[
-                'student_name'=>$r['name'],'parent_name'=>$r['guardian']??'Parent / guardian',
+                'student_name'=>$r['name'],'parent_name'=>!empty($r['guardian'])?$r['guardian']:'Parent / guardian',
                 'phone'=>$r['phone'],'email'=>$r['email']??'','grade'=>$r['grade']??'',
                 'city'=>$r['city']??'','state'=>$r['state']??'','academic_year'=>'',
                 'consent'=>false,'message'=>'Historical spreadsheet import'
@@ -293,7 +294,7 @@ function sf_import_rollback(SchoolFlowStore $store,string $auth,int|string $scho
         foreach($s['activities'] as $activity)if(isset($ids[$activity['lead_id']??0]) &&
             ($activity['action']??'')==='note' && ($activity['import_batch_guid']??'')!==$batchGuid)
             sf_fail(409,'An imported lead has newer notes. Rollback blocked');
-        foreach($s['leads'] as $lead)if(isset($ids[$lead['id']])&&($lead['import_batch_guid']??'')!==$batchGuid)
+        foreach($s['leads'] as $lead)if(isset($ids[$lead['id']])&&(($lead['import_batch_guid']??'')!==$batchGuid || ($lead['updated_at']??'')!==($lead['created_at']??'')))
             sf_fail(409,'Import record changed. Rollback blocked');
         $families=[];
         foreach($s['leads'] as $lead)if(isset($ids[$lead['id']]))$families[$lead['family_guid']??'']=true;
