@@ -12,7 +12,8 @@ function sf_auto_policy(array $s,int $sid):array{
     return ['enabled'=>($p['enabled']??false)===true,
         'email'=>($p['email']??false)===true,'whatsapp'=>($p['whatsapp']??false)===true,
         'task_kinds'=>is_array($p['task_kinds']??null)?$p['task_kinds']:['Follow-up','Campus Visit'],
-        'max_daily'=>min(50,max(1,(int)($p['max_daily']??10)))];
+        'max_daily'=>min(50,max(1,(int)($p['max_daily']??10))),
+        'send_start'=>$p['send_start']??'09:00','send_end'=>$p['send_end']??'18:00'];
 }
 function sf_auto_set_policy(array &$s,int $sid,int $uid,array $p):array {
     foreach(['enabled','email','whatsapp'] as $name)if(!is_bool($p[$name]??null))sf_fail(422,$name.' must be boolean');
@@ -22,8 +23,15 @@ function sf_auto_set_policy(array &$s,int $sid,int $uid,array $p):array {
     $kinds=array_values(array_unique($kinds));
     $max=$p['max_daily']??10;
     if(!is_int($max)||$max<1||$max>50)sf_fail(422,'Max daily must be between 1 and 50');
+    $previous=sf_auto_policy($s,$sid);
+    $start=$p['send_start']??$previous['send_start'];
+    $end=$p['send_end']??$previous['send_end'];
+    if(!is_string($start)||!is_string($end)||
+       !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D',$start)||
+       !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D',$end)||$start>=$end)
+        sf_fail(422,'Choose a same-day reminder window with start before end');
     $policy=['enabled'=>$p['enabled'],'email'=>$p['email'],'whatsapp'=>$p['whatsapp'],
-        'task_kinds'=>$kinds,'max_daily'=>$max];
+        'task_kinds'=>$kinds,'max_daily'=>$max,'send_start'=>$start,'send_end'=>$end];
     if($policy['enabled'] && (!$kinds || (!$policy['email']&&!$policy['whatsapp'])))
         sf_fail(422,'Enable at least one channel and task type');
     $s['automation_settings'][(string)$sid]=$policy;
@@ -39,6 +47,15 @@ function sf_auto_connected(array $s,int $sid,string $channel):bool {
     $c=$s['communication_settings'][(string)$sid]??[];
     $prefix=$channel==='email'?'email':'wa';
     return ($c[$prefix.'_provider']??'off')===($channel==='email'?'resend':'meta') && !empty($c[$prefix.'_key']);
+}
+function sf_auto_within_hours(array $policy,?DateTimeImmutable $now=null):bool {
+    $now=($now??new DateTimeImmutable('now'))->setTimezone(new DateTimeZone('Asia/Kolkata'));
+    $current=$now->format('H:i');
+    return $current>=($policy['send_start']??'09:00') && $current<($policy['send_end']??'18:00');
+}
+function sf_auto_local_day(string $timestamp):string{
+    try{return (new DateTimeImmutable($timestamp))->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d');}
+    catch(Throwable){return '';}
 }
 function sf_auto_queue_view(array $entry):array {
     // Safe staff response omits internal nonces and request metadata.
@@ -85,9 +102,10 @@ function sf_auto_reserve(array &$s,SchoolFlowStore $store):?array {
             $entry['status']='skipped';$entry['updated_at']=sf_time();$entry['reason']=$reason;
             continue;
         }
+        if(!sf_auto_within_hours($policy))continue; // keep queued until permitted school-local hours
         $sentToday=0;
         foreach($s['message_attempts']??[] as $attempt)if($attempt['school_id']===$sid &&
-            !empty($attempt['automated']) && str_starts_with($attempt['created_at'],gmdate('Y-m-d'))) $sentToday++;
+            !empty($attempt['automated']) && sf_auto_local_day((string)($attempt['created_at']??''))===sf_admission_today())$sentToday++;
         if($sentToday >= $policy['max_daily'])return null; // leave queued for next cron/day
         $c=$s['communication_settings'][(string)$sid];
         $key=$store->unseal($c[$channel==='email'?'email_key':'wa_key']);
