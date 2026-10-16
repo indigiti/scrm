@@ -15,7 +15,7 @@ try{
   $s['tasks'][]=['id'=>1,'guid'=>sf_uuid(),'school_id'=>1,'lead_id'=>1,'kind'=>'Follow-up',
       'title'=>'Follow up with parent','due_date'=>$today,'revision'=>1,'status'=>'Open','created_at'=>sf_time()];
   $s['counters']['tasks']=1;
-  $s['automation_settings']['1']=['enabled'=>true,'email'=>true,'whatsapp'=>false,'task_kinds'=>['Follow-up'],'max_daily'=>5];
+  $s['automation_settings']['1']=['enabled'=>true,'email'=>true,'whatsapp'=>false,'task_kinds'=>['Follow-up'],'max_daily'=>5,'send_start'=>'00:00','send_end'=>'23:59'];
   $s['communication_settings']['1']=['email_provider'=>'resend','email_from'=>'admissions@example.org',
      'email_key'=>$store->seal('re_TEST_NOT_REAL'),'wa_provider'=>'off'];
  },true);

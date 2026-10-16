@@ -299,7 +299,7 @@ function sf_import_rollback(SchoolFlowStore $store,string $auth,int|string $scho
         $families=[];
         foreach($s['leads'] as $lead)if(isset($ids[$lead['id']]))$families[$lead['family_guid']??'']=true;
         $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($ids[$l['id']])));
-        foreach(['activities','tasks','applications','notification_queue','stage_history','message_attempts'] as $table)
+        foreach(['activities','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $table)
             if(isset($s[$table]))$s[$table]=array_values(array_filter($s[$table],fn($r)=>!isset($ids[$r['lead_id']??0])));
         if(isset($s['parent_profiles']))$s['parent_profiles']=array_values(array_filter(
             $s['parent_profiles'],fn($p)=>!isset($families[$p['guid']??''])));

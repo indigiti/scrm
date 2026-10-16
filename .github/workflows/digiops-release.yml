@@ -40,6 +40,7 @@ jobs:
           php tests/test_admissions_schedule_revision.php
           php tests/test_admissions_export_xlsx.php
           php tests/test_historical_import.php
+          php tests/test_admissions_operations.php
           php tests/test_public_forms.php
           php tests/test_cf7_group.php
       - name: JavaScript syntax and UI smoke checks

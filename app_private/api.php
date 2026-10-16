@@ -9,6 +9,7 @@ require_once __DIR__ . '/admissions_analytics.php';
 require_once __DIR__ . '/admissions_automation.php';
 require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
+require_once __DIR__ . '/admissions_operations.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -432,7 +433,7 @@ function sf_demo_clear(array &$s, int $schoolId): array {
         $s['parent_profiles'],fn($p)=>isset($familyRefs[$p['guid']])
     ));
 
-    foreach(['calls','visits','tasks','applications','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
+    foreach(['calls','visits','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
         $s[$related]=array_values(array_filter($s[$related],fn($x)=>!isset($removedLeadIds[$x['lead_id']??-1])));
     // Preserve real submissions even if they refer to a demo lead or a demo source.
     foreach ($s['leads'] as &$l) if ($l['school_id']===$schoolId && isset($removedLeadIds[$l['duplicate_of'] ?? -1])) $l['duplicate_of']=null;
@@ -643,6 +644,28 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $canonical=sf_record_id($s,'schools',$sr[1]);
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
+
+        if(preg_match('#^/api/schools/(\d+)/leads/(\d+)/documents$#D',$path,$dm)){
+            $sid=(int)$dm[1];$leadId=(int)$dm[2];
+            $role=sf_membership($s,$sid,$uid);
+            sf_lead_allowed($s,$sid,$leadId,$uid,$role);
+            if($method==='GET')return [200,sf_doc_list($s,$sid,$leadId)];
+            if($method==='PATCH')return [200,sf_doc_update($s,$sid,$leadId,$uid,$role,$payload)];
+            sf_fail(405,'Document checklist method not allowed');
+        }
+        if(preg_match('#^/api/schools/(\d+)/(seat-plans|response-sla)$#D',$path,$ops)){
+            $sid=(int)$ops[1];$action=$ops[2];
+            sf_membership($s,$sid,$uid,['Admin']);
+            if($action==='seat-plans'){
+                if($method==='GET')return [200,sf_capacity_plan($s,$sid)];
+                if($method==='PATCH')return [200,sf_capacity_upsert($s,$sid,$uid,$payload)];
+            }
+            if($action==='response-sla'){
+                if($method==='GET')return [200,sf_sla_policy($s,$sid)];
+                if($method==='PATCH')return [200,sf_sla_set_policy($s,$sid,$uid,$payload)];
+            }
+            sf_fail(405,'Operations method not allowed');
+        }
         if(preg_match('#^/api/schools/(\d+)/followup-policy$#D',$path,$pm)){
             $sid=(int)$pm[1];sf_membership($s,$sid,$uid,['Admin']);
             if($method==='GET')return [200,sf_followup_policy($s,$sid)];
@@ -757,19 +780,25 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             foreach ($s['schools'] as $school) {
                 $sid=$school['id'];
                 if (!isset($adminIds[$sid])) continue;
-                $sites=[];$leads=0;$new=0;$unassigned=0;
+                $sites=[];$leads=0;$new=0;$unassigned=0;$enrolled=0;$hot=0;$breached=0;
+                $slaMinutes=sf_sla_policy($s,$sid)['first_contact_minutes'];
                 foreach ($s['sites'] as $site) if ($site['school_id']===$sid) {
                     $sites[]=['id'=>$site['id'],'name'=>$site['name'],'domain'=>$site['domain'],
                         'platform'=>$site['platform'],'enabled'=>(bool)$site['enabled']];
                 }
                 foreach ($s['leads'] as $lead) if ($lead['school_id']===$sid) {
                     $leads++;
-                    if ($lead['status']==='New') $new++;
+                    if (in_array($lead['status'],['New','New Enquiry'],true)) $new++;
                     if (($lead['assigned_to']??null)===null) $unassigned++;
+                    if ($lead['status']==='Enrolled')$enrolled++;
+                    if (($lead['temperature']??'Unrated')==='Hot')$hot++;
+                    if(empty($lead['last_successful_contact_at']) && empty($lead['is_demo']) && empty($lead['import_batch_guid']) &&
+                       !in_array($lead['status'],['Lost','Enrolled','Not Eligible','Duplicate / Invalid'],true) &&
+                       (time()-strtotime((string)($lead['created_at']??'now'))) >= $slaMinutes*60)$breached++;
                 }
                 usort($sites,fn($a,$b)=>strcmp($a['name'],$b['name']));
                 $rows[]=['id'=>$sid,'name'=>$school['name'],'leads'=>$leads,'new_leads'=>$new,
-                    'unassigned'=>$unassigned,'sites'=>$sites,
+                    'unassigned'=>$unassigned,'enrolled'=>$enrolled,'hot_leads'=>$hot,'sla_breached'=>$breached,'sites'=>$sites,
                     'assignment_mode'=>$s['assignment_modes'][(string)$sid]??'least_loaded'];
             }
             usort($rows,fn($a,$b)=>strcmp($a['name'],$b['name']));
@@ -860,6 +889,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         }
                         if($status==='Enrolled' && (!$fees || !in_array($app['status'],['Admission Confirmed','Enrolled'],true)))
                             sf_fail(422,'Admission must be confirmed and fee recorded before enrollment');
+                        if($status==='Enrolled' && $app['status']!=='Enrolled')sf_capacity_check_enrollment($s,sf_find($s['leads'],$app['lead_id']));
                         $app['status']=$status;$app['fee_recorded']=$fees;$app['updated_at']=sf_time();
                         $saved=$app;unset($app);
                         $stages=['Started'=>'Application Started','Submitted'=>'Application Submitted',
@@ -925,9 +955,19 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         $status=sf_text($payload,'status',30,3);
                         if(!in_array($status,['Scheduled','Completed','No Show','Cancelled'],true))sf_fail(422,'Invalid visit status');
                         $v['status']=$status;
+                        $v['feedback']=sf_text($payload,'feedback',600);
+                        $v['updated_by']=$uid;$v['updated_at']=sf_time();
                         $visitLeadId=(int)$v['lead_id'];
                         $savedVisit=$v;unset($v);
                         sf_event($s,$sid,$visitLeadId,$uid,'visit_status_changed',$status);
+                        if(array_key_exists('next_followup_date',$payload) && $payload['next_followup_date']!==''){
+                            $date=sf_date($payload['next_followup_date']);
+                            foreach($s['leads'] as &$row)if($row['id']===$visitLeadId){
+                                $row['followup_date']=$date;$row['updated_at']=sf_time();
+                                $copy=$row;break;
+                            }unset($row);
+                            if(isset($copy))sf_task_sync_followup($s,$copy,$uid);
+                        }
                         sf_task_resolve_visit($s,$sid,$visitLeadId,$status,$uid);
                         return [200,sf_visit_view($savedVisit,$s)];
                     }unset($v);sf_fail(404,'Visit not found');
@@ -961,11 +1001,11 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $source[(string)($l['site_id']??'manual')]=($source[(string)($l['site_id']??'manual')]??0)+1;
                     $byStaff[(string)($l['assigned_to']??'unassigned')]=($byStaff[(string)($l['assigned_to']??'unassigned')]??0)+1;
                     if($l['status']==='Enrolled')$enrolled++;
-                    if($l['status']==='New'&&empty($l['last_contact_at']))$pending++;
+                    if(in_array($l['status'],['New','New Enquiry'],true)&&empty($l['last_successful_contact_at']))$pending++;
                     if(!empty($l['followup_date'])&&$l['followup_date']<=sf_admission_today()&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
                 }
                 return [200,array_merge(['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
-                    'first_contact_pending'=>$pending,'followups_due'=>$due,'open_tasks'=>count(array_filter($s['tasks']??[],fn($t)=>$t['school_id']===$sid&&$t['status']==='Open'&&in_array($t['lead_id'],array_column($visible,'id'),true))), 'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff], sf_analytics_enrichment($s,$visible,$sid))];
+                    'first_contact_pending'=>$pending,'followups_due'=>$due,'open_tasks'=>count(array_filter($s['tasks']??[],fn($t)=>$t['school_id']===$sid&&$t['status']==='Open'&&in_array($t['lead_id'],array_column($visible,'id'),true))), 'by_stage'=>$stage,'by_site'=>$source,'by_staff'=>$byStaff], sf_analytics_enrichment($s,$visible,$sid),sf_sla_summary($s,$sid,$visible))];
             }
             sf_fail(404,'Not found');
         }
@@ -1110,6 +1150,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'calls'=>array_slice($calls,0,50),'messages'=>array_slice(array_reverse($messages),0,20),'visits'=>array_map(fn($v)=>sf_visit_view($v,$s),$visits),
                         'activities'=>array_slice($activities,0,100),
                         'stage_history'=>array_values(array_filter($s['stage_history']??[],fn($h)=>$h['school_id']===$schoolId&&$h['lead_id']===$itemId)),
+                        'documents'=>sf_doc_list($s,$schoolId,$itemId),
                         'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
                 }
                 if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
@@ -1137,6 +1178,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if (($changes['status']??'')==='On Hold / Deferred' && empty($changes['deferred_until']) && empty($lead['deferred_until']))sf_fail(422,'Deferred review date required');
                     if (($changes['status']??'')==='Lost' && $lead['status']!=='Lost' && empty($changes['lost_reason']) && empty($lead['lost_reason']))sf_fail(422,'Lost reason required');
                     if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled' && !sf_application_can_enrol($s,$schoolId,$itemId))sf_fail(422,'Confirmed application and recorded fee required before enrollment');
+                    if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled')sf_capacity_check_enrollment($s,$lead);
                     if (array_key_exists('followup_date',$changes)) $changes['followup_date']=sf_date($changes['followup_date']);
                     if (array_key_exists('assigned_to',$changes)) {
                         $changes['assigned_to']=sf_validate_assignment($s,$schoolId,$changes['assigned_to']);
