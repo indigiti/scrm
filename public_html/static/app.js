@@ -27,7 +27,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},visitMonth:new Date().toISOString().slice(0,7)};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,visitMonth:new Date().toISOString().slice(0,7)};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -45,7 +45,7 @@ const stat=(name,val,info,ico,cls='')=>`<div class="stat"><div class="stat-top">
 const stageBadge=s=>`<span class="stage-tag stage-${esc(String(s).replaceAll(' ','-'))}">${esc(s)}</span>`;
 const btn=(text,action,cls='',extra='')=>`<button class="btn ${cls}" data-action="${action}" ${extra}>${text}</button>`;
 const option=(value,text,selected)=>`<option value="${esc(value)}" ${String(value)===String(selected)?'selected':''}>${esc(text)}</option>`;
-const memberOptions=selected=>`<option value="">Unassigned / Auto-assign</option>`+state.members.map(m=>option(m.id,m.name+' · '+m.role,selected)).join('');
+const memberOptions=selected=>`<option value="">Unassigned / Auto-assign</option>`+state.members.filter(m=>m.enabled!==false).map(m=>option(m.id,m.name+' · '+m.role,selected)).join('');
 const siteOptions=selected=>`<option value="">Manual entry</option>`+state.sites.map(s=>option(s.id,s.name,selected)).join('');
 const input=(label,name,type='text',value='',required=false)=>`<div class="form-field"><label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" ${required?'required':''}></label></div>`;
 const select=(label,name,options)=>`<div class="form-field"><label>${esc(label)}<select name="${name}">${options}</select></label></div>`;
@@ -182,7 +182,36 @@ function routingPage(){
  <div class="button-row"><button class="btn small" data-action="route-open" data-school-id="${Number(sc.id)}">Open school</button><button class="btn primary small" data-action="route-connect" data-school-id="${Number(sc.id)}">＋ Connect website</button></div></section>`).join('')}</div>`;
 }
 
-function teamPage(){return `${pageHead('Team & permissions','Separate, authenticated staff accounts for each school.',isAdmin()?btn('＋ Add staff member','new-member','primary'):'')}<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Team member</th><th>Work email</th><th>Role</th><th>Active leads</th></tr></thead><tbody>${state.members.map(m=>`<tr><td><div class="name-cell"><div class="small-avatar">${initials(m.name)}</div><b>${esc(m.name)}</b></div></td><td>${esc(m.email)}</td><td><span class="role-label">${esc(m.role)}</span></td><td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td></tr>`).join('')}</tbody></table></div></div>${isAdmin()?`<section class="page-card" style="margin-top:18px"><h3>Automatic enquiry assignment</h3><p class="muted-note">Applies to new WordPress and manual enquiries without an explicit assignee. Existing assignments do not change.</p><form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}<button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}<div class="footer-tip" style="margin-top:17px">Admin: all leads and administration. Admissions: all school leads, no credential management. Counsellor: only leads assigned to their account. All checks are enforced on the server, not only in the interface.</div>`;}
+function teamPage(){
+ const can=isAdmin();
+ return `${pageHead('Team & permissions','Edit, suspend and restore school-scoped staff access.',can?btn('＋ Add staff member','new-member','primary'):'')}
+ ${ext.resetResult?`<div class="page-card" role="status"><h3>One-time temporary password</h3>
+ <p>For ${esc(ext.resetResult.name)}. Share it through a secure channel. Staff must change it at next login.</p>
+ <div class="staff-temp-secret">${esc(ext.resetResult.password)}</div>
+ <button class="btn small" data-action="copy-staff-password">Copy password</button>
+ <button class="btn small" data-action="dismiss-staff-password">Dismiss password</button></div>`:''}
+ <div class="panel"><div class="table-scroll"><table class="lead-table">
+ <thead><tr><th>Team member</th><th>Work email</th><th>Role</th><th>Access</th><th>Active leads</th>${can?'<th>Actions</th>':''}</tr></thead><tbody>
+ ${state.members.map(m=>`<tr><td><div class="name-cell"><div class="small-avatar">${initials(m.name)}</div><b>${esc(m.name)}</b></div></td>
+ <td>${esc(m.email)}</td><td><span class="role-label">${esc(m.role)}</span></td>
+ <td><span class="badge ${m.enabled===false?'status-inactive':'status-active'}">${m.enabled===false?'Disabled':'Active'}</span>${m.shared_account?'<small class="muted-note"> · Multi-school</small>':''}</td>
+ <td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td>
+ ${can?`<td><div class="staff-actions">
+ ${btn('Edit','edit-staff','small',`data-id="${Number(m.id)}"`)}
+ ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${m.shared_account||m.id===state.me.user.id?'disabled title="Use a central administrator or your own password settings"':''}`)}
+ ${m.id===state.me.user.id?'':btn(m.enabled===false?'Reactivate':'Disable',m.enabled===false?'enable-staff':'disable-staff','small',`data-id="${Number(m.id)}"`)}
+ </div></td>`:''}</tr>`).join('')||'<tr><td colspan="6">No staff members</td></tr>'}
+ </tbody></table></div></div>
+ <section class="page-card" style="margin-top:18px"><h3>My account</h3>
+ <p class="muted-note">Change your own password securely. All sessions will be signed out after the change.</p>
+ ${btn('Change my password','change-my-password','small')}
+ </section>
+ ${can?`<section class="page-card" style="margin-top:18px"><h3>Automatic enquiry assignment</h3>
+ <p class="muted-note">Disabled counsellors are excluded and their open tasks become unassigned for reassignment.</p>
+ <form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}
+ <button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}
+ <div class="footer-tip" style="margin-top:17px">Admin: school-wide access and staff administration. Admissions: all school leads. Counsellor: assigned leads only. Multi-school account credentials cannot be reset or edited by an individual campus administrator.</div>`;
+}
 function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_counts||{},phases=a.by_phase||{},reasons=a.lost_reasons||{};return `<div class="stats" style="margin:0 0 18px">${stat("Hot Leads",temps.Hot||0,"Qualified high-priority enquiries","♨","orange")}${stat("Applications Submitted",a.applications_submitted||0,"Verified submissions","▣","blue")}${stat("Visits Scheduled",a.visits_scheduled||0,"Planned campus visits","▤")}${stat("Overdue Tasks",a.overdue_tasks||0,"Needs counsellor action","◷","orange")}</div><div class="panel" style="padding:16px;margin-bottom:18px"><h3>Lead temperature distribution</h3>${Object.entries(temps).map(([k,v])=>`<span class="badge" style="margin:4px">${esc(k)} · ${Number(v)}</span>`).join("")}<h3>Admissions phases</h3>${Object.entries(phases).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")}<h3>Lost reasons</h3>${Object.entries(reasons).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")||"<div class=muted-note>No recorded lost reasons</div>"}</div>`;} 
 
 const IMPORT_FIELDS=[
@@ -280,7 +309,22 @@ function modalFrame(title,subtitle,inner){return `<div class="modal-wrap" data-a
 function modal(){if(!state.modal)return '';
  if(state.modal==='new-lead')return modalFrame('New enquiry','Add a phone call, walk-in or manually received lead.',`<form id="leadForm"><div class="two-cols">${input('Student name','student_name','text','',true)}${input('Parent / guardian name','parent_name','text','',true)}${input('Contact number','phone','tel','',true)}${input('Interested class','grade','text','',false)}${input('Email (optional)','email','email')}${input('Follow-up date','followup_date','date')}${select('Website source','site_id',siteOptions())}${role()==='Counsellor'?'':select('Assign to','assigned_to',memberOptions())}</div><div class="form-field"><label>Additional message</label><textarea name="message" placeholder="Reason for enquiry, preferred campus, admission details..."></textarea></div><label style="font-size:12px;color:#657087"><input type="checkbox" name="consent" value="true"> Parent has consented to be contacted</label><div class="button-row" style="margin-top:20px;justify-content:flex-end">${btn('Cancel','close-modal') }<button class="btn primary" type="submit">Save enquiry</button></div></form>`);
  if(state.modal==='new-site')return modalFrame('Connect website','Create a separate secret integration for each site.',`<form id="siteForm">${input('Website / form name','name','text','',true)}${input('Website domain','domain','text','',true)}${select('Platform','platform',['WordPress','Custom website','Landing page','Other'].map(s=>option(s,s,'WordPress')).join(''))}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Create API key</button></div></form>`);
- if(state.modal==='new-member')return modalFrame('Add staff account','Create access for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password')}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">If the email already has a SchoolFlow account, it is linked to this school without changing that user's password.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
+ if(state.modal==='edit-staff'){
+   const staff=state.members.find(m=>m.id===ext.editMemberId);
+   if(!staff)return '';
+   return modalFrame('Edit staff account','Update school role and account details.',`<form id="editStaffForm">
+   ${input('Full name','name','text',staff.name,true)}
+   ${input('Work email','email','email',staff.email,true)}
+   ${select('School role','role',['Counsellor','Admissions','Admin'].map(r=>option(r,r,staff.role)).join(''))}
+   <p class="muted-note">Multi-school identities must be edited centrally. Role changes revoke existing sessions.</p>
+   <div class="button-row">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">Save staff changes</button></div></form>`);
+ }
+ if(state.modal==='change-my-password')return modalFrame('Change my password','All existing sessions will be revoked after saving.',`<form id="ownPasswordForm">
+   ${input('Current password','current_password','password','',true)}
+   ${input('New password (12+ characters)','new_password','password','',true)}
+   ${input('Confirm new password','confirm_password','password','',true)}
+   <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Change password</button></div></form>`);
+ if(state.modal==='new-member')return modalFrame('Add staff account','Create access for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">If the email already has a SchoolFlow account, it is linked to this school without changing that user's password.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
  if(state.modal==='book-visit')return modalFrame('Book school visit','Schedule a parent campus tour or admissions consultation.',`<form id="visitForm">${select('Student enquiry','lead_id',state.leads.map(l=>option(l.id,l.name+' · '+l.guardian,state.visitLeadId||state.detail?.lead?.id)).join(''))}${input('Visit date and time','starts_at','datetime-local','',true)}${input('Purpose','purpose','text','Campus tour',true)}${role()==='Counsellor'?'':select('Assigned staff','staff_id',memberOptions(state.detail?.lead?.assigned_to))}<button class="btn primary" type="submit">Book visit</button></form>`);
  if(state.modal==='new-template'||state.modal==='edit-template'){
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
