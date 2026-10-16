@@ -1001,7 +1001,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $source[(string)($l['site_id']??'manual')]=($source[(string)($l['site_id']??'manual')]??0)+1;
                     $byStaff[(string)($l['assigned_to']??'unassigned')]=($byStaff[(string)($l['assigned_to']??'unassigned')]??0)+1;
                     if($l['status']==='Enrolled')$enrolled++;
-                    if($l['status']==='New'&&empty($l['last_contact_at']))$pending++;
+                    if(in_array($l['status'],['New','New Enquiry'],true)&&empty($l['last_successful_contact_at']))$pending++;
                     if(!empty($l['followup_date'])&&$l['followup_date']<=sf_admission_today()&&!in_array($l['status'],['Lost','Enrolled'],true))$due++;
                 }
                 return [200,array_merge(['total'=>$total,'enrolled'=>$enrolled,'conversion_rate'=>$total?round($enrolled*100/$total,1):0,
