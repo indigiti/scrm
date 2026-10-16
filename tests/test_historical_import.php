@@ -56,5 +56,26 @@ try{
       'Maharashtra','I','Kalyani Nagar','Spreadsheet remark','Parent']],[]);
  [$ok,$excel]=imp_req('POST',$base.'/preview',['filename'=>'old-report.xlsx','base64'=>base64_encode($xlsx)]);
  imp_assert($ok===200&&$excel['valid']===1,'native XLSX import accepts Excel workbook with inline strings and dates');
+
+ $xlsxPayload=['filename'=>'old-report.xlsx','base64'=>base64_encode($xlsx)];
+ [$ok,$excelBatch]=imp_req('POST',$base.'/commit',$xlsxPayload+['preview_guid'=>$excel['preview_guid'],'confirm'=>true]);
+ imp_assert($ok===201&&$excelBatch['imported']===1,'Excel row imported');
+ [$ok,$child]=imp_req('POST','/api/schools/1/leads',[
+   'student_name'=>'Linked Sibling','parent_name'=>'Parent','phone'=>'9999999022','grade'=>'II','consent'=>false
+ ]);
+ imp_assert($ok===201,'create a separately retained child');
+ $store->transaction(static function(&$s)use($child){
+   $imported=null;
+   foreach($s['leads'] as $l)if(($l['name']??'')==='Rohan Example'){$imported=$l;break;}
+   imp_assert($imported!==null,'parent imported lead available to link');
+   sf_family_explicit_sibling($s,$imported,$child['id'],1);
+ },true);
+ [$ok,$undoExcel]=imp_req('POST','/api/schools/1/imports/'.$excelBatch['batch_guid'].'/rollback');
+ imp_assert($ok===200&&$undoExcel['rolled_back']===1,'revert imported Excel lead');
+ $snap=$store->transaction(fn($s)=>$s);
+ imp_assert(count($snap['leads'])===1 && $snap['leads'][0]['name']==='Linked Sibling','independent linked sibling remains');
+ imp_assert(count($snap['parent_profiles'])===1 && $snap['parent_profiles'][0]['guid']===$snap['leads'][0]['family_guid'],
+    'rollback preserves parent profile now linked to remaining sibling');
+
  echo "PASS: CSV/XLSX historical preview, unlabeled remarks, time preservation, no consent, isolation, idempotent import and rollback\n";
 }finally{foreach(glob($dir.'/*')?:[] as $file)@unlink($file);@rmdir($dir);}
