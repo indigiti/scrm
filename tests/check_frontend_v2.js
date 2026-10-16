@@ -23,10 +23,13 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
  await sleep(150);assert.match(html,/First contact pending/);assert.match(html,/School Visits/);assert.match(html,/Families/);
  const click=(action,page='',id='')=>handlers.click({target:{closest:()=>({dataset:{action,page,id},getAttribute:()=>null})}});
+ click('nav','My Work');assert.match(html,/Priority actions/);assert.match(html,/Pending first conversations/);
+ click('nav','Pipeline');assert.strictEqual((html.match(/class="pipeline-column phase-column"/g)||[]).length,5);assert.match(html,/Exceptions/);
+ assert.match(html,/aria-label="SchoolFlow main navigation"/);
  click('nav','School Visits');assert.match(html,/School visit calendar/);
  click('nav','Families');assert.match(html,/Parent &amp; sibling profiles/);
  click('nav','Email Templates');assert.match(html,/Email templates/);
  click('nav','Enquiries');assert.match(html,/assignedFilter/);assert.match(html,/contactFilter/);
- click('view-lead','',1);await sleep(150);assert.match(html,/Record a call/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/emailTemplateChoice/);
+ click('view-lead','',1);await sleep(150);assert.match(html,/Record a call/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
  console.log('PASS: JavaScript renders School Visits, Families, Email Templates, filters, call manager, communications and audit drawer');
 })().catch(e=>{console.error(e);process.exitCode=1;});
