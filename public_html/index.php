@@ -32,9 +32,14 @@ if ($path === '/' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     exit;
 }
 if (!str_starts_with($path,'/api/') && $path !== '/health') sf_json(['detail'=>'Not found'],404);
-if (strlen($_SERVER['CONTENT_LENGTH']??'')>10 && (int)($_SERVER['CONTENT_LENGTH']??0)>32768) sf_json(['detail'=>'Request too large'],413);
-$raw=file_get_contents('php://input');
-if (strlen($raw)>32768) sf_json(['detail'=>'Request too large'],413);
+// Ordinary API requests remain small. Only the authenticated historical importer
+// accepts bounded base64 workbooks (2.5 MB binary + JSON/base64 overhead).
+$importRequest=($_SERVER['REQUEST_METHOD']??'')==='POST' &&
+    preg_match('#^/api/schools/(?:[0-9]+|[a-f0-9-]{36})/imports/(?:preview|commit)$#iD',$path)===1;
+$maxBody=$importRequest?3600000:32768;
+if ((int)($_SERVER['CONTENT_LENGTH']??0)>$maxBody) sf_json(['detail'=>'Request too large'],413);
+$raw=file_get_contents('php://input',false,null,0,$maxBody+1);
+if (!is_string($raw)||strlen($raw)>$maxBody) sf_json(['detail'=>'Request too large'],413);
 $payload=[];
 if (($raw??'')!=='') {
     try {
