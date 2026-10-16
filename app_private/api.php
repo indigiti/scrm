@@ -10,6 +10,7 @@ require_once __DIR__ . '/admissions_automation.php';
 require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
+require_once __DIR__ . '/staff_management.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -72,6 +73,7 @@ function sf_find(array $rows, int $id): ?array {
 }
 function sf_membership(array $s, int $schoolId, int $userId, array $roles = []): string {
     foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['user_id'] === $userId) {
+        if(!sf_staff_enabled($m) || !(sf_user($s,$userId)['active']??false))sf_fail(403,'This school account is disabled');
         if ($roles && !in_array($m['role'], $roles, true)) sf_fail(403, 'Your role does not permit this action');
         return $m['role'];
     }
@@ -95,7 +97,7 @@ function sf_group_campuses(array $s, array $group): array {
         if (!$school || !$site || empty($site['enabled'])) continue;
         // An owner who has lost school-admin membership cannot keep routing data there.
         $authorized=false;
-        foreach ($s['memberships'] as $m) if ($m['school_id']===$school['id'] && $m['user_id']===$group['owner_id'] && $m['role']==='Admin') {$authorized=true;break;}
+        foreach ($s['memberships'] as $m) if ($m['school_id']===$school['id'] && $m['user_id']===$group['owner_id'] && $m['role']==='Admin' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false)) {$authorized=true;break;}
         if($authorized) $out[]=['code'=>$route['code'],'name'=>$school['name'],'school_id'=>$school['id'],'site_id'=>$site['id']];
     }
     return $out;
@@ -242,7 +244,7 @@ function sf_validate_assignment(array $s, int $schoolId, mixed $id): ?int {
 }
 function sf_auto_owner(array $s, int $schoolId): ?int {
     $loads = [];
-    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
+    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && isset($loads[$lead['assigned_to'] ?? -1]) && !in_array($lead['status'], ['Enrolled','Lost'], true)) $loads[$lead['assigned_to']]++;
     if (!$loads) return null;
     asort($loads, SORT_NUMERIC);
@@ -254,7 +256,7 @@ function sf_assignment_owner(array &$s, int $schoolId): ?int {
     if ($policy === 'manual') return null;
     if ($policy !== 'round_robin') return sf_auto_owner($s,$schoolId);
     $people=[];
-    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor') {
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor' && sf_staff_enabled($m)) {
         $user=sf_user($s,$m['user_id']);if ($user && $user['active']) $people[]=$user['id'];
     }
     sort($people,SORT_NUMERIC);
@@ -338,7 +340,7 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
     }
     // Real staff members may be used as assignment targets; no demo login accounts are created.
     $owners=[];
-    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && in_array($m['role'],['Counsellor','Admissions'],true)) $owners[]=$m['user_id'];
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && sf_staff_enabled($m) && in_array($m['role'],['Counsellor','Admissions'],true)) $owners[]=$m['user_id'];
     if (!$owners) $owners=[$adminId];
     $rows = [
         ['Aarav Mehta','Rohan Mehta','Grade 1','New',-1,0],
@@ -572,6 +574,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $pass=sf_text($payload,'password',1024,1);
             $user=null;
             foreach ($s['users'] as $u) if ($u['email']===$email && $u['active']) { $user=$u;break; }
+            if($user && !array_filter($s['memberships'],fn($m)=>$m['user_id']===$user['id'] && sf_staff_enabled($m)))$user=null;
             if (!$user || !password_verify($pass,$user['password_hash'])) {
                 if ($user) foreach ($s['memberships'] as $m) if ($m['user_id']===$user['id']) sf_event($s,$m['school_id'],null,$user['id'],'login_failed','Incorrect password');
                 return [401, ['detail'=>'Incorrect email or password']];
@@ -639,12 +642,22 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     $write=$method !== 'GET';
     return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri,$store) {
         $user=sf_session($s,$auth);$uid=$user['id'];
+        if(!empty($user['must_change_password']) && !in_array($path,['/api/me','/api/me/password','/api/auth/logout'],true))
+            sf_fail(403,'Change your temporary password before using the CRM');
+        if($path==='/api/me/password' && $method==='POST')return [200,sf_staff_change_own_password($s,$uid,$payload)];
         // School URLs accept GUIDs without changing legacy numeric IDs or internal relations.
         if(preg_match('#^/api/schools/([0-9a-f-]{36})(/.*)?$#iD',$path,$sr)){
             $canonical=sf_record_id($s,'schools',$sr[1]);
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
+        if(preg_match('#^/api/schools/(\d+)/members/(\d+)(?:/(reset-password))?$#D',$path,$staffMatch)){
+            $sid=(int)$staffMatch[1];$target=(int)$staffMatch[2];
+            if($method==='PATCH' && empty($staffMatch[3]))return [200,sf_staff_update($s,$sid,$uid,$target,$payload)];
+            if($method==='POST' && ($staffMatch[3]??'')==='reset-password')
+                return [200,sf_staff_reset_password($s,$sid,$uid,$target)];
+            sf_fail(405,'Team member operation is not supported');
+        }
         if(preg_match('#^/api/schools/(\d+)/leads/(\d+)/documents$#D',$path,$dm)){
             $sid=(int)$dm[1];$leadId=(int)$dm[2];
             $role=sf_membership($s,$sid,$uid);
