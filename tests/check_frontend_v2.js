@@ -26,6 +26,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  click('nav','My Work');assert.match(html,/Priority actions/);assert.match(html,/Pending first conversations/);
  click('nav','Pipeline');assert.strictEqual((html.match(/class="pipeline-column phase-column"/g)||[]).length,5);assert.match(html,/Exceptions/);
  assert.match(html,/aria-label="SchoolFlow main navigation"/);
+ click('nav','Team');assert.match(html,/Reset password/);assert.match(html,/Disable/);assert.match(html,/Change my password/);
  click('nav','Seat Planning');assert.match(html,/Grade and academic-year seats/);assert.match(html,/First-contact response SLA/);
  click('nav','Import Enquiries');assert.match(html,/Spreadsheet import/);assert.match(html,/sfImportFile/);assert.match(html,/Preview import/);
  click('nav','School Visits');assert.match(html,/School visit calendar/);
