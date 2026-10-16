@@ -378,3 +378,14 @@ From Enquiries or Reports, choose Export Excel. The CRM builds a genuine XLSX wo
 - To protect the JSON-backed application, the maximum is 10,000 enquiries and 50,000 history events per export. Narrow filters for larger data sets.
 
 The endpoint is POST /scrm/api/schools/{school_id_or_guid}/exports/admissions.xlsx (authenticated bearer token and JSON filters). Existing notes saved only in an external Google Sheet are not present in SchoolFlow until imported separately.
+
+## SchoolFlow admissions operations
+
+- **Seat Planning:** school admins configure academic-year and grade seat capacity. Existing Enrolled records count against that plan; the application enrollment endpoint and direct stage transition both refuse enrolling beyond the limit. A capacity below existing enrollment is rejected. No seat plan means admissions are not automatically restricted.
+- **Document checklist:** every lead has metadata-only Birth Certificate, Address Proof, Previous Report Card, Transfer Certificate and Student Photograph statuses. Counsellors can mark received/rejected; only Admin and Admissions can verify. No private student document bytes or public upload route are stored.
+- **Visits:** a recorded completed/no-show/cancelled campus visit can include internal feedback and an optional next follow-up date. The linked task and lead follow-up remain synchronized.
+- **First-contact SLA:** admins choose a 15–2880 minute target. Dashboard and analytics show untreated enquiries that exceeded the target, excluding synthetic demo and historical imported leads. An SLA breach is a reporting warning, not an external message.
+- **Automated reminders:** Admins choose an India school-local same-day sending window (default 09:00–18:00). Existing channel consent and provider checks remain mandatory. Outside that window, queued messages remain queued rather than being marked delivered or resent.
+- **Multi-campus overview:** admins can compare enrolled, hot and overdue first-contact leads in schools they administer. Existing school isolation remains in force.
+
+After DigiOps deployment, confirm seat-plan and document rules with representative users in staging. Back up private JSON and key files first. External parent messaging remains disabled by default. Provider webhooks and storage of student documents are not included in this release.
