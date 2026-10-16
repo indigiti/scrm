@@ -1150,6 +1150,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'calls'=>array_slice($calls,0,50),'messages'=>array_slice(array_reverse($messages),0,20),'visits'=>array_map(fn($v)=>sf_visit_view($v,$s),$visits),
                         'activities'=>array_slice($activities,0,100),
                         'stage_history'=>array_values(array_filter($s['stage_history']??[],fn($h)=>$h['school_id']===$schoolId&&$h['lead_id']===$itemId)),
+                        'documents'=>sf_doc_list($s,$schoolId,$itemId),
                         'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
                 }
                 if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
