@@ -19,7 +19,7 @@ try{
    foreach(['admin'=>1,'counsellor'=>2,'other'=>3] as $token=>$uid)
       $s['sessions'][]=['user_id'=>$uid,'token_hash'=>sf_hash($token),'expires_at'=>time()+3600];
  },true);
- $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,\n".
+ $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,,Academic year\n".
       "03/09/2026 10:45:32 AM,Aarav Example,parent@example.org,09876543210,Pune,Maharashtra,I,Kalyani Nagar,\"Parent will come for a visit next week\"\n".
       "04/09/2026 11:00:00 AM,Diya Example,second@example.org,9999999011,Pune,Maharashtra,LKG,Kalyani Nagar,\"Looking for 2027-28\"\n";
  $payload=['filename'=>'historical.csv','base64'=>base64_encode($csv)];
