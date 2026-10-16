@@ -70,6 +70,7 @@ async function initialize(){
  if(!state.token){render();return;}
  try{state.me=await api('/api/me');state.schoolId=Number(sessionStorage.getItem('schoolflow_school'))||state.me.schools[0]?.id;
  if(!state.me.schools.find(s=>s.id===state.schoolId))state.schoolId=state.me.schools[0]?.id;
+ if(state.me.user.must_change_password){render();return;}
  await reload();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
@@ -348,6 +349,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 <button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div><h3 class="section-title">Parent messaging consent</h3><form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form><h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}<section class="drawer-audit" aria-label="Enquiry audit log"><h3 class="section-title">Audit log</h3><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${auditEntries(d.audit?.events||[])}${d.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section></div></div></div>`;
 }
 function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Connecting to SchoolFlow…</h2><p>Checking your application setup.</p></div></div>';return;}if(state.setup.needs_setup||!state.token||!state.me){root.innerHTML=loginPage();return;}
+ if(state.me.user.must_change_password){
+  root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Change temporary password</h2><p>Your administrator reset your password. You must choose a new password before accessing school records.</p>'+
+  '<form id="mandatoryPasswordForm">'+input('Temporary password','current_password','password','',true)+
+  input('New password (12+ characters)','new_password','password','',true)+
+  input('Confirm new password','confirm_password','password','',true)+
+  '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
+ }
  const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning};
  const addSchool=canManageSchools() && state.page!=='Schools & Routing'?`<button class="btn small" data-action="new-school" style="margin-left:8px">＋ Add school</button>`:'';
  root.innerHTML=`<div class="app">${nav()}<div class="main">${topbar()}<main class="content"><div style="text-align:right;margin-bottom:12px">${addSchool}</div>${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
@@ -433,6 +441,37 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    ext.lastImport=null;await reload();toast('Imported batch rolled back');
   });return;
  }
+ if(action==='edit-staff'){
+  if(!isAdmin())return;
+  ext.editMemberId=Number(el.dataset.id);state.modal='edit-staff';render();return;
+ }
+ if(action==='disable-staff'||action==='enable-staff'){
+  if(!isAdmin())return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
+  const enabled=action==='enable-staff';
+  if(!confirm((enabled?'Restore school access for ':'Disable school access for ')+staff.name+'?'+
+     (enabled?'':' Their open enquiries and tasks will be unassigned. Their active sessions will be revoked.')))return;
+  perform(async()=>{
+   await api('/api/schools/'+state.schoolId+'/members/'+staff.id,'PATCH',{enabled});
+   ext.resetResult=null;await reload();toast(staff.name+(enabled?' reactivated':' disabled for this school'));
+  });return;
+ }
+ if(action==='reset-staff'){
+  if(!isAdmin())return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
+  if(!confirm('Reset password for '+staff.name+' and revoke all their sessions?'))return;
+  perform(async()=>{
+   const result=await api('/api/schools/'+state.schoolId+'/members/'+staff.id+'/reset-password','POST',{});
+   ext.resetResult={password:result.temporary_password,name:staff.name};
+   render();toast('Temporary password generated. Copy it now.');
+  });return;
+ }
+ if(action==='dismiss-staff-password'){ext.resetResult=null;render();return;}
+ if(action==='copy-staff-password'){
+  if(ext.resetResult?.password)navigator.clipboard.writeText(ext.resetResult.password).then(()=>toast('Copied securely')).catch(()=>toast('Copy password manually',true));
+  return;
+ }
+ if(action==='change-my-password'){state.modal='change-my-password';render();return;}
  if(action==='task-complete'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/tasks/'+Number(el.dataset.id),'PATCH',{status:'Completed'});await reload();toast('Task completed');});return;}
  if(action==='create-application'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/applications','POST',{lead_id:Number(el.dataset.id)});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+Number(el.dataset.id));render();toast('Application started');});return;}
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
@@ -575,7 +614,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      await reload();toast('Administrator created. Welcome to SchoolFlow.');
    }catch(e){state.error=e.message;render();}
  });return;}
- if(f.id==='loginForm'){perform(async()=>{state.error='';let result=await api('/api/auth/login','POST',fd);state.token=result.token;sessionStorage.setItem('schoolflow_session',state.token);state.me=await api('/api/me');state.schoolId=state.me.schools[0]?.id;await reload();toast('Signed in successfully');});return;}
+ if(f.id==='loginForm'){perform(async()=>{state.error='';let result=await api('/api/auth/login','POST',fd);state.token=result.token;sessionStorage.setItem('schoolflow_session',state.token);state.me=await api('/api/me');state.schoolId=state.me.schools[0]?.id;if(state.me.user.must_change_password){render();return;}await reload();toast('Signed in successfully');});return;}
 
  if(f.id==='seatPlanForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/seat-plans','PATCH',{academic_year:fd.academic_year,grade:fd.grade,capacity:Number(fd.capacity)});await reload();toast('Seat capacity saved');});return;}
  if(f.id==='responseSlaForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/response-sla','PATCH',{first_contact_minutes:Number(fd.first_contact_minutes)});await reload();toast('First-contact SLA updated');});return;}
@@ -611,6 +650,22 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      render();toast('Provider settings saved. Use a consented real enquiry to send a test.');});return;
  }
  if(f.id==='siteForm'){perform(async()=>{let result=await api(`/api/schools/${state.schoolId}/sites`,'POST',fd);state.key=result.api_key;state.modal='';state.page='Websites & Forms';await reload();toast('Website connected. Save its API key.');});return;}
+ if(f.id==='editStaffForm'){
+  perform(async()=>{
+   const id=ext.editMemberId;if(!id)throw new Error('Choose a staff member');
+   await api('/api/schools/'+state.schoolId+'/members/'+id,'PATCH',{name:fd.name,email:fd.email,role:fd.role});
+   state.modal='';ext.editMemberId=null;ext.resetResult=null;await reload();toast('Staff account updated');
+  });return;
+ }
+ if(f.id==='ownPasswordForm'||f.id==='mandatoryPasswordForm'){
+  perform(async()=>{
+   if(fd.new_password!==fd.confirm_password)throw new Error('Passwords do not match');
+   if(fd.new_password.length<12)throw new Error('Use at least 12 characters');
+   await api('/api/me/password','POST',{current_password:fd.current_password,new_password:fd.new_password});
+   state.token='';state.me=null;state.modal='';sessionStorage.removeItem('schoolflow_session');
+   render();toast('Password changed. Sign in again.');
+  });return;
+ }
  if(f.id==='memberForm'){perform(async()=>{await api(`/api/schools/${state.schoolId}/members`,'POST',fd);state.modal='';await reload();toast('Team member added');});return;}
  if(f.id==='schoolForm'){perform(async()=>{let result=await api('/api/schools','POST',fd);state.me=await api('/api/me');state.schoolId=result.id;sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.modal='';state.page='Dashboard';await reload();toast('School workspace created');});return;}
  if(f.id==='editLeadForm'){perform(async()=>{let leadId=state.detail.lead.id;let payload={status:fd.status,followup_date:fd.followup_date,contact_state:fd.contact_state,academic_year:fd.academic_year,lost_reason:fd.lost_reason,deferred_until:fd.deferred_until,current_school:fd.current_school,date_of_birth:fd.date_of_birth};if(fd.temperature!==(state.detail.lead.temperature||'Unrated')){payload.temperature=fd.temperature;payload.temperature_reason=fd.temperature_reason;}if(role()!=='Counsellor')payload.assigned_to=fd.assigned_to?Number(fd.assigned_to):null;await api(`/api/schools/${state.schoolId}/leads/${leadId}`,'PATCH',payload);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${leadId}`);render();toast('Enquiry updated');});return;}
