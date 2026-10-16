@@ -80,7 +80,7 @@ try {
     // The importer must accept an actual spreadsheet above the ordinary 32 KB JSON limit.
     $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,Remarks\n";
     for($i=0;$i<100;$i++){
-        $csv.="03/09/2026 10:30:00 AM,Sample Student $i,parent$i@example.org,9898".str_pad((string)$i,6,'0',STR_PAD_LEFT).",Pune,Maharashtra,I,Test School,\"".str_repeat('School visit requested ',9)."\"\n";
+        $csv.="03/09/2026 10:30:00 AM,Sample Student $i,parent$i@example.org,9898".str_pad((string)$i,6,'0',STR_PAD_LEFT).",Pune,Maharashtra,I,Test School,\"".str_repeat('School visit requested ',18)."\"\n";
     }
     $upload=json_encode(['filename'=>'historical.csv','base64'=>base64_encode($csv)],JSON_THROW_ON_ERROR);
     ht_assert(strlen($upload)>32768,'regression fixture exceeds prior gateway limit');
