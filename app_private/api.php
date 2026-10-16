@@ -827,6 +827,17 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_event($s,$school['id'],null,$uid,'school_created','New school workspace');
             return [201,['id'=>$school['id'],'name'=>$name,'role'=>'Admin']];
         }
+        if(preg_match('#^/api/schools/(\\d+)$#D',$path,$schoolMatch) && $method==='PATCH'){
+            $sid=(int)$schoolMatch[1];sf_membership($s,$sid,$uid,['Admin']);
+            $name=sf_text($payload,'name',140,3);
+            foreach($s['schools'] as &$school)if($school['id']===$sid){
+                $school['name']=$name;$school['updated_at']=sf_time();
+                $saved=$school;break;
+            }unset($school);
+            if(!isset($saved))sf_fail(404,'School not found');
+            sf_event($s,$sid,null,$uid,'school_updated','School name updated');
+            return [200,['id'=>$sid,'name'=>$name]];
+        }
         // CRM 2.0 school-scoped modules: backwards compatible with existing store.json.
         if (preg_match('#^/api/schools/(\d+)/(assignment|visits|families|templates|analytics|tasks|applications)(?:/(\d+))?(?:/(siblings))?$#D',$path,$ext)) {
             $sid=(int)$ext[1];$kind=$ext[2];$rid=isset($ext[3])?(int)$ext[3]:null;
@@ -1112,12 +1123,28 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
-                        $enabled=parse_url($uri,PHP_URL_QUERY);
-                        parse_str(is_string($enabled)?$enabled:'',$siteQuery);$enabled=$siteQuery['enabled']??null;
-                        if (!in_array($enabled,['true','false','1','0'],true)) sf_fail(422,'enabled query parameter required');
-                        $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
-                        sf_event($s,$schoolId,null,$uid,'website_status_changed','Source #'.$itemId.($v['enabled']?' enabled':' disabled'));
-                        return [200,['ok'=>true,'enabled'=>(bool)$v['enabled']]];
+                        $query=parse_url($uri,PHP_URL_QUERY);
+                        parse_str(is_string($query)?$query:'',$siteQuery);
+                        $enabled=$siteQuery['enabled']??null;
+                        if(array_key_exists('enabled',$payload)){
+                            if(!is_bool($payload['enabled']))sf_fail(422,'enabled must be boolean');
+                            $enabled=$payload['enabled']?'true':'false';
+                        }
+                        if($enabled!==null){
+                            if(!in_array($enabled,['true','false','1','0'],true))sf_fail(422,'Invalid enabled value');
+                            $v['enabled']=in_array($enabled,['true','1'],true)?1:0;
+                        }
+                        $changed=false;
+                        foreach(['name'=>140,'domain'=>180,'platform'=>60] as $field=>$max)if(array_key_exists($field,$payload)){
+                            $value=sf_text($payload,$field,$max,$field==='platform'?1:2);
+                            $v[$field]=$value;$changed=true;
+                        }
+                        if($enabled===null && !$changed)sf_fail(422,'Provide website details or enabled status');
+                        $v['updated_at']=sf_time();
+                        sf_event($s,$schoolId,null,$uid,$changed?'website_updated':'website_status_changed',
+                            'Source #'.$itemId.' '.($v['enabled']?'active':'disabled'));
+                        return [200,['ok'=>true,'id'=>$itemId,'enabled'=>(bool)$v['enabled'],
+                            'name'=>$v['name'],'domain'=>$v['domain'],'platform'=>$v['platform']]];
                     }
                 } unset($v);
             }
