@@ -8,6 +8,7 @@ require_once __DIR__ . '/admissions_tasks.php';
 require_once __DIR__ . '/admissions_analytics.php';
 require_once __DIR__ . '/admissions_automation.php';
 require_once __DIR__ . '/export_xlsx.php';
+require_once __DIR__ . '/import_enquiries.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -503,6 +504,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
+    if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/(preview|commit)$#iD',$path,$importMatch))
+        return sf_import_process($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2],$payload);
+    if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/([a-f0-9-]{36})/rollback$#iD',$path,$importMatch))
+        return sf_import_rollback($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2]);
     if (str_starts_with($path,'/api/public/forms/'))
         return sf_public_handle($method,$path,$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('#^/api/schools/\d+/communications/(email|whatsapp)/send$#D',$path))
