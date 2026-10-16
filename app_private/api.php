@@ -433,7 +433,7 @@ function sf_demo_clear(array &$s, int $schoolId): array {
         $s['parent_profiles'],fn($p)=>isset($familyRefs[$p['guid']])
     ));
 
-    foreach(['calls','visits','tasks','applications','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
+    foreach(['calls','visits','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
         $s[$related]=array_values(array_filter($s[$related],fn($x)=>!isset($removedLeadIds[$x['lead_id']??-1])));
     // Preserve real submissions even if they refer to a demo lead or a demo source.
     foreach ($s['leads'] as &$l) if ($l['school_id']===$schoolId && isset($removedLeadIds[$l['duplicate_of'] ?? -1])) $l['duplicate_of']=null;
