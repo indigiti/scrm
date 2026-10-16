@@ -87,7 +87,7 @@ final class SchoolFlowStore {
     }
     /** Assign permanent GUIDs to records during locked writes; keep numeric ID FKs intact. */
     private static function ensureGuids(array &$s): void {
-        foreach(['users','schools','memberships','sites','group_sites','leads','calls','visits','tasks','applications','parent_profiles','stage_history','notification_queue','email_templates','activities','audit_logs','receipts','sessions','message_attempts'] as $table){
+        foreach(['users','schools','memberships','sites','group_sites','leads','calls','visits','tasks','applications','admission_documents','seat_plans','parent_profiles','stage_history','notification_queue','email_templates','activities','audit_logs','receipts','sessions','message_attempts'] as $table){
             if(!isset($s[$table])||!is_array($s[$table]))continue;
             foreach($s[$table] as &$record)if(is_array($record)&&empty($record['guid']))$record['guid']=self::guid();
             unset($record);
@@ -100,6 +100,6 @@ final class SchoolFlowStore {
     }
     public static function blank(): array {
         return ['version'=>1, 'counters'=>[], 'users'=>[], 'schools'=>[], 'memberships'=>[], 'sites'=>[],
-            'leads'=>[], 'group_sites'=>[], 'calls'=>[], 'visits'=>[], 'tasks'=>[], 'applications'=>[], 'parent_profiles'=>[], 'stage_history'=>[], 'notification_queue'=>[], 'automation_settings'=>[], 'email_templates'=>[], 'assignment_modes'=>[], 'assignment_cursors'=>[], 'activities'=>[], 'audit_logs'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
+            'leads'=>[], 'group_sites'=>[], 'calls'=>[], 'visits'=>[], 'tasks'=>[], 'applications'=>[], 'admission_documents'=>[], 'seat_plans'=>[], 'response_sla_settings'=>[], 'parent_profiles'=>[], 'stage_history'=>[], 'notification_queue'=>[], 'automation_settings'=>[], 'email_templates'=>[], 'assignment_modes'=>[], 'assignment_cursors'=>[], 'activities'=>[], 'audit_logs'=>[], 'sessions'=>[], 'receipts'=>[], 'rate_limits'=>[]];
     }
 }
