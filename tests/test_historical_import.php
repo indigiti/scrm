@@ -19,9 +19,9 @@ try{
    foreach(['admin'=>1,'counsellor'=>2,'other'=>3] as $token=>$uid)
       $s['sessions'][]=['user_id'=>$uid,'token_hash'=>sf_hash($token),'expires_at'=>time()+3600];
  },true);
- $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,\n".
-      "03/09/2026 10:45:32 AM,Aarav Example,parent@example.org,09876543210,Pune,Maharashtra,I,Kalyani Nagar,\"Parent will come for a visit next week\"\n".
-      "04/09/2026 11:00:00 AM,Diya Example,second@example.org,9999999011,Pune,Maharashtra,LKG,Kalyani Nagar,\"Looking for 2027-28\"\n";
+ $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,,Academic year\n".
+      "03/09/2026 10:45:32 AM,Aarav Example,parent@example.org,09876543210,Pune,Maharashtra,I,Kalyani Nagar,\"Parent will come for a visit next week\",2027-28\n".
+      "04/09/2026 11:00:00 AM,Diya Example,second@example.org,9999999011,Pune,Maharashtra,LKG,Kalyani Nagar,\"Looking for 2027-28\",2027-28\n";
  $payload=['filename'=>'historical.csv','base64'=>base64_encode($csv)];
  $base='/api/schools/1/imports';
  imp_assert(imp_req('POST',$base.'/preview',$payload,'counsellor')[0]===403,'counsellor cannot preview');
@@ -37,6 +37,7 @@ try{
  $lead=array_values(array_filter($snap['leads'],fn($r)=>$r['school_id']===1&&$r['name']==='Aarav Example'))[0];
  imp_assert(str_starts_with($lead['created_at'],'2026-09-03T05:15:32'),'India time preserved as UTC instant');
  imp_assert($lead['consent']===0&&$lead['consent_email']===false,'historical upload never grants messaging permission');
+ imp_assert($lead['academic_year']==='2027-28','mapped academic year preserved with the enquiry');
  imp_assert(count(array_filter($snap['tasks'],fn($t)=>$t['lead_id']===$lead['id']&&$t['status']==='Open'))===0,'no overdue parent-contact tasks created from import');
  imp_assert(count(array_filter($snap['activities'],fn($a)=>$a['lead_id']===$lead['id']&&$a['action']==='note'))===1,'remarks imported as timestamped history');
  imp_assert(imp_req('POST',$base.'/commit',$payload+['preview_guid'=>$preview['preview_guid'],'confirm'=>true])[0]===409,'preview receipt is single-use');
@@ -55,5 +56,26 @@ try{
       'Maharashtra','I','Kalyani Nagar','Spreadsheet remark','Parent']],[]);
  [$ok,$excel]=imp_req('POST',$base.'/preview',['filename'=>'old-report.xlsx','base64'=>base64_encode($xlsx)]);
  imp_assert($ok===200&&$excel['valid']===1,'native XLSX import accepts Excel workbook with inline strings and dates');
+
+ $xlsxPayload=['filename'=>'old-report.xlsx','base64'=>base64_encode($xlsx)];
+ [$ok,$excelBatch]=imp_req('POST',$base.'/commit',$xlsxPayload+['preview_guid'=>$excel['preview_guid'],'confirm'=>true]);
+ imp_assert($ok===201&&$excelBatch['imported']===1,'Excel row imported');
+ [$ok,$child]=imp_req('POST','/api/schools/1/leads',[
+   'student_name'=>'Linked Sibling','parent_name'=>'Parent','phone'=>'9999999022','grade'=>'II','consent'=>false
+ ]);
+ imp_assert($ok===201,'create a separately retained child');
+ $store->transaction(static function(&$s)use($child){
+   $imported=null;
+   foreach($s['leads'] as $l)if(($l['name']??'')==='Rohan Example'){$imported=$l;break;}
+   imp_assert($imported!==null,'parent imported lead available to link');
+   sf_family_explicit_sibling($s,$imported,$child['id'],1);
+ },true);
+ [$ok,$undoExcel]=imp_req('POST','/api/schools/1/imports/'.$excelBatch['batch_guid'].'/rollback');
+ imp_assert($ok===200&&$undoExcel['rolled_back']===1,'revert imported Excel lead');
+ $snap=$store->transaction(fn($s)=>$s);
+ imp_assert(count($snap['leads'])===1 && $snap['leads'][0]['name']==='Linked Sibling','independent linked sibling remains');
+ imp_assert(count($snap['parent_profiles'])===1 && $snap['parent_profiles'][0]['guid']===$snap['leads'][0]['family_guid'],
+    'rollback preserves parent profile now linked to remaining sibling');
+
  echo "PASS: CSV/XLSX historical preview, unlabeled remarks, time preservation, no consent, isolation, idempotent import and rollback\n";
 }finally{foreach(glob($dir.'/*')?:[] as $file)@unlink($file);@rmdir($dir);}

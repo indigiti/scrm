@@ -1176,6 +1176,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if (!$changes) sf_fail(422,'Nothing to update');
                     if (array_key_exists('status',$changes) && !in_array($changes['status'],SF_STAGES,true)) sf_fail(422,'Invalid stage');
                     if (($changes['status']??'')==='On Hold / Deferred' && empty($changes['deferred_until']) && empty($lead['deferred_until']))sf_fail(422,'Deferred review date required');
+                    if(($lead['status']??'')==='Enrolled' && array_key_exists('academic_year',$changes) && $changes['academic_year']!==($lead['academic_year']??''))sf_fail(409,'Reopen admission before changing an enrolled academic year');
                     if (($changes['status']??'')==='Lost' && $lead['status']!=='Lost' && empty($changes['lost_reason']) && empty($lead['lost_reason']))sf_fail(422,'Lost reason required');
                     if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled' && !sf_application_can_enrol($s,$schoolId,$itemId))sf_fail(422,'Confirmed application and recorded fee required before enrollment');
                     if (($changes['status']??'')==='Enrolled' && $lead['status']!=='Enrolled')sf_capacity_check_enrollment($s,$lead);

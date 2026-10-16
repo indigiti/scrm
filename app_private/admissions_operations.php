@@ -18,6 +18,7 @@ function sf_doc_update(array &$s,int $sid,int $leadId,int $actor,string $role,ar
     $note=sf_text($payload,'note',240);
     $s['admission_documents']=$s['admission_documents']??[];
     foreach($s['admission_documents'] as &$doc)if($doc['school_id']===$sid && $doc['lead_id']===$leadId && $doc['type']===$type){
+        if(($doc['status']??'')==='Verified' && !in_array($role,['Admin','Admissions'],true))sf_fail(403,'Verified documents are restricted to admissions management');
         $doc['status']=$status;$doc['note']=$note;$doc['updated_by']=$actor;$doc['updated_at']=sf_time();
         $result=$doc;unset($doc);
         sf_event($s,$sid,$leadId,$actor,'admission_document_updated',$type.' → '.$status);
@@ -66,6 +67,8 @@ function sf_capacity_upsert(array &$s,int $sid,int $actor,array $payload):array 
     return $row;
 }
 function sf_capacity_check_enrollment(array $s,array $lead):void{
+    $year=(string)($lead['academic_year']??'');
+    if($year==='')foreach($s['seat_plans']??[] as $p)if($p['school_id']===$lead['school_id']&&$p['grade']===$lead['grade'])sf_fail(422,'Choose an academic year before enrolling against configured seat capacity');
     foreach($s['seat_plans']??[] as $entry)if($entry['school_id']===$lead['school_id'] &&
         ($lead['academic_year']??'')===$entry['academic_year'] && ($lead['grade']??'')===$entry['grade']){
         $n=0;foreach($s['leads'] as $other)if($other['school_id']===$lead['school_id'] &&
