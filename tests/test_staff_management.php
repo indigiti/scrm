@@ -20,6 +20,18 @@ try{
   $s['counters']['users']=3;$s['counters']['schools']=2;
  },true);
  $b='/api/schools/1';
+ staff_ok(staff_api('PATCH','/api/schools/1',['name'=>'Renamed Test School'],'other')[0]===403,'other campus cannot rename school');
+ staff_ok(staff_api('PATCH','/api/schools/1',['name'=>'Renamed Test School'])[0]===200,'admin can rename own school');
+ staff_ok(staff_api('GET','/api/me')[1]['schools'][0]['name']==='Renamed Test School','school rename appears in navigation');
+ [$siteStatus,$source]=staff_api('POST',$b.'/sites',['name'=>'Admissions Website','domain'=>'school.example.org','platform'=>'WordPress']);
+ staff_ok($siteStatus===201,'test website created');
+ $siteId=$source['id'];
+ staff_ok(staff_api('PATCH',$b.'/sites/'.$siteId,['name'=>'Updated Website','domain'=>'apply.example.org','platform'=>'Landing page'])[0]===200,'website details editable');
+ $sites=staff_api('GET',$b.'/sites')[1];
+ staff_ok($sites[0]['name']==='Updated Website'&&$sites[0]['domain']==='apply.example.org','website metadata persisted');
+ staff_ok(staff_api('PATCH',$b.'/sites/'.$siteId,['enabled'=>false])[1]['enabled']===false,'website can be disabled by JSON');
+ staff_ok(staff_api('PATCH',$b.'/sites/'.$siteId,['enabled'=>true])[1]['enabled']===true,'website can be reactivated');
+ staff_ok(staff_api('PATCH',$b.'/sites/'.$siteId,['name'=>'Forbidden'],'other')[0]===403,'other school cannot edit website');
  staff_ok(staff_api('PATCH',$b.'/members/1',['enabled'=>false])[0]===409,'last active admin cannot disable self');
  staff_ok(staff_api('PATCH',$b.'/members/1',['role'=>'Counsellor'])[0]===409,'last admin cannot demote self');
  [$status,$new]=staff_api('POST',$b.'/members',['name'=>'Admissions Staff','email'=>'admissions@example.org',
