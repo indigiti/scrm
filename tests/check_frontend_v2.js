@@ -26,6 +26,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  click('nav','My Work');assert.match(html,/Priority actions/);assert.match(html,/Pending first conversations/);
  click('nav','Pipeline');assert.strictEqual((html.match(/class="pipeline-column phase-column"/g)||[]).length,5);assert.match(html,/Exceptions/);
  assert.match(html,/aria-label="SchoolFlow main navigation"/);
+ click('nav','Import Enquiries');assert.match(html,/Spreadsheet import/);assert.match(html,/sfImportFile/);assert.match(html,/Preview import/);
  click('nav','School Visits');assert.match(html,/School visit calendar/);
  click('nav','Families');assert.match(html,/Parent &amp; sibling profiles/);
  click('nav','Email Templates');assert.match(html,/Email templates/);
