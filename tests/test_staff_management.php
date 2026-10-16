@@ -71,7 +71,12 @@ try{
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['email'=>'global-change@example.org'])[0]===409,'campus admin cannot change shared identity');
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['enabled'=>false])[0]===200,'local campus disabled while shared account remains');
  staff_ok(staff_api('GET',$b.'/leads',[],$loggedIn['token'])[0]===403,'disabled membership denied');
- staff_ok(staff_api('GET','/api/schools/2/leads',[],$loggedIn['token'])[0]===200 || true,'other campus remains accessible after new sign in');
+ [$st,$otherLogin]=staff_api('POST','/api/auth/login',['email'=>'coordinator@example.org','password'=>'CompletelyNewSecurePass2!']);
+ staff_ok($st===200,'shared-account password remains usable after campus disable');
+ staff_ok(staff_api('GET','/api/schools/2/leads',[],$otherLogin['token'])[0]===200,
+    'other campus membership stays active');
+ staff_ok(staff_api('GET',$b.'/leads',[],$otherLogin['token'])[0]===403,
+    'disabled campus stays inaccessible on a fresh session');
  $audit=$store->transaction(fn($s)=>$s['audit_logs']??[]);
  staff_ok(count(array_filter($audit,fn($e)=>str_contains((string)($e['action']??''),'member_')))>1,'administration actions recorded');
  echo "PASS: school staff edit, role, disable, reactivate, last-admin protection, unassignment, credential rotation, forced change, tenant isolation\n";
