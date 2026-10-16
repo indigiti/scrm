@@ -20,8 +20,8 @@ try{
       $s['sessions'][]=['user_id'=>$uid,'token_hash'=>sf_hash($token),'expires_at'=>time()+3600];
  },true);
  $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,,Academic year\n".
-      "03/09/2026 10:45:32 AM,Aarav Example,parent@example.org,09876543210,Pune,Maharashtra,I,Kalyani Nagar,\"Parent will come for a visit next week\"\n".
-      "04/09/2026 11:00:00 AM,Diya Example,second@example.org,9999999011,Pune,Maharashtra,LKG,Kalyani Nagar,\"Looking for 2027-28\"\n";
+      "03/09/2026 10:45:32 AM,Aarav Example,parent@example.org,09876543210,Pune,Maharashtra,I,Kalyani Nagar,\"Parent will come for a visit next week\",2027-28\n".
+      "04/09/2026 11:00:00 AM,Diya Example,second@example.org,9999999011,Pune,Maharashtra,LKG,Kalyani Nagar,\"Looking for 2027-28\",2027-28\n";
  $payload=['filename'=>'historical.csv','base64'=>base64_encode($csv)];
  $base='/api/schools/1/imports';
  imp_assert(imp_req('POST',$base.'/preview',$payload,'counsellor')[0]===403,'counsellor cannot preview');
@@ -37,6 +37,7 @@ try{
  $lead=array_values(array_filter($snap['leads'],fn($r)=>$r['school_id']===1&&$r['name']==='Aarav Example'))[0];
  imp_assert(str_starts_with($lead['created_at'],'2026-09-03T05:15:32'),'India time preserved as UTC instant');
  imp_assert($lead['consent']===0&&$lead['consent_email']===false,'historical upload never grants messaging permission');
+ imp_assert($lead['academic_year']==='2027-28','mapped academic year preserved with the enquiry');
  imp_assert(count(array_filter($snap['tasks'],fn($t)=>$t['lead_id']===$lead['id']&&$t['status']==='Open'))===0,'no overdue parent-contact tasks created from import');
  imp_assert(count(array_filter($snap['activities'],fn($a)=>$a['lead_id']===$lead['id']&&$a['action']==='note'))===1,'remarks imported as timestamped history');
  imp_assert(imp_req('POST',$base.'/commit',$payload+['preview_guid'=>$preview['preview_guid'],'confirm'=>true])[0]===409,'preview receipt is single-use');
