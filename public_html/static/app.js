@@ -339,6 +339,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
     ext.importUpload={filename:file.name,base64:btoa(binary)};
    }
    if(!ext.importUpload)throw new Error('Choose a CSV or XLSX file');
+   if(!/\.(csv|xlsx)$/i.test(ext.importUpload.filename))throw new Error('Use CSV or XLSX');
    const selects=[...(root.querySelectorAll?.('[data-import-map]')||[])];
    const mapping={};
    for(const select of selects)mapping[select.dataset.importMap]=select.value===''?null:Number(select.value);
@@ -476,7 +477,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
 });
 root.addEventListener('change',e=>{
- if(e.target.id==='schoolSelect'){state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
+ if(e.target.id==='schoolSelect'){ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
