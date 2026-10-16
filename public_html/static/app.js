@@ -498,14 +498,14 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='task-complete'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/tasks/'+Number(el.dataset.id),'PATCH',{status:'Completed'});await reload();toast('Task completed');});return;}
  if(action==='create-application'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/applications','POST',{lead_id:Number(el.dataset.id)});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+Number(el.dataset.id));render();toast('Application started');});return;}
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
- if(action==='nav'||action==='go-enquiries'){state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
+ if(action==='nav'||action==='go-enquiries'){if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
    if(state.page==='Schools & Routing' && canManageSchools()){perform(loadRouting);}
    render();return;}
  if(action==='route-open'||action==='route-connect'){
    const sid=Number(el.dataset.schoolId);
    if(!canManageSchools() || !state.me.schools.some(s=>s.id===sid&&s.role==='Admin'))return;
-   state.schoolId=sid;sessionStorage.setItem('schoolflow_school',String(sid));
+   state.schoolId=sid;ext.resetResult=null;sessionStorage.setItem('schoolflow_school',String(sid));
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
@@ -610,11 +610,11 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
 }
  if(action==='new-template'){state.modal='new-template';state.editTemplateId=null;render();return;}
  if(action==='edit-template'){state.modal='edit-template';state.editTemplateId=Number(el.dataset.id);render();return;}
- if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
+ if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}ext.resetResult=null;state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
 });
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
