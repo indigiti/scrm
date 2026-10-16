@@ -27,7 +27,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,visitMonth:new Date().toISOString().slice(0,7)};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7)};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -161,7 +161,7 @@ function tasksPage(){const rows=ext.tasks||[];return `<div class="page-card"><h2
 function followups(){let rows=state.leads.filter(l=>l.followup_date&&!['Lost','Enrolled'].includes(l.status)).sort((a,b)=>a.followup_date.localeCompare(b.followup_date));
  return `${pageHead('Follow-ups','Prioritise calls, school visits and counselling sessions.',btn('＋ New enquiry','new-lead','primary'))}<div class="stats" style="margin:0 0 22px">${stat('Due or overdue',rows.filter(l=>l.followup_date<=day()).length,'Priority contact list','◷','orange')}${stat('Scheduled',rows.filter(l=>l.followup_date>day()).length,'Future follow-ups','▣','blue')}${stat('Active enquiries',state.leads.filter(l=>!['Lost','Enrolled'].includes(l.status)).length,'Still in admissions journey','♧')}${stat('Counsellors',state.members.filter(m=>m.role==='Counsellor').length,'Available staff','♙','green')}</div>${rows.length?`<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Due date</th><th>Student</th><th>Contact</th><th>Stage</th><th>Assigned to</th><th>Actions</th></tr></thead><tbody>${rows.map(l=>`<tr><td><b style="color:${l.followup_date<=day()?'#dc8855':'#56607a'}">${esc(dateFmt(l.followup_date))}</b></td><td><b>${esc(l.name)}</b><small class="muted" style="display:block">${esc(l.grade)}</small></td><td>${esc(l.phone)}</td><td>${stageBadge(l.status)}</td><td>${esc(l.assigned_name||'Unassigned')}</td><td><div class="button-row">${btn('Open','view-lead','small',`data-id="${l.id}"`)}${l.consent&&l.email?btn('✉ Reminder draft','email-draft','small',`data-id="${l.id}"`):''}${btn('✓ Done','done-followup','small',`data-id="${l.id}"`)}</div></td></tr>`).join('')}</tbody></table></div></div>`:'<div class="empty-state"><b>No scheduled follow-ups</b><p>Add a follow-up date to an enquiry to see it here.</p></div>'}`;
 }
-function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
+function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${btn('Edit','edit-site','small',`data-id="${s.id}"`)}${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
 function groupSchoolChecks(chosen=[]){
  const admins=state.me?.schools.filter(x=>x.role==='Admin')||[];
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
@@ -180,7 +180,7 @@ function routingPage(){
  <div class="route-stats"><span><strong>${Number(sc.leads)}</strong>Enquiries</span><span><strong>${Number(sc.new_leads)}</strong>New</span><span><strong>${Number(sc.unassigned)}</strong>Unassigned</span></div>
  <p class="muted-note">Counsellor allocation: <strong>${esc(sc.assignment_mode.replaceAll('_',' '))}</strong></p>
  <div class="route-sources">${sc.sites.map(site=>`<div class="route-source"><span><b>${esc(site.name)}</b><small>${esc(site.domain)}</small></span><span class="badge ${site.enabled?'':'route-inactive'}">${site.enabled?'Active':'Disabled'}</span></div>`).join('')||'<p class="muted-note">No website connected.</p>'}</div>
- <div class="button-row"><button class="btn small" data-action="route-open" data-school-id="${Number(sc.id)}">Open school</button><button class="btn primary small" data-action="route-connect" data-school-id="${Number(sc.id)}">＋ Connect website</button></div></section>`).join('')}</div>`;
+ <div class="button-row"><button class="btn small" data-action="edit-school" data-school-id="${Number(sc.id)}">Edit school</button><button class="btn small" data-action="route-open" data-school-id="${Number(sc.id)}">Open school</button><button class="btn primary small" data-action="route-connect" data-school-id="${Number(sc.id)}">＋ Connect website</button></div></section>`).join('')}</div>`;
 }
 
 function teamPage(){
@@ -335,6 +335,20 @@ function modal(){if(!state.modal)return '';
    const g=state.modal==='edit-group'?ext.groupSites.find(x=>x.id===ext.editGroupId):null;
    return modalFrame(g?'Edit group website':'Connect group website','Choose the schools available in the parent enquiry dropdown.',`<form id="groupSiteForm">${input('Group website name','name','text',g?.name||'',true)}${input('Website domain','domain','text',g?.domain||'',true)}${groupSchoolChecks(g?.schools.map(x=>x.school_id)||[])}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">${g?'Save school routes':'Create group key'}</button></div></form>`);
  }
+ if(state.modal==='edit-site'){
+  const site=state.sites.find(x=>x.id===ext.editSiteId);if(!site)return '';
+  return modalFrame('Edit website','Update website details without changing its API key.',`<form id="editSiteForm">
+  ${input('Website name','name','text',site.name,true)}
+  ${input('Domain','domain','text',site.domain,true)}
+  ${select('Platform','platform',['WordPress','Custom website','Landing page','Other'].map(v=>option(v,v,site.platform)).join(''))}
+  <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Save website</button></div></form>`);
+ }
+ if(state.modal==='edit-school'){
+  const sc=(ext.schoolsOverview||[]).find(x=>x.id===ext.editSchoolId);if(!sc)return '';
+  return modalFrame('Edit school','Rename the school without changing its records, routes or GUID.',`<form id="editSchoolForm">
+  ${input('School name','name','text',sc.name,true)}
+  <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Save school</button></div></form>`);
+ }
  if(state.modal==='new-school')return modalFrame('Add school workspace','Create another separate school with the current admin as its administrator.',`<form id="schoolForm">${input('New school name','name','text','',true)}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Create school</button></div></form>`);
  return '';
 }
@@ -440,6 +454,15 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    await api('/api/schools/'+state.schoolId+'/imports/'+el.dataset.guid+'/rollback','POST',{});
    ext.lastImport=null;await reload();toast('Imported batch rolled back');
   });return;
+ }
+ if(action==='edit-site'){
+  if(!isAdmin())return;
+  ext.editSiteId=Number(el.dataset.id);state.modal='edit-site';render();return;
+ }
+ if(action==='edit-school'){
+  const sid=Number(el.dataset.schoolId);
+  if(!state.me.schools.some(x=>x.id===sid&&x.role==='Admin'))return toast('Only that school administrator can edit it',true);
+  ext.editSchoolId=sid;state.modal='edit-school';render();return;
  }
  if(action==='edit-staff'){
   if(!isAdmin())return;
@@ -650,6 +673,14 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      render();toast('Provider settings saved. Use a consented real enquiry to send a test.');});return;
  }
  if(f.id==='siteForm'){perform(async()=>{let result=await api(`/api/schools/${state.schoolId}/sites`,'POST',fd);state.key=result.api_key;state.modal='';state.page='Websites & Forms';await reload();toast('Website connected. Save its API key.');});return;}
+ if(f.id==='editSiteForm'){perform(async()=>{
+   await api('/api/schools/'+state.schoolId+'/sites/'+ext.editSiteId,'PATCH',{name:fd.name,domain:fd.domain,platform:fd.platform});
+   state.modal='';ext.editSiteId=null;await reload();toast('Website details updated');
+  });return;}
+ if(f.id==='editSchoolForm'){perform(async()=>{
+   await api('/api/schools/'+ext.editSchoolId,'PATCH',{name:fd.name});
+   state.me=await api('/api/me');await loadRouting();state.modal='';ext.editSchoolId=null;await reload();toast('School name updated');
+  });return;}
  if(f.id==='editStaffForm'){
   perform(async()=>{
    const id=ext.editMemberId;if(!id)throw new Error('Choose a staff member');
