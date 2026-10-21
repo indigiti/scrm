@@ -1,0 +1,17 @@
+name: Lexicon Demo Chatbot Live Diagnostics
+on:
+  pull_request:
+    paths:
+      - 'tools/diagnose-lexicon-chat.mjs'
+      - '.github/workflows/lexicon-chat-diagnostics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check demo embed, version, CORS, and enabled campuses
+        run: node tools/diagnose-lexicon-chat.mjs
