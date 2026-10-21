@@ -124,3 +124,13 @@ Existing integrations using `/static/lexicon-form.js?v=1` with `data-schoolflow-
 - The model receives only a screened general question and published school overview/FAQs, **never** the pre-chat enquiry data or signed session. Screening is heuristic and must not be treated as a guarantee; schools should disclose optional AI processing in their privacy notice.
 - Protect and back up `private_html/scrm/data/messaging.key` alongside `store.json`; restoring the JSON without its key prevents the stored OpenRouter token from being decrypted.
 - New endpoints: `/chat-start`, `/chat-followup`, `/chat` (now requires session), and authenticated `/api/schools/{id}/public-chat/provider`. Old `/callback` remains for backwards compatibility. Existing embedded form script and GUID bootstrap remain unchanged.
+
+## October 2026 cache regression and fix
+
+A read-only check of `https://lexiconedu.in/demo/` confirmed that the site already embeds its group using `/scrm/embed/<GUID>.js`, but the public server returns `Cache-Control: max-age=1440` for that dynamic `.js` response and up to one-year caching for static JS. The stale bootstrap referenced a previous, 9,729-byte chatbot even though the new 9,007-byte guided-chat JS was deployed. Browser reload alone does not reliably replace the cached bootstrap.
+
+**New recommended URL:** `/scrm/embed/<GUID>` (no file extension). This deliberately routes through the dynamic PHP gateway, avoiding hosting/CDN rules that classify `*.js` as a static resource. The response is JavaScript with `no-store`/CDN no-store headers and content-hash asset versions; the one-tag embed still runs normally. The old `.js` route and old `lexicon-form.js` integrations remain compatible, but may remain stale until CDN cache expires or is purged.
+
+SchoolFlow admin's **Copy head script** now provides the extensionless form URL. Existing sites already using the previous GUID `.js` URL should replace that one tag with the new extensionless URL, keeping the exact same GUID. **Do not rotate the Form ID** to fix cache; ID rotation intentionally invalidates the old embed and requires website edits.
+
+**Infrastructure caveat:** The application can request no-store, but Cloudways or Cloudflare rules may override origin headers. After deploying, verify the extensionless URL has no long-lived public cache header and that it retrieves current JS hashes. Where CDN rules override the origin, bypass caching for `/scrm/embed/*` and `/scrm/api/public/forms/*`. Purge the cached legacy `/scrm/embed/<GUID>.js` URL as needed.
