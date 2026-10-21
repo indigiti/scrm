@@ -114,6 +114,8 @@ function init(){
  }
  function promptIfEligible(reason){
   if(!autoEnabled||closed()||autoShownHere||previouslyPrompted()||popup.classList.contains('lf-visible')||document.visibilityState==='hidden')return;
+  var activeChat=window.__schoolflowAdmissionsChatState;
+  if(activeChat&&activeChat.guid===guid&&activeChat.leadCaptured)return;
   if(chatbotOpen()){
    if(reason==='timer')deferredForChat=true;
    return;
