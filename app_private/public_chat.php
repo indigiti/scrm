@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /** School-scoped published knowledge for the public admissions assistant. */
 function sf_chat_settings(array $state,int $schoolId):array {
-    return $state['public_chat_settings'][(string)$schoolId]??['enabled'=>false,'overview'=>'','faqs'=>[]];
+    return array_merge(['enabled'=>false,'ai_enabled'=>false,'overview'=>'','faqs'=>[]],$state['public_chat_settings'][(string)$schoolId]??[]);
 }
 function sf_chat_admin(string $method,string $ref,array $input,array $headers,SchoolFlowStore $store):array {
     if(!in_array($method,['GET','PATCH'],true))sf_fail(405,'Method not allowed');
@@ -13,6 +13,8 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         sf_membership($s,$sid,(int)$user['id'],['Admin']);
         if($method==='GET')return [200,sf_chat_settings($s,$sid)];
         if(!is_bool($input['enabled']??null))sf_fail(422,'Invalid enabled flag');
+        $aiEnabled=$input['ai_enabled']??false;
+        if(!is_bool($aiEnabled))sf_fail(422,'Invalid AI provider setting');
         $overview=sf_text($input,'overview',1500);
         $items=$input['faqs']??null;
         if(!is_array($items)||!array_is_list($items)||count($items)>60)sf_fail(422,'Invalid FAQ entries');
@@ -22,7 +24,7 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
             $faqs[]=['question'=>sf_text($item,'question',180,3),'answer'=>sf_text($item,'answer',800,3)];
         }
         if($input['enabled'] && $overview==='' && !$faqs)sf_fail(422,'Publish school information first');
-        $config=['enabled'=>$input['enabled'],'overview'=>$overview,'faqs'=>$faqs];
+        $config=['enabled'=>$input['enabled'],'ai_enabled'=>$aiEnabled,'overview'=>$overview,'faqs'=>$faqs];
         $s['public_chat_settings'][(string)$sid]=$config;
         sf_event($s,$sid,null,(int)$user['id'],'public_chat_updated','Public admissions assistant configuration changed');
         return [200,$config];
@@ -93,7 +95,11 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
     // Unanswered nonpersonal topics are suggested for an administrator to verify.
     sf_kb_suggest($store,(int)$target['school']['school_id'],$question);
-    $answer=sf_chat_ai($question,$target['school']['name'],$target['config']);
+    // Only send nonpersonal general questions to a provider, and only with
+    // the individual school's explicit administrator opt-in.
+    $safeQuestion=sf_kb_safe_topic($question);
+    $answer=($safeQuestion!==null && !empty($target['config']['ai_enabled']))
+       ? sf_chat_ai($safeQuestion,$target['school']['name'],$target['config']) : null;
     return [200,['answer'=>$answer??sf_chat_fallback($question,$target['config']),
       'source'=>$answer!==null?'ai':'human_handoff']];
 }
