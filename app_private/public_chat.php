@@ -85,13 +85,13 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     if(!$target)sf_fail(422,'Select an available campus');
     if($action==='chat-start')return sf_chat_start($guid,$input,$headers,$ip,$store);
     if($action==='chat-followup'){
-        $session=sf_text($input,'session',500,30);
+        $session=sf_text($input,'session',500);
         return sf_chat_followup($guid,$code,$session,$origin,$store);
     }
     if($action==='callback')return sf_chat_callback($guid,$input,$headers,$ip,$store);
     if($action!=='chat')sf_fail(404,'Unknown public chat action');
     // A parent must create a consented school enquiry before asking questions.
-    $session=sf_text($input,'session',500,30);
+    $session=sf_text($input,'session',500);
     sf_chat_session_lead($store,$session,(int)$groupData['group']['id'],
         (int)$target['school']['school_id'],$origin,
         $store->transaction(static fn(array $s)=>$s));
