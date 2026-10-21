@@ -181,6 +181,22 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         $rec['origin_hash']=hash('sha256',$origin);
         $rec['school_id']=$school?(int)$school['school_id']:0;
         $rec['profile']=sf_counsellor_extract($message,$rec['profile']??[]);
+        // Keep only a whitelisted conversational intent, never the raw
+        // parent's message. Choosing a branch/year/grade continues that topic.
+        $incomingTopics=sf_counsellor_classify($message);
+        $previous=(string)($rec['pending_topic']??'');
+        $primary='';
+        foreach($incomingTopics as $topic){
+            if(in_array($topic,['fees','age_eligibility','documents','transport','facilities',
+                'curriculum','admissions','school_features','timings','visit','contact'],true)){
+                $primary=$topic;break;
+            }
+        }
+        // Selecting a campus is a clarification, not a new admission topic.
+        // A bare academic year or class is also a clarification.
+        if($primary==='')$primary=$previous;
+        $rec['pending_topic']=$primary;
+        $rec['pending_since']=$primary!==''?time():null;
         $rec['turn_count']=min(10000,(int)($rec['turn_count']??0)+1);
         $rec['last_at']=sf_time();
         if($index===null)$s['public_counsellor_sessions'][]=$rec;
@@ -190,7 +206,8 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             $s['public_counsellor_sessions']=array_slice(array_values(array_filter(
                 $s['public_counsellor_sessions'],static fn($v)=>(int)($v['expires_at']??0)>$now)),-1200);
         return ['group_id'=>$gid,'school'=>$school,'routes'=>array_values($routes),
-            'profile'=>$rec['profile'],'lead_id'=>$rec['lead_id']];
+            'profile'=>$rec['profile'],'lead_id'=>$rec['lead_id'],
+            'pending_topic'=>$rec['pending_topic']??''];
     },true);
     $route=$stored['school'];
     $schoolData=$route? $store->transaction(static fn(array $s)=>[
@@ -201,9 +218,29 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
     $knowledgeFiles=$schoolData['documents']??[];
     $profile=$stored['profile'];
     $topics=sf_counsellor_classify($message);
+    $pendingTopic=(string)($stored['pending_topic']??'');
+    // The parent may have just selected a campus or supplied a class/year.
+    // Reuse the prior subject for lookups, never an unrelated generic query.
+    $continuation=(!$topics && $pendingTopic!=='');
+    $effectiveMessage=$message;
+    if($continuation){
+        $promptFor=['fees'=>'What are the school fees?',
+          'age_eligibility'=>'What are the age eligibility requirements?',
+          'documents'=>'Which documents are required for admission?',
+          'transport'=>'Is school bus transport available?',
+          'facilities'=>'What facilities does the school have?',
+          'curriculum'=>'What curriculum does the school offer?',
+          'admissions'=>'What is the admission process?',
+          'school_features'=>'What are the school features?',
+          'timings'=>'What are school timings?',
+          'visit'=>'Can we arrange a campus visit?',
+          'contact'=>'What are the school contact details?'];
+        $effectiveMessage=$promptFor[$pendingTopic]??$message;
+        $topics=[$pendingTopic];
+    }
     $reply=null;$source='general_guidance';
     if($route!==null){
-        $q=sf_chat_expand_topic($safe);
+        $q=sf_chat_expand_topic($continuation?$effectiveMessage:$safe);
         // Approved school-provided documents are the preferred source for
         // year-specific fees. Never merge two academic years or campuses.
         // Read every published file for this campus together, so separate
@@ -244,7 +281,10 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         elseif($route===null)$reply='I can help with school admissions, fee questions, documents, transport, facilities and campus visits.';
         else $reply='I can help explain general admission steps. For this campus’s specific policies, I can check published information or help you request confirmation.';
     }
-    $next=sf_counsellor_next($message,$profile,$route!==null);
+    // Published file answers already contain the necessary year/grade
+    // clarification. Do not append a second unrelated scripted question.
+    $next=$source==='approved_knowledge_file'
+        ?'' : sf_counsellor_next($effectiveMessage,$profile,$route!==null);
     if($next!=='')$reply.=" \n\n".$next;
     $topicsOut=array_values(array_unique($topics));
     // Save anonymised topic and EXACT parent-facing response for review and
@@ -278,6 +318,10 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
     return [200,['conversation_token'=>$token,'reply'=>$reply,'source'=>$source,
       'campus_name'=>$route['name']??null,'school_code'=>$route['code']??null,
       'profile'=>$profile,'qualified'=>$profile['lead_intent']??'Browsing',
+      'pending_topic'=>$pendingTopic,
+      'needs_detail'=>$pendingTopic==='fees' || $pendingTopic==='age_eligibility'
+         ? (sf_kfile_year($message,$profile)===''?'academic_year':
+            (sf_kfile_grade($message,$profile)===''?'grade':'')) : '',
       'suggest_contact'=>in_array('visit',$topics,true),'campuses'=>$campuses,
       'existing_lead'=>!empty($stored['lead_id'])]];
 }

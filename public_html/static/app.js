@@ -464,13 +464,26 @@ function publicChatPage(){
    '</div></div></article>').join('')+'</div>':
    '<div class="ai-empty"><div aria-hidden="true" class="ai-empty-mark">▤</div><strong>No knowledge files yet</strong>'+
    '<p>Upload school-approved Markdown or text. You can inspect it before publishing to parents.</p></div>';
+ const knowledgeReadiness=activeFiles.length
+  ?'<div class="ai-guidance" role="status"><b>Knowledge ready:</b> '+activeFiles.length+' published document(s) for this campus. Only published files are used in parent answers.</div>'
+  :'<div class="ai-guidance" role="alert"><b>No published knowledge files for this campus.</b> '+(draftFiles.length
+    ?draftFiles.length+' file(s) uploaded but awaiting Review &amp; publish. These documents are not used in chat yet.'
+    :'Upload and publish a school knowledge document to enable verified file-based answers.')+'</div>';
+ const knowledgeTest='<form id="chatKnowledgeTest" class="ai-add-faq">'+
+  '<h4>Test a published knowledge answer</h4>'+
+  '<p class="ai-muted">Checks the selected campus’s live published documents using the same factual lookup as the parent chatbot. No AI call or parent details are involved.</p>'+
+  '<label>Sample parent question<input type="text" name="question" maxlength="200" required value="Class II annual fees 2026–27"></label>'+
+  '<button type="submit" class="btn small primary">Test knowledge</button>'+
+  (ext.chatKnowledgeTest?'<div class="ai-guidance" role="status"><strong>'+esc(ext.chatKnowledgeTest.status||'')+
+    ' · '+Number(ext.chatKnowledgeTest.published_files||0)+' published file(s)</strong>'+
+    '<p>'+esc(ext.chatKnowledgeTest.answer||'')+'</p></div>':'')+'</form>';
  const upload='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">01 · PRIMARY KNOWLEDGE</span>'+
   '<h3>School knowledge files</h3><p>Give your counsellor the facts it needs—fee tables, age criteria, documents, transport and school features.</p></div>'+
   '<span class="ai-status neutral">'+activeFiles.length+' live</span></div>'+
   '<form id="chatKnowledgeUpload" class="ai-upload"><div class="ai-upload-icon" aria-hidden="true">↑</div>'+
   '<div><strong>Choose a knowledge file to upload</strong><p>Markdown (.md) or plain text (.txt), maximum 120 KB. Up to 8 files per school.</p>'+
   '<input type="file" name="knowledge_file" accept=".md,.txt,text/markdown,text/plain" required aria-label="Choose school knowledge file"></div>'+
-  '<button type="submit" class="btn primary">Upload for review</button></form>'+fileList+'</section>';
+  '<button type="submit" class="btn primary">Upload for review</button></form>'+knowledgeReadiness+fileList+knowledgeTest+'</section>';
  const sourceList=sources.length?sources.map(src=>
   '<article class="ai-record"><div class="ai-record-body"><strong>'+esc(src.url)+'</strong>'+
   '<small>'+esc(src.status||'not_scanned')+' · Last checked '+esc(src.last_checked_at||'Never')+'</small></div>'+
@@ -1008,6 +1021,16 @@ root.addEventListener('input',e=>{
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
 
+ if(f.id==='chatKnowledgeTest'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const question=String(fd.question||'').trim();
+     ext.chatKnowledgeTest=await api('/api/schools/'+state.schoolId+'/public-chat/knowledge-files',
+       'POST',{action:'test',question});
+     render();
+     toast(ext.chatKnowledgeTest.status==='matched'?'Published school knowledge matched the question.':'Knowledge check needs attention.',ext.chatKnowledgeTest.status!=='matched');
+   });return;
+ }
  if(f.id==='chatKnowledgeUpload'){
    if(!isAdmin())return;
    const file=f.elements.knowledge_file?.files?.[0];

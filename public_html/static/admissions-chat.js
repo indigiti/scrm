@@ -31,7 +31,7 @@ const panel=$('.sfac-panel'),history=$('.sfac-history'),chips=$('.sfac-quick'),
 entry=$('.sfac-entry'),input=$('#sfac-reply'),sendButton=$('.sfac-send');
 const storageKey='schoolflow:admissions:return:'+guid,anonKey='schoolflow:counsellor:anonymous:'+guid;
 let started=false,busy=false,schoolCode='',schools=[],conversationToken='',crmSession='';
-let profile={},contactState='',contactDraft={},suggestedContact=false,callbackRequested=false;
+let profile={},contactState='',contactDraft={},suggestedContact=false,callbackRequested=false,needDetail='',pendingTopic='';
 let verification=null,attemptId='',pendingCampusContact=false;
 function status(s){$('.sfac-status').textContent=s||'';}
 function bubble(who,s){
@@ -87,6 +87,17 @@ function forgetLocal(){
 }
 function suggested(){
  const options=[];
+ // Respond to the active admission question instead of offering only a
+ // callback after the parent has selected a campus.
+ if(schoolCode && ['fees','age_eligibility'].includes(pendingTopic)){
+  if(needDetail==='academic_year'){
+   for(const year of ['2026–27','2027–28'])
+     options.push({label:year,onClick:()=>chat(year)});
+  }else if(needDetail==='grade'){
+   for(const grade of ['Nursery','Class I','Class II','Class XI'])
+     options.push({label:grade,onClick:()=>chat(grade)});
+  }
+ }
  if(!schoolCode && schools.length>1)
    for(const s of schools.slice(0,8))
      options.push({label:s.name,onClick:()=>pickCampus(s)});
@@ -111,6 +122,8 @@ function updateProfile(result){
  if(result.school_code)schoolCode=result.school_code;
  if(result.conversation_token){conversationToken=result.conversation_token;saveAnonymous();}
  profile=result.profile||profile;
+ pendingTopic=result.pending_topic||pendingTopic;
+ needDetail=result.needs_detail||'';
  suggestedContact=!!result.suggest_contact;
  if(result.qualified)headline(result.campus_name?
   result.campus_name+' · '+result.qualified:'School admissions · '+result.qualified);
@@ -277,6 +290,7 @@ async function begin(){
      {label:'Start new chat',onClick:async()=>{const v=savedReturn();forgetLocal();
        if(v)request('/chat-forget',{remember_token:v.token}).catch(()=>{});
        crmSession='';conversationToken='';saveAnonymous();schoolCode=schools.length===1?schools[0].code:'';
+       pendingTopic='';needDetail='';profile={};
        history.replaceChildren();bubble('assistant','Of course. What would you like to know about admissions?');suggested();}}]);
   }else {
    choices([{label:'Fees',onClick:()=>chat('What are the school fees?')},
