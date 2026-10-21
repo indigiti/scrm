@@ -27,7 +27,8 @@ function sf_counsellor_classify(string $question):array {
       'curriculum'=>'/cbse|icse|\bib\b|board|curricul|syllabus/u',
       'admissions'=>'/admission|enrol|application|apply|प्रवेश/u',
       'timings'=>'/timi|hours|school time|schedule/u',
-      'school_features'=>'/club|extra.?curricular|activity|activities|features/u',
+      'school_features'=>'/club|extra.?curricular|activity|activities|features|special|unique|different|teach|philosophy|learning|pedagog|montessori|method|academics/u',
+      'contact'=>'/contact|phone number|admission office|school email|reach the school/u',
       'visit'=>'/visit|tour|come to school|see campus|saturday|sunday|appointment/u'
     ];
     $topics=[];
@@ -108,7 +109,7 @@ function sf_counsellor_next(string $question,array $profile,bool $campusSelected
 function sf_counsellor_ai_topic(array $topics,array $profile):?string {
     $safeTopics=array_values(array_filter($topics,static fn($t)=>in_array($t,
        ['fees','documents','age_eligibility','transport','facilities',
-        'curriculum','admissions','timings','school_features','visit'],true)));
+        'curriculum','admissions','timings','school_features','contact','visit'],true)));
     if(!$safeTopics)return null;
     $question='Explain general school admission information about '.implode(', ',$safeTopics);
     $grade=(string)($profile['grade']??'');
