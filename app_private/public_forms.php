@@ -28,6 +28,45 @@ function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, str
         return $group !== null && sf_public_origin_ok($group, $origin) && count(sf_group_campuses($s, $group)) > 0;
     });
 }
+/**
+ * Serve an uncached, GUID-addressed browser bootstrap. The GUID identifies the
+ * public group form, never a private credential. The returned asset versions are
+ * actual content hashes, not manually maintained ?v=1 query strings.
+ */
+function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publicRoot):string {
+    if(!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD',$guid))
+        sf_fail(404,'Public form not found');
+    $enabled=$store->transaction(static function(array $s)use($guid):bool {
+        $group=sf_public_group($s,strtolower($guid));
+        return $group!==null && count(sf_group_campuses($s,$group))>0;
+    });
+    if(!$enabled)sf_fail(404,'Public form not found');
+    $assets=['static/lexicon-form.js','static/lexicon-form.css',
+        'static/admissions-chat.js','static/admissions-chat.css'];
+    $versions=[];
+    foreach($assets as $asset){
+        $file=rtrim($publicRoot,'/').'/'.$asset;
+        if(!is_file($file))throw new RuntimeException('Public form asset missing');
+        $hash=hash_file('sha256',$file);
+        if(!is_string($hash))throw new RuntimeException('Public form asset unreadable');
+        $versions[]=substr($hash,0,16);
+    }
+    $data=json_encode(['guid'=>strtolower($guid),'versions'=>$versions],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
+    return '(function(){'."\n".
+        'var current=document.currentScript;if(!current)return;'."\n".
+        'var meta='.$data.';'."\n".
+        'var base=new URL(current.src).origin+"/scrm";'."\n".
+        'var script=document.createElement("script");script.async=true;'."\n".
+        'script.src=base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
+        'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
+        'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
+        'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
+        'script.setAttribute("data-schoolflow-chat-css-version",meta.versions[3]);'."\n".
+        '["data-thank-you","data-logo"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        'document.head.appendChild(script);'."\n".
+        '})();'."\n";
+}
+
 function sf_public_challenge(SchoolFlowStore $store, string $guid, string $origin): array {
     $a=random_int(1,20); $b=random_int(1,20); $issued=time();
     $raw=implode(':', [$guid,$a,$b,$issued,bin2hex(random_bytes(12))]);

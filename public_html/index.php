@@ -10,6 +10,26 @@ $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $basePath = '/scrm';
 if (!str_starts_with($requestPath, $basePath)) sf_json(['detail'=>'Not found'],404);
 $path = substr($requestPath, strlen($basePath)) ?: '/';
+// A group-form GUID is the sole website embed identifier. Dynamic JavaScript
+// cannot remain cached with an obsolete ?v=1 URL across Cloudways deployments.
+if(preg_match('~^/embed/([0-9a-f-]{36})\.js$~iD',$path,$embedMatch)){
+    if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')sf_json(['detail'=>'Method not allowed'],405);
+    header('Cache-Control: private, no-store, no-cache, max-age=0, must-revalidate');
+    header('CDN-Cache-Control: no-store');
+    header('Cloudflare-CDN-Cache-Control: no-store');
+    header('Cross-Origin-Resource-Policy: cross-origin');
+    header('Pragma: no-cache');
+    header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
+    try{
+        $script=sf_public_embed_script(new SchoolFlowStore(),strtolower($embedMatch[1]),__DIR__);
+        header('Content-Type: application/javascript; charset=utf-8');
+        http_response_code(200);
+        echo $script;
+    }catch(SFError $e){sf_json(['detail'=>'Public embed unavailable'],404);}
+    catch(Throwable $e){error_log('SchoolFlow public embed failed (details redacted)');sf_json(['detail'=>'Embed unavailable'],503);}
+    exit;
+}
+
 if (str_starts_with($path,'/api/public/forms/')) {
     try {
         $origin=$_SERVER['HTTP_ORIGIN']??'';

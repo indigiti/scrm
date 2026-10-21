@@ -9,7 +9,7 @@ if(window.__schoolflowAdmissionsChatMounted)return;
 window.__schoolflowAdmissionsChatMounted=guid;
 const base=new URL(loader.src).href.replace(/\/static\/admissions-chat\.js(?:\?.*)?$/,'');
 const api=base+'/api/public/forms/'+encodeURIComponent(guid);
-const css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/admissions-chat.css';document.head.append(css);
+const css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/admissions-chat.css?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-chat-css-version')||'1');document.head.append(css);
 const root=document.createElement('section');root.className='sfac';root.innerHTML=
 '<button type="button" class="sfac-launch" aria-expanded="false" aria-label="Open admissions assistant">✦ Ask Admissions</button>'+
 '<div class="sfac-panel" hidden role="dialog" aria-label="Admissions assistant">'+
