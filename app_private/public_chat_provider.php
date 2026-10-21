@@ -42,6 +42,72 @@ function sf_chat_provider_admin(string $method,string $ref,array $input,array $h
           'enabled'=>!empty($config['ai_enabled'])]];
     },$method==='PATCH');
 }
+/** Test the actual model via a tiny, administrator-initiated request.
+ *  Credentials and upstream response bodies are never returned.
+ *  No network request takes place while holding the CRM JSON-store lock.
+ */
+function sf_chat_provider_test(string $ref,array $headers,SchoolFlowStore $store):array {
+    $config=$store->transaction(static function(array &$s)use($ref,$headers):array{
+        $user=sf_session($s,(string)($headers['authorization']??''));
+        if(!empty($user['must_change_password']))sf_fail(403,'Change password first');
+        $sid=sf_record_id($s,'schools',$ref);
+        sf_membership($s,$sid,(int)$user['id'],['Admin']);
+        sf_limit($s,'chat-provider-test:'.$sid.':'.(int)$user['id'],6,3600);
+        return sf_chat_settings($s,$sid);
+    },true);
+    $optedIn=!empty($config['ai_enabled']);
+    if(empty($config['openrouter_key']))
+        return [200,['status'=>'no_key','message'=>'No OpenRouter key saved for this campus. Save your key to test the connection.']];
+    if(!function_exists('curl_init'))
+        return [200,['status'=>'missing_curl','message'=>'PHP cURL is unavailable on this hosting environment.']];
+    $model=(string)($config['openrouter_model']??'openai/gpt-4o-mini');
+    if(!preg_match('~^[a-zA-Z0-9._-]+/[a-zA-Z0-9._:-]+$~D',$model))
+        return [200,['status'=>'invalid_model','message'=>'Choose a valid OpenRouter model ID.']];
+    try{$key=$store->unseal((string)$config['openrouter_key']);}
+    catch(Throwable $e){
+        return [200,['status'=>'key_unavailable','message'=>'Saved key cannot be decrypted. Reconnect the API key in this dashboard.']];
+    }
+    $body=['model'=>$model,'max_tokens'=>16,'temperature'=>0,'stream'=>false,
+        'messages'=>[['role'=>'user','content'=>'Connection test: respond with OK. No parent information is included.']]];
+    $ch=curl_init('https://openrouter.ai/api/v1/chat/completions');
+    if($ch===false)return [200,['status'=>'network_error','message'=>'Could not initialize OpenRouter connection.']];
+    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_TIMEOUT=>10,
+        CURLOPT_MAXREDIRS=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,
+        CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key,'Content-Type: application/json'],
+        CURLOPT_POSTFIELDS=>json_encode($body,JSON_THROW_ON_ERROR)]);
+    $response=curl_exec($ch);
+    $http=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);
+    $errorNo=curl_errno($ch);
+    curl_close($ch);
+    if(!is_string($response)){
+        $code=$errorNo===28?'timeout':'network_error';
+        return [200,['status'=>$code,'message'=>$code==='timeout'
+            ?'OpenRouter connection timed out. Check server connectivity and retry.'
+            :'Server could not connect to OpenRouter over HTTPS.']];
+    }
+    if($http===200){
+        $data=json_decode($response,true);
+        $answer=$data['choices'][0]['message']['content']??null;
+        if(is_string($answer)&&trim($answer)!=='')
+            return [200,['status'=>'connected','message'=>'OpenRouter model responded successfully. '.($optedIn?'External AI is enabled for parents.':'Enable external AI in Assistant publication to answer parents.'),'model'=>$model]];
+        return [200,['status'=>'invalid_response','message'=>'OpenRouter returned HTTP 200 without a usable model response.']];
+    }
+    $messages=[
+        400=>'OpenRouter rejected the test request or model parameters.',
+        401=>'OpenRouter rejected the saved API key. Reconnect a valid key.',
+        402=>'OpenRouter account or key has insufficient credits.',
+        403=>'OpenRouter rejected this request due to account permissions or policy.',
+        404=>'Selected OpenRouter model is unavailable or not found.',
+        408=>'OpenRouter model request timed out.',
+        429=>'OpenRouter rate limit exceeded; retry later.',
+        502=>'OpenRouter model provider is temporarily unavailable.',
+        503=>'No OpenRouter provider is currently available for this model.'
+    ];
+    return [200,['status'=>'provider_error','http_status'=>$http,
+        'message'=>$messages[$http]??'OpenRouter connection failed. Check the selected model, credits and service status.']];
+}
+
 /**
  * Provider only receives published school knowledge and a screened,
  * nonpersonal question. No parent name, phone, lead ID or conversation log.

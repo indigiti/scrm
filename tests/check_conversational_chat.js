@@ -26,11 +26,17 @@ cache['.sfac-entry'].hidden=true;
 const root=el();root.querySelector=s=>{if(!cache[s])throw Error('missing UI node '+s);return cache[s];};
 const loader={src:'https://crm.example.test/scrm/static/admissions-chat.js?v=hash',
  getAttribute(key){return {'data-schoolflow-group':guid,'data-schoolflow-chat-css-version':'1234'}[key]||null;}};
+const host=el();
+host.attachShadow=({mode})=>{
+ assert.equal(mode,'open','theme-safe Shadow DOM expected');
+ host.hasShadow=true;
+ return {append(item){if(item===root)host.widget=root;}};
+};
 const doc={
  currentScript:loader,
- body:{append(item){assert.equal(item,root);}},
+ body:{append(item){assert.equal(item,host,'only isolated host mounts into WordPress page');}},
  head:{append(){}},
- createElement(tag){return tag==='section'?root:el();}
+ createElement(tag){return tag==='section'?root:tag==='div'?host:el();}
 };
 const getUrl=url=>url.replace('https://crm.example.test/scrm/api/public/forms/'+guid,'');
 const requests=[];
@@ -64,6 +70,8 @@ const choice=(label)=>{
 };
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
+ assert.equal(host.hasShadow,true,'chatbot is isolated from WordPress global styles');
+ assert.equal(host.widget,root,'chatbot mounted inside shadow root');
  assert.ok(!root.innerHTML.includes('sfac-register'), 'no visible bulk lead form');
  assert.ok(root.innerHTML.includes('sfac-history'),'conversation is main interface');
  $('.sfac-launch').click();await tick();

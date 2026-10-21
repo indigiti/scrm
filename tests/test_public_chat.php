@@ -48,6 +48,15 @@ try{
   ai_assert(ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-2','question'=>'Which documents are required?'])[0]===422,
     'disabled campus cannot be asked');
+  ai_assert(sf_chat_expand_topic('fees')==='What is the admission fee structure?',
+    'short fees query maps to published admissions fee FAQ');
+  ai_assert(sf_chat_expand_topic('documents')==='Which documents are required for school admission?',
+    'documents shorthand is understood');
+  [$probeStatus,$probeNoKey]=ai_req('POST','/api/schools/1/public-chat/provider/test',[]);
+  ai_assert($probeStatus===200 && $probeNoKey['status']==='no_key',
+    'admin test reports no saved OpenRouter key without outbound request');
+  ai_assert(ai_req('POST','/api/schools/3/public-chat/provider/test',[])[0]===403,
+    'OpenRouter diagnostic requires school administrator');
   // Parent must register an enquiry before the assistant may answer.
   ai_assert(ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-1','question'=>'Which documents are required?'])[0]===401,
@@ -104,6 +113,11 @@ try{
   [$status,$result]=ai_req('POST',$base.'/chat',[
       'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
   ai_assert(($result['source']??'')==='approved_knowledge','approved answer works offline');
+  [$feeStatus,$feeReply]=ai_req('POST',$base.'/chat',[
+    'school_code'=>'campus-1','session'=>$session,'question'=>'fees']);
+  ai_assert($feeStatus===200 && str_contains($feeReply['answer'],'verified fee'),
+    'short fee enquiry gets useful callback guidance without inventing prices');
+
   // Provider key is encrypted per school. No API response ever returns it.
   $rawKey='sk-or-v1-'.str_repeat('a',32);
   [$status,$provider]=ai_req('PATCH','/api/schools/1/public-chat/provider',[

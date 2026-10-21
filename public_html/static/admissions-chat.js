@@ -8,10 +8,14 @@ if(window.__schoolflowAdmissionsChatMounted)return;
 window.__schoolflowAdmissionsChatMounted=guid;
 const base=new URL(loader.src).href.replace(/\/static\/admissions-chat\.js(?:\?.*)?$/,'');
 const api=base+'/api/public/forms/'+encodeURIComponent(guid);
+// Keep WordPress/theme CSS and global button styles outside this widget.
+const host=document.createElement('div');
+host.className='schoolflow-admissions-host';
+const mount=typeof host.attachShadow==='function'?host.attachShadow({mode:'open'}):host;
 const css=document.createElement('link');
 css.rel='stylesheet';
 css.href=base+'/static/admissions-chat.css?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-chat-css-version')||'1');
-document.head.append(css);
+mount.append(css);
 
 const root=document.createElement('section');
 root.className='sfac';
@@ -26,7 +30,8 @@ root.innerHTML=
  '<input id="sfac-reply" type="text" maxlength="400" autocomplete="off" placeholder="Type your answer…" required>'+
  '<button class="sfac-send" type="submit" aria-label="Send reply">➤</button></form>'+
  '<div class="sfac-footer"><span class="sfac-status" role="status" aria-live="polite"></span></div></div>';
-document.body.append(root);
+mount.append(root);
+document.body.append(host);
 
 const $=selector=>root.querySelector(selector);
 const panel=$('.sfac-panel'),history=$('.sfac-history'),choices=$('.sfac-quick');
