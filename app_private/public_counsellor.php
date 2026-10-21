@@ -101,6 +101,22 @@ function sf_counsellor_next(string $question,array $profile,bool $campusSelected
     // Answer first; do not tack on a scripted qualifying question to every turn.
     return '';
 }
+/**
+ * Provider input is deliberately a topic synopsis, not verbatim parent text.
+ * Heuristics cannot reliably detect every name or child's personal detail.
+ */
+function sf_counsellor_ai_topic(array $topics,array $profile):?string {
+    $safeTopics=array_values(array_filter($topics,static fn($t)=>in_array($t,
+       ['fees','documents','age_eligibility','transport','facilities',
+        'curriculum','admissions','timings','school_features','visit'],true)));
+    if(!$safeTopics)return null;
+    $question='Explain general school admission information about '.implode(', ',$safeTopics);
+    $grade=(string)($profile['grade']??'');
+    if($grade!==''&&preg_match('/^(?:[0-9]{1,2}|nursery|lkg|ukg|kindergarten|jr\s*kg|sr\s*kg)$/i',$grade))
+       $question.=' for class '.$grade;
+    return $question.'. If specific campus facts are unavailable, state what needs confirmation.';
+}
+
 function sf_counsellor_anonymous_token():string {
     return rtrim(strtr(base64_encode(random_bytes(32)),'+/','-_'),'=');
 }
@@ -178,9 +194,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         if($reply===null){
             // The provider receives a de-identified topic, never contact data.
             // For personal questions build a topic-only synopsis.
-            $aiTopic=sf_kb_safe_topic($q);
-            if($aiTopic===null&&$topics)$aiTopic='General school enquiry about '.implode(', ',$topics).
-                (!empty($profile['grade'])?' for grade '.$profile['grade']:'');
+            $aiTopic=sf_counsellor_ai_topic($topics,$profile);
             if($aiTopic!==null&&!empty($config['ai_enabled'])){
                 $reply=!empty($config['openrouter_key'])
                     ? sf_chat_openrouter($aiTopic,$route['name'],$config,$store)
@@ -206,11 +220,13 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
     $store->transaction(static function(array &$s)use($route,$topicsOut,$source,$publicReply,$stored):void{
         $sid=$route?(int)$route['school_id']:0;
         if(!$sid||!$topicsOut)return;
+        $grade=substr((string)($stored['profile']['grade']??''),0,40);
+        $year=substr((string)($stored['profile']['academic_year']??''),0,12);
         $s['public_counsellor_topics']=$s['public_counsellor_topics']??[];
         foreach($topicsOut as $topic){
             $found=false;
             foreach($s['public_counsellor_topics'] as &$row)
-                if(($row['school_id']??0)===$sid&&($row['topic']??'')===$topic) {
+                if(($row['school_id']??0)===$sid&&($row['topic']??'')===$topic && ($row['grade']??'')===$grade && ($row['academic_year']??'')===$year) {
                     $row['count']=min(100000,(int)($row['count']??0)+1);
                     $row['last_answer']=substr($publicReply,0,900);
                     $row['last_source']=$source;
@@ -219,7 +235,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
                 }
             unset($row);
             if(!$found)$s['public_counsellor_topics'][]=['school_id'=>$sid,
-              'topic'=>$topic,'count'=>1,'last_answer'=>substr($publicReply,0,900),
+              'topic'=>$topic,'grade'=>$grade,'academic_year'=>$year,'count'=>1,'last_answer'=>substr($publicReply,0,900),
               'last_source'=>$source,'last_seen_at'=>sf_time()];
         }
         if(count($s['public_counsellor_topics'])>1500)
