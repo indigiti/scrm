@@ -96,7 +96,7 @@ function sf_counsellor_fact_answer(string $question,array $profile,array $settin
             return sf_kfile_explicit_grade((string)($f['label']??''))===$grade;
         }));
         if(!$matched)return 'I don’t have a confirmed '.($category==='fees'?'fee amount':'eligibility rule').
-            ' for '.$grade.' in the school’s approved information. The admissions office can confirm it.';
+            ' for '.$grade.' right now. The admissions team can confirm the details.';
         $facts=$matched;
     }
     $answers=[];
@@ -142,7 +142,7 @@ function sf_counsellor_documents_list(string $answer):string {
         $item=trim($item," \t\n\r\0\x0B.");
         if($item!=='')$clean[]='• '.ucfirst($item);
     }
-    return "The school’s listed admission documents include:\n\n".implode("\n",$clean).
+    return "You’ll need these admission documents:\n\n".implode("\n",$clean).
         "\n\nThe exact requirements may depend on the class and admission stage. Please confirm the final checklist with the school admissions team.";
 }
 
@@ -338,29 +338,29 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
 • Previous school records, if joining a higher class
 
 ".
-                "This is general guidance, not a confirmed checklist for this campus. The admissions team can clarify the exact documents required.";
+                "The required documents can vary by class. Admissions can confirm the final list.";
         elseif(in_array('age_eligibility',$topics,true))
             $reply='I can help you check the age requirement. Which class and academic year are you considering? The school can confirm the final eligibility.';
         elseif(in_array('curriculum',$topics,true) &&
             preg_match('/\b(?:cbse|icse|board|affiliation)\b/iu',$message))
             $reply=$route===null
-                ?'Which campus are you asking about? I can check its published board information.'
-                :'I can’t confirm the selected campus’s CBSE or board affiliation from its approved school information yet. The admissions team can verify the current board and affiliation details.';
+                ?'Which campus are you asking about? I can help with its board details.'
+                :'I’m not certain about this campus’s current board affiliation. The admissions team can confirm it for you.';
         elseif(in_array('school_features',$topics,true)||in_array('facilities',$topics,true))
             $reply=$route===null
-                ?'Which campus would you like to know about? I can check its published features and facilities.'
-                :'I don’t have a confirmed list of this campus’s facilities in its published information. Are you most interested in sports, learning spaces or extracurricular activities? The admissions team can confirm the latest offerings.';
+                ?'Which campus are you interested in? I can share more about its facilities.'
+                :'Would you like to know about sports, classrooms or extracurricular activities? I can help you with those details or connect you with the admissions team.';
         elseif($route===null)
             $reply='Happy to help. Which campus are you interested in? I can then share relevant information about fees, age eligibility, documents, facilities and transport.';
         else
-            $reply='I can help you with that. Could you tell me a little more about which class or aspect of the school you’d like to know about? I can also help connect you with the admissions team for confirmation.';
+            $reply='Happy to help. Could you tell me which class or school feature you’d like to know about?';
     }
     if(in_array($source,['approved_knowledge_file','approved_school_information','approved_faq'],true)
         && (array_intersect(['fees','age_eligibility','documents'],$topics))
         && !preg_match('/confirm|verification|subject to|requirements may vary|final checklist|school admissions team|school admissions office/iu',$reply)) {
         $reply.="
 
-These are the school’s published details and may change. For the most up-to-date and precise information, the admissions team can confirm what applies to your enquiry.";
+The admissions team can confirm the latest details.";
     }
     // One clarification per turn; don't repeat a question already in the answer.
     $next=($source==='approved_knowledge_file' || str_contains($reply,'?'))

@@ -73,7 +73,10 @@ function choose(label){
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no covert lead');
  // First useful answer introduces the option to share a name, but does not
  // prevent more questions or create a lead.
- choose('Share my name');await tick();
+ choose('Tell you my name');await tick();
+ assert.equal($('.sfac-quick').children.length,0,'no Skip name control appears when parent chooses to give a name');
+ await submit('R');
+ assert.ok($('.sfac-status').textContent.includes('Please enter your name'),'invalid name remains on the name step');
  await submit('Rahul');
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'sharing a name is not CRM contact consent');
  choose('Continue asking');await tick();
