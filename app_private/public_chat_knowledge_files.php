@@ -24,7 +24,7 @@ function sf_kfile_admin(string $method,string $ref,array $p,array $headers,Schoo
                 $out[]=[
                   'id'=>$doc['id'],'filename'=>$doc['filename'],'status'=>$doc['status'],
                   'bytes'=>strlen($doc['content']),'sections'=>$heads,
-                  'preview'=>substr($doc['content'],0,1500),
+                  'preview'=>sf_kfile_cut($doc['content'],1500),
                   'created_at'=>$doc['created_at'],'published_at'=>$doc['published_at']??null,
                   'sha256'=>$doc['sha256']
                 ];
@@ -89,12 +89,21 @@ function sf_kfile_year(string $question,array $profile):string {
         return '20'.$m[1].'–'.$m[2];
     return '';
 }
+/** Return UTF-8-safe previews, never cut inside a multibyte symbol. */
+function sf_kfile_cut(string $text,int $limit):string {
+    $part=substr($text,0,$limit);
+    while($part!==''&&!preg_match('//u',$part))$part=substr($part,0,-1);
+    return $part;
+}
 function sf_kfile_grade(string $question,array $profile):string {
     $raw=(string)($profile['grade']??'');
     if(preg_match('/\b(?:class|grade|std|standard)\s*(nursery|pre[- ]?nursery|lkg|ukg|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i|[1-9]|1[0-2])\b/iu',$question,$m))
         $raw=$m[1];
     $norm=strtolower(trim($raw));
-    if($norm==='')return '';
+    if($norm===''){
+        if(preg_match('/\b(pre[- ]?nursery|nursery|lkg|ukg)\b/iu',$question,$m))$norm=strtolower($m[1]);
+        else return '';
+    }
     $roman=['1'=>'I','2'=>'II','3'=>'III','4'=>'IV','5'=>'V','6'=>'VI',
       '7'=>'VII','8'=>'VIII','9'=>'IX','10'=>'X','11'=>'XI','12'=>'XII'];
     if(isset($roman[$norm]))return 'Class '.$roman[$norm];
@@ -116,8 +125,19 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
     if(count($foundYears)>1 && $year==='')return 'I have fee information for multiple academic years. Do you mean 2026–27 or 2027–28?';
     if($year==='' && $foundYears)$year=reset($foundYears);
     if($grade==='')return 'Which class are you considering? I can check the school’s published fee details for '.($year?:'the relevant academic year').'.';
-    if($grade==='Class XI' && preg_match('/one.time admission fee|admission.fee notes/iu',$question))
-        return 'The school’s supplied one-time Class XI admission-fee notes conflict (₹20,000 and ₹30,000). Please confirm the correct amount with the admissions office.';
+    $oneTime=preg_match('/one[ -]?time|\badmission fee\b/iu',$question)===1;
+    if($oneTime){
+        if($grade==='Class XI')
+            return 'The school’s supplied one-time Class XI admission-fee notes conflict (₹20,000 and ₹30,000). Please confirm the correct amount with the admissions office.';
+        if(in_array($grade,['Nursery','LKG','UKG'],true))
+            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹10,000. Confirm the final payable amount with admissions.';
+        $levels=['Class I','Class II','Class III','Class IV','Class V','Class VI','Class VII','Class VIII','Class IX'];
+        if(in_array($grade,$levels,true))
+            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹20,000. Confirm the latest amount with admissions.';
+        if(in_array($grade,['Class X','Class XII'],true))
+            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹30,000. Confirm the latest amount with admissions.';
+        return 'The supplied school knowledge does not specify a one-time admission fee for '.$grade.'. Please confirm with admissions.';
+    }
     if($year==='')return null;
     $sections=preg_split('/(?=^##\s+(?:\d+\.\s*)?School fees\s*[—–-]\s*academic year\s+20\d\d[–—-]\d\d)/miu',$content);
     $section=null;
@@ -126,7 +146,15 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
             if(str_contains(str_replace(['-','—'],'–',$header[0]),$year)){$section=$piece;break;}
         }
     if($section===null)return null;
-    if(!preg_match('/###\s+Annual fee table.*?(?=^###\s+|\z)/misu',$section,$table))return null;
+    $term=preg_match('/\b(?:first[ -]?term|term[ -]?i|term 1|1st term)\b/iu',$question)?'Term I':
+        (preg_match('/\b(?:second[ -]?term|term[ -]?ii|term 2|2nd term)\b/iu',$question)?'Term II':'');
+    if($term!=='' && $year==='2027–28')
+        return 'The supplied 2027–28 school fee information provides annual totals only; the '.$term.' payment amount is not listed. Please confirm with admissions.';
+    $heading=$term==='Term I'?'First-term fee table':($term==='Term II'?'Second-term fee table':'Annual fee table');
+    if(!preg_match('/###\s+'.preg_quote($heading,'/').'.*?(?=^###\s+|\z)/misu',$section,$table))return null;
+    if($grade==='Class XI'&&$year==='2027–28'&&
+       !preg_match('/science|commerce|humanities|arts/iu',$question))
+        return 'For Class XI in 2027–28, the school lists separate fees for Science and Commerce/Humanities. Which stream are you considering?';
     $row=null;
     foreach(explode("\n",$table[0]) as $line){
         if(!str_starts_with(trim($line),'|'))continue;
@@ -139,10 +167,10 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
             $row=$cols;break;
         }
     }
-    if($row===null)return 'I do not have a confirmed '.$grade.' annual fee for '.$year.' in this school’s approved document. Please check with admissions.';
+    if($row===null)return 'I do not have a confirmed '.$grade.' '.($term?:'annual').' fee for '.$year.' in this school’s approved document. Please check with admissions.';
     $value=trim(str_replace('*','',end($row)));
     if(!preg_match('/^[₹]?\s*[\d,]+(?:\.\d+)?$/u',$value))return null;
-    $answer='For '.$grade.' in '.$year.', the school’s stated annual fee is ₹'.ltrim($value,'₹ ').'.';
+    $answer='For '.$grade.' in '.$year.', the school’s stated '.($term?:'annual').' fee is ₹'.ltrim($value,'₹ ').'.';
     if(preg_match('/(Nursery|LKG|UKG)/',$grade) && $value==='96,296')
         $answer.=' The supplied fee components have a ₹1 discrepancy; please confirm the final payable amount with admissions.';
     if($grade==='Class XI')$answer.=' One-time Class XI admission-fee notes conflict; please confirm those separately.';
@@ -203,7 +231,7 @@ function sf_kfile_context(array $docs,string $question,array $profile):string {
             $first=strtok($chunk,"\n")?:'';
             if(!str_starts_with($first,'## ')){
                 // Answering rules and identifying details, not the entire document.
-                $relevant[]=substr($chunk,0,900);continue;
+                $relevant[]=sf_kfile_cut($chunk,900);continue;
             }
             $score=0;
             $heading=strtolower($first);
@@ -234,7 +262,7 @@ function sf_kfile_context(array $docs,string $question,array $profile):string {
             }
             $text=implode("\n",$selected);
         }
-        $next="\nFile: ".$item['filename']."\n".substr($text,0,4400)."\n";
+        $next="\nFile: ".$item['filename']."\n".sf_kfile_cut($text,4400)."\n";
         if(strlen($result)+strlen($next)>10000)break;
         $result.=$next;
     }
