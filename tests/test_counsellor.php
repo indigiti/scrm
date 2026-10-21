@@ -153,6 +153,65 @@ try {
    'explicit administrator re-verification restores changed source fact');
 
 
+
+ // Regression: asking "fees" before campus selection must not be forgotten
+ // when the parent chooses the relevant branch in the next chat bubble.
+ $md=<<<'MARKDOWN'
+# Approved campus fees
+## 9. School fees — academic year 2026–27
+### Annual fee table, 2026–27
+| Class | Term component | Tuition | Stated annual total |
+|---|---:|---:|---:|
+| Class II | 16,675 | 100,050 | **116,725** |
+
+## 10. School fees — academic year 2027–28
+### Annual fee table, 2027–28
+| Class | Term component | Tuition | Stated annual total |
+|---|---:|---:|---:|
+| Class II | 15,133 | 90,794 | **105,927** |
+MARKDOWN;
+ [$upStatus,$up]=co_req('POST','/api/schools/1/public-chat/knowledge-files',[
+   'action'=>'upload','filename'=>'Campus1_fee_schedule.md','content'=>$md]);
+ co_assert($upStatus===201,'school knowledge uploaded');
+ [$pendingStatus,$pendingTest]=co_req('POST','/api/schools/1/public-chat/knowledge-files',
+    ['action'=>'test','question'=>'Class II annual fees 2026-27']);
+ co_assert($pendingStatus===200 && $pendingTest['status']==='no_published_files',
+    'uploaded files unavailable until approved');
+ co_assert(co_req('POST','/api/schools/1/public-chat/knowledge-files',[
+   'action'=>'publish','id'=>$up['id'],'confirmed'=>true])[0]===200,
+   'admin publishes fee document for selected campus');
+ [$previewStatus,$preview]=co_req('POST','/api/schools/1/public-chat/knowledge-files',[
+   'action'=>'test','question'=>'Class II annual fees 2026-27']);
+ co_assert($previewStatus===200 && $preview['status']==='matched' &&
+    str_contains($preview['answer'],'116,725'),'knowledge test confirms approved school fee');
+ [$firstStatus,$first]=co_req('POST',$base.'/counsel',[
+   'message'=>'What are the school fees?']);
+ co_assert($firstStatus===200 && str_contains($first['reply'],'Which campus'),
+   'no campus prompts for branch while storing fee intent');
+ $continuation=$first['conversation_token'];
+ [$chosenStatus,$chosen]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$continuation,'school_code'=>'campus-1',
+   'message'=>'I am interested in the Campus 1 campus.']);
+ co_assert($chosenStatus===200 && ($chosen['pending_topic']??'')==='fees' &&
+   str_contains($chosen['reply'],'2026') && !str_contains($chosen['reply'],'general admission steps'),
+   'campus selection continues pending fee question instead of generic fallback');
+ co_assert($chosen['needs_detail']==='academic_year','academic year requested for two fee tables');
+ [$yearStatus,$chosenYear]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$continuation,'school_code'=>'campus-1','message'=>'2026–27']);
+ co_assert($yearStatus===200 && str_contains($chosenYear['reply'],'Which class'),
+   'bare year continues fee enquiry and requests grade');
+ co_assert($chosenYear['needs_detail']==='grade','grade suggestion only after year');
+ [$gradeStatus,$gradeReply]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$continuation,'school_code'=>'campus-1','message'=>'Class II']);
+ co_assert($gradeStatus===200 && str_contains($gradeReply['reply'],'₹116,725') &&
+    $gradeReply['source']==='approved_knowledge_file',
+   'bare grade continues the same school fee enquiry and quotes correct annual total');
+ [$separateStatus,$separate]=co_req('POST',$base.'/counsel',[
+   'message'=>'Class II fees 2027-28','school_code'=>'campus-1']);
+ co_assert($separateStatus===200 && str_contains($separate['reply'],'105,927'),
+   'different academic year returns different approved total');
+ co_assert(!str_contains($gradeReply['reply'],'105,927'),'two years never mixed');
+
  echo "PASS: answer-first AI admission counsellor, anonymous intent, school facts, contact consent, qualification and CRM conversion\n";
 }finally{
  foreach(glob($dir.'/*')?:[] as $file)@unlink($file);
