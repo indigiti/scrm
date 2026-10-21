@@ -96,7 +96,7 @@ function sf_kb_review(string $method,string $schoolRef,array $payload,array $hea
         $id=sf_text($payload,'id',36,36);
         if(!preg_match('/^[0-9a-f-]{36}$/D',$id))sf_fail(422,'Invalid topic reference');
         $decision=sf_text($payload,'decision',12,6);
-        if(!in_array($decision,['approve','reject'],true))sf_fail(422,'Invalid review action');
+        if(!in_array($decision,['approve','reject','delete'],true))sf_fail(422,'Invalid review action');
         $index=null;
         foreach($s['public_chat_suggestions']??[] as $i=>$entry)
             if(($entry['id']??'')===$id && ($entry['school_id']??null)===$sid && ($entry['status']??'')==='pending'){$index=$i;break;}
@@ -112,6 +112,11 @@ function sf_kb_review(string $method,string $schoolRef,array $payload,array $hea
                     sf_fail(409,'An answer for this topic already exists');
             $config['faqs'][]=['question'=>$question,'answer'=>$answer];
             $s['public_chat_settings'][(string)$sid]=$config;
+        }
+        if($decision==='delete'){
+            array_splice($s['public_chat_suggestions'],$index,1);
+            sf_event($s,$sid,null,(int)$user['id'],'public_chat_topic_deleted','Unanswered topic deleted');
+            return [200,['ok'=>true]];
         }
         $s['public_chat_suggestions'][$index]['status']=$decision==='approve'?'approved':'rejected';
         unset($s['public_chat_suggestions'][$index]['question']);
