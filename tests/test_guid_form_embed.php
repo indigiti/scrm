@@ -33,6 +33,14 @@ try {
     $first=$group['guid'];$id=(int)$group['id'];
     ef(preg_match('/^[0-9a-f-]{36}$/D',$first)===1,'existing UUID public form ID');
     $root=dirname(__DIR__).'/public_html';
+    // Keep old .js URLs functional, but use the extensionless URL for new
+    // website installations to avoid a static-file CDN cache lifetime.
+    $gateway=file_get_contents($root.'/index.php');
+    $dashboard=file_get_contents($root.'/static/app.js');
+    ef(is_string($gateway) && str_contains($gateway,'(?:\\.js)?'),
+        'gateway handles both extensionless and historical .js embeds');
+    ef(is_string($dashboard) && str_contains($dashboard,"encodeURIComponent(guid)+'"),
+        'dashboard generates extensionless dynamic form script');
     $js=sf_public_embed_script($store,$first,$root);
     ef(str_contains($js,'static/lexicon-form.js?v='),'versioned original form script');
     ef(str_contains($js,'data-schoolflow-chat-version'),'chat JS fingerprint passed through');
