@@ -52,7 +52,7 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
             if(!is_array($item))sf_fail(422,'Invalid FAQ');
             $faqs[]=['question'=>sf_text($item,'question',180,3),'answer'=>sf_text($item,'answer',800,3)];
         }
-        if($input['enabled'] && $overview==='' && !$faqs && !$approvedFacts)sf_fail(422,'Publish school information first');
+        if($input['enabled'] && $overview==='' && !$faqs && !$approvedFacts && !sf_kfile_published($s,$sid))sf_fail(422,'Publish school information first');
         $config=sf_chat_settings($s,$sid);
         $config['enabled']=$input['enabled'];
         $config['ai_enabled']=$aiEnabled;
