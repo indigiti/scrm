@@ -15,6 +15,9 @@ $path = substr($requestPath, strlen($basePath)) ?: '/';
 if(preg_match('~^/embed/([0-9a-f-]{36})\.js$~iD',$path,$embedMatch)){
     if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')sf_json(['detail'=>'Method not allowed'],405);
     header('Cache-Control: private, no-store, no-cache, max-age=0, must-revalidate');
+    header('CDN-Cache-Control: no-store');
+    header('Cloudflare-CDN-Cache-Control: no-store');
+    header('Cross-Origin-Resource-Policy: cross-origin');
     header('Pragma: no-cache');
     header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
     try{
