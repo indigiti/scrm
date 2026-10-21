@@ -123,7 +123,8 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         if($given!=='')foreach($s['public_counsellor_sessions'] as $i=>$v)
           if(hash_equals((string)($v['token_hash']??''),$fingerprint)&&
              (int)($v['group_id']??0)===$gid&&
-             (int)($v['expires_at']??0)>$now){$index=$i;break;}
+             (int)($v['expires_at']??0)>$now
+             &&hash_equals((string)($v['origin_hash']??''),hash('sha256',$origin))){$index=$i;break;}
         if($given!==''&&$index===null)sf_fail(401,'Conversation expired');
         $rec=$index!==null?$s['public_counsellor_sessions'][$index]:
           ['token_hash'=>$fingerprint,'group_id'=>$gid,'school_id'=>0,
@@ -140,6 +141,15 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             $name=strtolower((string)$v['name']);
             if(strlen($name)>=4&&str_contains(strtolower($message),$name)){$school=$v;break;}
         }
+        if($school!==null&&!empty($p['chat_session'])){
+            $leadId=sf_chat_session_lead($store,(string)$p['chat_session'],
+                $gid,(int)$school['school_id'],$origin,$s);
+            $rec['lead_id']=$leadId;
+            $existing=sf_find($s['leads'],$leadId);
+            if($existing && empty($rec['profile']['grade']) && !empty($existing['grade']))
+                $rec['profile']['grade']=(string)$existing['grade'];
+        }
+        $rec['origin_hash']=hash('sha256',$origin);
         $rec['school_id']=$school?(int)$school['school_id']:0;
         $rec['profile']=sf_counsellor_extract($message,$rec['profile']??[]);
         $rec['turn_count']=min(10000,(int)($rec['turn_count']??0)+1);
@@ -192,7 +202,8 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
     $topicsOut=array_values(array_unique($topics));
     // Save anonymised topic and EXACT parent-facing response for review and
     // coverage reporting. Never auto-approve model-generated information.
-    $store->transaction(static function(array &$s)use($route,$topicsOut,$source,$reply,$stored):void{
+    $publicReply=sf_counsellor_redact($reply);
+    $store->transaction(static function(array &$s)use($route,$topicsOut,$source,$publicReply,$stored):void{
         $sid=$route?(int)$route['school_id']:0;
         if(!$sid||!$topicsOut)return;
         $s['public_counsellor_topics']=$s['public_counsellor_topics']??[];
@@ -201,14 +212,14 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             foreach($s['public_counsellor_topics'] as &$row)
                 if(($row['school_id']??0)===$sid&&($row['topic']??'')===$topic) {
                     $row['count']=min(100000,(int)($row['count']??0)+1);
-                    $row['last_answer']=substr($reply,0,900);
+                    $row['last_answer']=substr($publicReply,0,900);
                     $row['last_source']=$source;
                     $row['last_seen_at']=sf_time();
                     $found=true;break;
                 }
             unset($row);
             if(!$found)$s['public_counsellor_topics'][]=['school_id'=>$sid,
-              'topic'=>$topic,'count'=>1,'last_answer'=>substr($reply,0,900),
+              'topic'=>$topic,'count'=>1,'last_answer'=>substr($publicReply,0,900),
               'last_source'=>$source,'last_seen_at'=>sf_time()];
         }
         if(count($s['public_counsellor_topics'])>1500)
@@ -245,9 +256,12 @@ function sf_counsellor_convert(string $guid,array $p,array $headers,string $ip,S
         $rec=&$s['public_counsellor_sessions'][$recId];
         foreach($routes as $route)if((int)$route['school_id']===(int)$rec['school_id'])break;
         if(!isset($route)||(int)$route['school_id']!==(int)$rec['school_id'])sf_fail(422,'Choose a campus first');
+        $wasLinked=!empty($rec['lead_id']);
         if(!empty($rec['lead_id'])){
             $lead=sf_find($s['leads'],(int)$rec['lead_id']);
             if(!$lead)sf_fail(404,'Lead unavailable');
+            if(substr(preg_replace('/\D/','',(string)($lead['phone']??'')),-10)!==$phone)
+                sf_fail(409,'This enquiry is already linked to a different contact number');
             $existingId=(int)$rec['lead_id'];
         }else{
             sf_limit($s,'counsel-convert:'.substr(hash('sha256',$ip),0,16),8,3600);
@@ -295,7 +309,7 @@ function sf_counsellor_convert(string $guid,array $p,array $headers,string $ip,S
         $s['receipts'][]=['school_id'=>$route['school_id'],
            'chat_group_id'=>$group['id'],'chat_session_lead_id'=>$existingId,
            'chat_expires_at'=>$expires,'created_at'=>sf_time()];
-        return [201,['success'=>true,'existing_lead'=>!empty($rec['lead_id']),
+        return [201,['success'=>true,'existing_lead'=>$wasLinked,
           'session'=>sf_chat_token($store,(int)$group['id'],(int)$route['school_id'],$existingId,$expires,$origin),
           'school_code'=>$route['code'],'lead_created'=>true]];
     },true);
