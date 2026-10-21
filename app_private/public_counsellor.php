@@ -193,14 +193,28 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             'profile'=>$rec['profile'],'lead_id'=>$rec['lead_id']];
     },true);
     $route=$stored['school'];
-    $config=$route? $store->transaction(static fn(array $s)=>
-        sf_chat_settings($s,(int)$route['school_id'])) :null;
+    $schoolData=$route? $store->transaction(static fn(array $s)=>[
+        'config'=>sf_chat_settings($s,(int)$route['school_id']),
+        'documents'=>sf_kfile_published($s,(int)$route['school_id'])
+    ]) :null;
+    $config=$schoolData['config']??null;
+    $knowledgeFiles=$schoolData['documents']??[];
     $profile=$stored['profile'];
     $topics=sf_counsellor_classify($message);
     $reply=null;$source='general_guidance';
     if($route!==null){
         $q=sf_chat_expand_topic($safe);
-        $match=sf_kb_match($q,$config);
+        // Approved school-provided documents are the preferred source for
+        // year-specific fees. Never merge two academic years or campuses.
+        foreach($knowledgeFiles as $doc)if($reply===null){
+            $specific=sf_kfile_fee_answer((string)$doc['content'],$q,$profile);
+            if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
+        }
+        if($reply===null){
+            $documentAnswer=sf_kfile_example_answer($knowledgeFiles,$q,$profile);
+            if($documentAnswer!==null){$reply=$documentAnswer;$source='approved_knowledge_file';}
+        }
+        $match=$reply===null?sf_kb_match($q,$config):null;
         if($match!==null){$reply=$match['answer'];$source='approved_faq';}
         if($reply===null){$reply=sf_counsellor_fact_answer($q,$profile,$config);
             if($reply!==null)$source='approved_school_information';}
@@ -209,6 +223,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             // For personal questions build a topic-only synopsis.
             $aiTopic=sf_counsellor_ai_topic($topics,$profile);
             if($aiTopic!==null&&!empty($config['ai_enabled'])){
+                $config['file_context']=sf_kfile_context($knowledgeFiles,$q,$profile);
                 $reply=!empty($config['openrouter_key'])
                     ? sf_chat_openrouter($aiTopic,$route['name'],$config,$store)
                     : sf_chat_ai($aiTopic,$route['name'],$config);
@@ -343,16 +358,35 @@ function sf_counsellor_convert(string $guid,array $p,array $headers,string $ip,S
           'school_code'=>$route['code'],'lead_created'=>true]];
     },true);
 }
-function sf_counsellor_report(string $ref,array $headers,SchoolFlowStore $store):array {
-    return $store->transaction(static function(array $s)use($ref,$headers):array{
+function sf_counsellor_report(string $method,string $ref,array $payload,array $headers,SchoolFlowStore $store):array {
+    if(!in_array($method,['GET','POST'],true))sf_fail(405,'Method not allowed');
+    return $store->transaction(static function(array &$s)use($method,$ref,$payload,$headers):array{
         $user=sf_session($s,(string)($headers['authorization']??''));
+        if(!empty($user['must_change_password']))sf_fail(403,'Change password first');
         $schoolId=sf_record_id($s,'schools',$ref);
         sf_membership($s,$schoolId,(int)$user['id'],['Admin']);
+        if($method==='POST'){
+            if(($payload['action']??'')!=='delete_topic')sf_fail(422,'Invalid topic action');
+            $topic=sf_text($payload,'topic',45,2);
+            $grade=sf_text($payload,'grade',40);
+            $year=sf_text($payload,'academic_year',12);
+            $deleted=false;
+            foreach($s['public_counsellor_topics']??[] as $i=>$row)
+                if((int)($row['school_id']??0)===$schoolId &&
+                   ($row['topic']??'')===$topic && ($row['grade']??'')===$grade &&
+                   ($row['academic_year']??'')===$year){
+                    unset($s['public_counsellor_topics'][$i]);$deleted=true;
+                }
+            if(!$deleted)sf_fail(404,'Topic not found');
+            $s['public_counsellor_topics']=array_values($s['public_counsellor_topics']);
+            sf_event($s,$schoolId,null,(int)$user['id'],'public_chat_topic_deleted','Aggregated topic deleted');
+            return [200,['ok'=>true]];
+        }
         $topics=array_values(array_filter($s['public_counsellor_topics']??[],
             static fn($r)=>(int)($r['school_id']??0)===$schoolId));
         usort($topics,static fn($a,$b)=>($b['count']??0)<=>($a['count']??0));
-        return [200,['topics'=>array_slice($topics,0,40),
-           'anonymous_conversations'=>count(array_filter($s['public_counsellor_sessions']??[],
-              static fn($r)=>(int)($r['school_id']??0)===$schoolId&&empty($r['lead_id']))) ]];
-    });
+        return [200,['topics'=>array_slice($topics,0,60),
+            'anonymous_conversations'=>count(array_filter($s['public_counsellor_sessions']??[],
+                static fn($r)=>(int)($r['school_id']??0)===$schoolId&&empty($r['lead_id']))) ]];
+    },$method==='POST');
 }
