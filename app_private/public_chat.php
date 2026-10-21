@@ -11,7 +11,7 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         if(!empty($user['must_change_password']))sf_fail(403,'Change password first');
         $sid=sf_record_id($s,'schools',$ref);
         sf_membership($s,$sid,(int)$user['id'],['Admin']);
-        if($method==='GET')return [200,sf_chat_settings($s,$sid)];
+        if($method==='GET')return [200,sf_chat_safe_settings(sf_chat_settings($s,$sid))];
         if(!is_bool($input['enabled']??null))sf_fail(422,'Invalid enabled flag');
         $aiEnabled=$input['ai_enabled']??false;
         if(!is_bool($aiEnabled))sf_fail(422,'Invalid AI provider setting');
@@ -24,10 +24,14 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
             $faqs[]=['question'=>sf_text($item,'question',180,3),'answer'=>sf_text($item,'answer',800,3)];
         }
         if($input['enabled'] && $overview==='' && !$faqs)sf_fail(422,'Publish school information first');
-        $config=['enabled'=>$input['enabled'],'ai_enabled'=>$aiEnabled,'overview'=>$overview,'faqs'=>$faqs];
+        $config=sf_chat_settings($s,$sid);
+        $config['enabled']=$input['enabled'];
+        $config['ai_enabled']=$aiEnabled;
+        $config['overview']=$overview;
+        $config['faqs']=$faqs;
         $s['public_chat_settings'][(string)$sid]=$config;
         sf_event($s,$sid,null,(int)$user['id'],'public_chat_updated','Public admissions assistant configuration changed');
-        return [200,$config];
+        return [200,sf_chat_safe_settings($config)];
     },$method==='PATCH');
 }
 function sf_chat_fallback(string $question,array $config):string {
@@ -79,8 +83,18 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     $code=sf_text($input,'school_code',50,3);
     $target=$groupData['schools'][$code]??null;
     if(!$target)sf_fail(422,'Select an available campus');
+    if($action==='chat-start')return sf_chat_start($guid,$input,$headers,$ip,$store);
+    if($action==='chat-followup'){
+        $session=sf_text($input,'session',500);
+        return sf_chat_followup($guid,$code,$session,$origin,$store);
+    }
     if($action==='callback')return sf_chat_callback($guid,$input,$headers,$ip,$store);
     if($action!=='chat')sf_fail(404,'Unknown public chat action');
+    // A parent must create a consented school enquiry before asking questions.
+    $session=sf_text($input,'session',500);
+    sf_chat_session_lead($store,$session,(int)$groupData['group']['id'],
+        (int)$target['school']['school_id'],$origin,
+        $store->transaction(static fn(array $s)=>$s));
     $question=sf_text($input,'question',400,3);
     $ipHash=substr(hash('sha256',$ip),0,20);
     $gid=(int)$groupData['group']['id'];
@@ -98,8 +112,12 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     // Only send nonpersonal general questions to a provider, and only with
     // the individual school's explicit administrator opt-in.
     $safeQuestion=sf_kb_safe_topic($question);
-    $answer=($safeQuestion!==null && !empty($target['config']['ai_enabled']))
-       ? sf_chat_ai($safeQuestion,$target['school']['name'],$target['config']) : null;
+    $answer=null;
+    if($safeQuestion!==null && !empty($target['config']['ai_enabled'])){
+        $answer=!empty($target['config']['openrouter_key'])
+            ? sf_chat_openrouter($safeQuestion,$target['school']['name'],$target['config'],$store)
+            : sf_chat_ai($safeQuestion,$target['school']['name'],$target['config']);
+    }
     return [200,['answer'=>$answer??sf_chat_fallback($question,$target['config']),
       'source'=>$answer!==null?'ai':'human_handoff']];
 }
