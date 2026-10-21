@@ -40,7 +40,7 @@ function sf_counsellor_extract(string $message,array $profile):array {
         'interests'=>[],'visit_preference'=>'','lead_intent'=>'Browsing'], $profile);
     if(preg_match('/\b(?:grade|class|std|standard)\s*(?:is\s*)?([0-9]{1,2}|nursery|jr\.?\s*kg|sr\.?\s*kg|lkg|ukg|kindergarten|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/i',$message,$m))
         $profile['grade']=substr(trim($m[1]),0,40);
-    if(preg_match('/\b(20\d{2}\s*[-\/]\s*(?:20)?\d{2})\b/',$message,$m))
+    if(preg_match('/\b(20\d{2}\s*[-–—\/]\s*(?:20)?\d{2})(?!\d)/u',$message,$m))
         $profile['academic_year']=preg_replace('/\s+/','',$m[1]);
     if(preg_match('/\b(?:we live in|i live in|reside in|from|we are in)\s+([\p{L} \-]{3,50})/ui',$message,$m)){
         $area=trim(preg_split('/[,.;!?]|\s+(?:and|near|but|so|what|how)\b/i',$m[1])[0]);
