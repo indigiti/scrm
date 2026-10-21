@@ -180,14 +180,13 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     // Common one-word questions such as "fees" should not be discarded
     // by the short-topic privacy screen before reaching approved knowledge/AI.
     $topic=sf_chat_expand_topic($question);
-    // Specific school policies are confirmed only from administrator-approved
-    // structured facts; AI must never invent missing school-specific values.
+    // Verified FAQs take precedence for specific matches, followed by the
+    // school's category-specific factual entries. Neither needs a paid model.
+    $match=sf_kb_match($topic,$target['config']);
+    if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
     $schoolFactAnswer=sf_chat_fact_answer($topic,$target['config']);
     if($schoolFactAnswer!==null)
         return [200,['answer'=>$schoolFactAnswer,'source'=>'approved_school_information']];
-    // Prefer verified published answers: no provider call or additional cost.
-    $match=sf_kb_match($topic,$target['config']);
-    if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
     // Unanswered nonpersonal topics are suggested for an administrator to verify.
     sf_kb_suggest($store,(int)$target['school']['school_id'],$topic);
     // Only send nonpersonal general questions to a provider, and only with
