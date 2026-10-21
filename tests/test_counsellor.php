@@ -268,7 +268,7 @@ MARKDOWN;
  [$unverifiedStatus,$unverified]=co_req('POST',$base.'/counsel',[
    'message'=>'is cbse','school_code'=>'campus-2']);
  co_assert($unverifiedStatus===200 &&
-   str_contains($unverified['reply'],'can’t confirm') &&
+   str_contains($unverified['reply'],'not certain') &&
    !str_contains($unverified['reply'],'CBSE-affiliated'),
    'no other campus may inherit positive CBSE affiliation');
  co_assert(!str_contains((string)sf_counsellor_fact_answer(
