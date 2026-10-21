@@ -158,6 +158,27 @@ try {
  // when the parent chooses the relevant branch in the next chat bubble.
  $md=<<<'MARKDOWN'
 # Approved campus fees
+## 6. Age eligibility for the 2026–27 session
+| Class | Eligible date of birth | Approximate age |
+|---|---|---|
+| Pre-Nursery | **1 January 2024 – 31 December 2024** | 2 years and above, below 3 |
+| Nursery | **1 January 2023 – 31 December 2023** | 3 years and above, below 4 |
+| LKG | **1 January 2022 – 31 December 2022** | 4 years and above, below 5 |
+| UKG | **1 January 2021 – 31 December 2021** | 5 years and above, below 6 |
+| Class I | **1 January 2020 – 31 December 2020** | 6 years and above, below 7 |
+| Classes II–IX | Must have passed the previous class at a recognized school | DOB cutoff not supplied |
+
+## 7. Age eligibility for the 2027–28 session
+| Class | Eligible date of birth | Approximate age |
+|---|---|---|
+| Pre-Nursery | **1 January 2025 – 31 December 2025** | 2 years and above, below 3 |
+| Nursery | **1 January 2024 – 31 December 2024** | 3 years and above, below 4 |
+
+## 8. Admission documents
+- Birth certificate
+- Recent passport photographs
+- Previous school report where applicable
+
 ## 9. School fees — academic year 2026–27
 ### Annual fee table, 2026–27
 | Class | Term component | Tuition | Stated annual total |
@@ -211,6 +232,19 @@ MARKDOWN;
  co_assert($separateStatus===200 && str_contains($separate['reply'],'105,927'),
    'different academic year returns different approved total');
  co_assert(!str_contains($gradeReply['reply'],'105,927'),'two years never mixed');
+ [$ageStatus,$ageResult]=co_req('POST',$base.'/counsel',[
+    'message'=>'What is the age eligibility for 2026-27?','school_code'=>'campus-1']);
+ co_assert($ageStatus===200 && $ageResult['source']==='approved_knowledge_file' &&
+    str_contains($ageResult['reply'],'• Pre-Nursery') &&
+    str_contains($ageResult['reply'],'Classes II–IX'),
+    'counsellor answers all confirmed age classes as readable list');
+ [$docStatus,$docResult]=co_req('POST',$base.'/counsel',[
+    'message'=>'Which documents are required for admission?','school_code'=>'campus-1']);
+ co_assert($docStatus===200 && $docResult['source']==='approved_knowledge_file' &&
+    str_contains($docResult['reply'],'• Birth certificate') &&
+    str_contains($docResult['reply'],'• Recent passport photographs'),
+    'counsellor searches school document checklist and answers in bullet points');
+
 
  echo "PASS: answer-first AI admission counsellor, anonymous intent, school facts, contact consent, qualification and CRM conversion\n";
 }finally{
