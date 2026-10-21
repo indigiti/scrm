@@ -87,6 +87,14 @@ function init(){
  var form=$('lf_form'),submit=$('lf_submit'),campus=$('lf_campus'),pin=$('lf_pincode');
  var state=$('lf_state'),city=$('lf_city'),phone=$('lf_phone'),answer=$('lf_captcha');
  var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false;
+ // The enquiry form is a gentle fallback when the visitor is not using chat.
+ // These optional website attributes allow site owners to opt out or tune timing.
+ var autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off';
+ var exitEnabled=loader.getAttribute('data-schoolflow-exit-intent')!=='off';
+ var configuredDelay=Number(loader.getAttribute('data-schoolflow-enquiry-delay'));
+ var autoDelay=Number.isFinite(configuredDelay)&&configuredDelay>=8000&&configuredDelay<=180000?configuredDelay:30000;
+ var pageOpenedAt=Date.now(),autoShownHere=false,deferredForChat=false,closeGraceTimer=null;
+ var autoShownKey='schoolflow_lexicon_auto_shown_'+guid;
  async function decode(response){
   var data=await response.json().catch(function(){return {};});
   if(!response.ok)throw new Error(data.detail||('SchoolFlow unavailable ('+response.status+')'));
@@ -96,6 +104,52 @@ function init(){
  function feedback(message,success){$('lf_feedback').textContent=message||'';$('lf_feedback').classList.toggle('lf-success',!!success);}
  function closed(){try{return sessionStorage.getItem('schoolflow_lexicon_closed_'+guid)==='1';}catch(e){return false;}}
  function remember(){try{sessionStorage.setItem('schoolflow_lexicon_closed_'+guid,'1');}catch(e){}}
+ function previouslyPrompted(){try{return sessionStorage.getItem(autoShownKey)==='1';}catch(e){return autoShownHere;}}
+ function rememberPrompt(){autoShownHere=true;try{sessionStorage.setItem(autoShownKey,'1');}catch(e){}}
+ function chatbotOpen(){
+  var chat=window.__schoolflowAdmissionsChatState;
+  // Conservative fallback for a legacy chatbot build with no visibility state.
+  if(window.__schoolflowAdmissionsChatMounted===guid && (!chat||chat.guid!==guid))return true;
+  return !!(chat&&chat.guid===guid&&chat.open);
+ }
+ function promptIfEligible(reason){
+  if(!autoEnabled||closed()||autoShownHere||previouslyPrompted()||popup.classList.contains('lf-visible')||document.visibilityState==='hidden')return;
+  if(chatbotOpen()){
+   if(reason==='timer')deferredForChat=true;
+   return;
+  }
+  if(reason==='timer' && Date.now()-pageOpenedAt<autoDelay)return;
+  if(reason==='exit' && Date.now()-pageOpenedAt<8000)return;
+  open();
+  rememberPrompt();
+ }
+ function scheduleAfterChat(){
+  if(closeGraceTimer!==null)clearTimeout(closeGraceTimer);
+  closeGraceTimer=setTimeout(function(){closeGraceTimer=null;promptIfEligible('timer');},15000);
+ }
+ if(autoEnabled){
+  setTimeout(function(){promptIfEligible('timer');},autoDelay);
+  if(exitEnabled)document.addEventListener('mouseout',function(event){
+   // Desktop exit intent only: leave through the top of the viewport.
+   if(event.relatedTarget||event.toElement||event.clientY>10)return;
+   promptIfEligible('exit');
+  });
+  document.addEventListener('schoolflow:admissions-chat-state',function(event){
+   if(!event.detail||event.detail.guid!==guid)return;
+   if(event.detail.open){
+    if(closeGraceTimer!==null){clearTimeout(closeGraceTimer);closeGraceTimer=null;}
+   }else if(deferredForChat){
+    deferredForChat=false;
+    scheduleAfterChat();
+   }
+  });
+  // Background tabs do not launch a hidden modal.
+  document.addEventListener('visibilitychange',function(){
+   if(document.visibilityState==='visible'&&deferredForChat&&!chatbotOpen()){
+    deferredForChat=false;scheduleAfterChat();
+   }
+  });
+ }
  function resetCaptcha(){
   token='';$('lf_captcha_label').textContent='Loading math CAPTCHA...';answer.value='';
   get('/challenge').then(function(data){token=data.token;$('lf_captcha_label').textContent=data.question;})
@@ -137,7 +191,7 @@ function init(){
   }
  });
  document.addEventListener('click',function(event){var el=event.target.closest('[data-lexicon-form]');if(!el)return;event.preventDefault();open();});
- // No timed popups: only explicit Enquire Now / data-lexicon-form clicks open this dialog.
+ // Auto-prompt is conditional, session-limited and suppressed while chat is open.
  phone.addEventListener('input',function(){phone.value=phone.value.replace(/\D/g,'').slice(0,10);});
  function manualPin(){state.readOnly=false;city.readOnly=false;state.classList.remove('lf-readonly');city.classList.remove('lf-readonly');}
  function readonlyPin(){state.readOnly=true;city.readOnly=true;state.classList.add('lf-readonly');city.classList.add('lf-readonly');}
