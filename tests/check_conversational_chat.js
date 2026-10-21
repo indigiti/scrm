@@ -64,6 +64,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  assert.ok(!root.innerHTML.includes('sfac-register'), 'no visible bulk lead form');
  assert.ok(root.innerHTML.includes('sfac-history'),'conversation is main interface');
  $('.sfac-launch').click();await tick();
+ console.log('DEBUG_INTAKE',JSON.stringify({calls:requests.map(x=>x.route),options:$('.sfac-quick').children.map(x=>x.textContent),bubbles:$('.sfac-history').children.map(x=>x.textContent),stage:$('.sfac-step').textContent}));
  assert.equal(requests.filter(x=>x.route==='/chat').length,0,'AI must not start at open');
  choice('Kalyani Nagar');
  assert.equal($('.sfac-step').textContent,'Enquiry details · Step 2 of 9');
