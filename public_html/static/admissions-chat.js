@@ -32,6 +32,7 @@ entry=$('.sfac-entry'),input=$('#sfac-reply'),sendButton=$('.sfac-send');
 const storageKey='schoolflow:admissions:return:'+guid,anonKey='schoolflow:counsellor:anonymous:'+guid;
 let started=false,busy=false,schoolCode='',schools=[],conversationToken='',crmSession='';
 let profile={},contactState='',contactDraft={},suggestedContact=false,callbackRequested=false,needDetail='',pendingTopic='';
+let introductionOffered=false,answeredCount=0;
 let verification=null,attemptId='',pendingCampusContact=false;
 function status(s){$('.sfac-status').textContent=s||'';}
 function bubble(who,s){
@@ -125,9 +126,30 @@ function updateProfile(result){
  pendingTopic=result.pending_topic||pendingTopic;
  needDetail=result.needs_detail||'';
  suggestedContact=!!result.suggest_contact;
- if(result.qualified)headline(result.campus_name?
-  result.campus_name+' · '+result.qualified:'School admissions · '+result.qualified);
+ headline(result.campus_name?result.campus_name+' · Here to help':'Here to help with admissions');
 }
+function introduce(){
+ if(contactState||busy)return;
+ contactState='intro-name';
+ bubble('assistant','Of course. What name would you like me to use? It’s entirely optional.');
+ field(true,{maxLength:100,placeholder:'Your name (optional)'});
+ choices([{label:'Skip for now',onClick:()=>finishIntroduction('')}]);
+}
+function finishIntroduction(name){
+ const clean=textSafe(name).replace(/[<>]/g,'').trim();
+ if(clean && clean.length>=2 && clean.length<=100 && !/[?!]/.test(clean)){
+  contactDraft.parent_name=clean;
+  bubble('parent','You can call me '+clean+'.');
+  bubble('assistant','Lovely to meet you, '+clean+'. If you’d like one-to-one help from admissions, I can also arrange a callback. You’re welcome to keep asking questions here without sharing a number.');
+ }else{
+  bubble('assistant','No problem at all. We can keep chatting without any personal details.');
+ }
+ contactState='';
+ field(true,{placeholder:'Ask another admissions question…'});
+ choices([{label:'Request a callback',onClick:beginContact},
+          {label:'Continue asking',onClick:suggested}]);
+}
+
 function textSafe(raw){
  return String(raw||'').trim().slice(0,400);
 }
@@ -149,14 +171,21 @@ async function chat(message,echo=true){
   return;
  }
  if(echo)bubble('parent',cleaned);
- busy=true;sendButton.disabled=true;status('Finding a helpful answer…');
+ busy=true;sendButton.disabled=true;status('One moment, I’ll look into that for you…');
  try{
   const result=await request('/counsel',{
    message:cleaned,school_code:schoolCode,
    conversation_token:conversationToken, ...(crmSession?{chat_session:crmSession}:{})
   });
   updateProfile(result);bubble('assistant',result.reply);
-  suggested();
+  answeredCount++;
+  if(!introductionOffered && answeredCount===1 && !crmSession){
+   introductionOffered=true;
+   bubble('assistant','By the way, may I know what to call you? Only if you’re comfortable sharing. If you’d prefer, we can simply continue with your school questions.');
+   choices([{label:'Share my name',onClick:introduce},
+      {label:'Keep chatting',onClick:suggested},
+      {label:'Ask for a callback',onClick:beginContact}]);
+  }else suggested();
  }catch(e){
   if(/expired/i.test(e.message)){conversationToken='';saveAnonymous();}
   bubble('assistant','I could not load that answer right now. Please try again or ask our admissions team.');
@@ -171,8 +200,16 @@ function beginContact(){
   return;
  }
  if(crmSession){requestCallback();return;}
+ const knownName=contactDraft.parent_name||'';
+ if(knownName){
+  contactState='phone';
+  bubble('assistant','Certainly. What 10-digit mobile number can the school admissions team use to contact you? I’ll ask for your permission before sharing the request.');
+  field(true,{type:'tel',inputMode:'numeric',maxLength:10,placeholder:'Mobile number for optional follow-up'});
+  choices([]);
+  return;
+ }
  contactState='name';contactDraft={};bubble('assistant',
-  'I can help request an admissions callback or campus visit. What name should the admissions team use? You may skip this.');
+  'I can ask the school admissions team to contact you. What name should they use? You may skip this.');
  headline('Optional follow-up request');field(true,{maxLength:140,placeholder:'Your name (optional)'});
  choices([{label:'Skip name',onClick:()=>captureContact('')}]);
 }
@@ -277,7 +314,7 @@ async function restore(){
 }
 async function begin(){
  if(started)return;started=true;
- bubble('assistant','Hello! 👋 I’m here to help with admissions. Ask me about fees, age requirements, documents, transport, or anything you would like to know about the school.');
+ bubble('assistant','Hello, welcome! 👋 I’m your school admissions guide. You can ask me about fees, age eligibility, required documents, facilities, transport or choosing the right class. What would you like to know?');
  field(true);
  try{
   const data=await request('/chat-config');
@@ -290,7 +327,7 @@ async function begin(){
      {label:'Start new chat',onClick:async()=>{const v=savedReturn();forgetLocal();
        if(v)request('/chat-forget',{remember_token:v.token}).catch(()=>{});
        crmSession='';conversationToken='';saveAnonymous();schoolCode=schools.length===1?schools[0].code:'';
-       pendingTopic='';needDetail='';profile={};
+       pendingTopic='';needDetail='';profile={};introductionOffered=false;answeredCount=0;
        history.replaceChildren();bubble('assistant','Of course. What would you like to know about admissions?');suggested();}}]);
   }else {
    choices([{label:'Fees',onClick:()=>chat('What are the school fees?')},
@@ -315,7 +352,8 @@ entry.addEventListener('submit',e=>{
  e.preventDefault();if(busy)return;
  const value=input.value.trim();if(!value)return;
  input.value='';
- if(contactState==='name'||contactState==='phone')captureContact(value);
+ if(contactState==='intro-name')finishIntroduction(value);
+ else if(contactState==='name'||contactState==='phone')captureContact(value);
  else if(contactState==='verification')convert(value);
  else chat(value);
 });
