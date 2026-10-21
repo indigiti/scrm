@@ -518,6 +518,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         return sf_import_rollback($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2]);
     if(preg_match('~^/api/public/forms/([a-f0-9-]{36})/(chat-config|chat|chat-start|chat-followup|callback)$~iD',$path,$chatMatch))
         return sf_chat_public($method,strtolower($chatMatch[1]),$chatMatch[2],$payload,$headers,$ip,$store);
+    if($method==='POST' && preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/provider/test$~iD',$path,$providerTest))
+        return sf_chat_provider_test($providerTest[1],$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/provider$~iD',$path,$providerChat))
         return sf_chat_provider_admin($method,$providerChat[1],$payload,$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat$~iD',$path,$adminChat))
