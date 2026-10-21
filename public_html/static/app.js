@@ -430,105 +430,174 @@ function schoolFactEditor(fact={}){
 function publicChatPage(){
  if(!isAdmin())return '<div class="empty-state">School administrator access required.</div>';
  const settings=ext.chatSettings;
- if(!settings)return pageHead('Public Admissions AI','Loading school knowledge and unanswered topics…');
- const faqs=settings.faqs||[];
- const groups=(ext.chatGroups||[]).filter(g=>(g.schools||[]).some(s=>Number(s.school_id)===Number(state.schoolId)));
- const row=(q='',a='')=>'<div class="sf-chat-faq panel" style="padding:15px;margin-bottom:10px">'+
- '<div class="form-field"><label>Parent question</label><input class="sf-chat-q" maxlength="180" value="'+esc(q)+'" placeholder="e.g. Which documents are required?"></div>'+
- '<div class="form-field"><label>Approved answer</label><textarea class="sf-chat-a" maxlength="800" rows="2" placeholder="Only verified school information">'+esc(a)+'</textarea></div>'+
- '<button class="btn small" type="button" data-action="chat-remove-faq">Remove</button></div>';
-
-
+ if(!settings)return pageHead('AI Admission Counsellor','Loading the knowledge desk…');
  const tab=ext.chatTab||'Overview';
- const tabs=['Overview','School Knowledge','Questions & Answers','Leads & Conversations','Settings'];
- const heading=pageHead('AI Admission Counsellor','Answer-first counselling, verified campus knowledge, lead qualification and question reviews.');
- const tabbar='<nav class="button-row" aria-label="AI Admission Counsellor sections" style="margin-bottom:20px;display:flex;gap:8px;flex-wrap:wrap">'+
-  tabs.map(t=>'<button type="button" class="btn small '+(tab===t?'primary':'')+'" data-action="chat-select-tab" data-tab="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</nav>';
- const report=ext.counsellorReport||{topics:[],anonymous_conversations:0};
- const sourceData=ext.chatSources||{sources:[],candidates:[]};
- const chatbotCount=state.leads.filter(x=>!!x.chatbot_lead).length;
- const overview='<div class="panel" style="padding:20px;margin-bottom:18px"><h3>Admissions counsellor overview</h3>'+
-  '<div style="display:flex;gap:28px;flex-wrap:wrap;margin:14px 0">'+
-  '<div><strong>'+Number(report.anonymous_conversations||0)+'</strong><p class="muted-note">Anonymous conversations</p></div>'+
-  '<div><strong>'+Number(chatbotCount)+'</strong><p class="muted-note">Chatbot leads</p></div>'+
-  '<div><strong>'+Number((report.topics||[]).length)+'</strong><p class="muted-note">Question topics</p></div>'+
-  '<div><strong>'+Number((ext.chatQueue||[]).length+(sourceData.candidates||[]).length)+'</strong><p class="muted-note">Pending knowledge reviews</p></div></div>'+
-  '<p><b>Publishing:</b> '+(settings.enabled?'Enabled':'Disabled')+
-  ' · <b>External AI:</b> '+(settings.ai_enabled?'Enabled':'Disabled')+
-  ' · <b>OpenRouter key:</b> '+(settings.openrouter_connected?'Connected':'Not saved')+'</p>'+
-  '<p class="muted-note">Parents can ask questions before providing contact information. Contact data is collected only after they request follow-up and explicitly agree. Unverified web and AI statements are never published automatically.</p></div>';
- const sourcesPanel='<section class="panel" style="padding:20px;margin-bottom:18px">'+
-  '<h3>Registered school website sources</h3><p class="muted-note">Add public HTTPS pages from a domain registered to this school. Scan stages proposed information for review; no page content is published automatically. HTML and plain-text pages supported.</p>'+
-  '<form id="chatSourceAddForm" class="button-row" style="margin:10px 0"><input type="url" name="url" required maxlength="600" placeholder="https://school-domain.example/admissions/" style="min-width:240px;flex:1"><button class="btn small primary" type="submit">Add source URL</button></form>'+
-  ((sourceData.sources||[]).length?sourceData.sources.map(src=>
-   '<div style="padding:12px 0;border-top:1px solid #e3e5ef">'+
-   '<p><strong>'+esc(src.url)+'</strong> · '+esc(src.status||'not_scanned')+'</p>'+
-   '<p class="muted-note">Last checked: '+esc(src.last_checked_at||'Not scanned')+'</p>'+
-   '<div class="button-row"><button class="btn small" type="button" data-action="chat-source-scan" data-id="'+esc(src.id)+'">Scan / Rescan</button>'+
-   '<button class="btn small" type="button" data-action="chat-source-remove" data-id="'+esc(src.id)+'">Remove URL</button></div></div>').join(''):'<p class="muted-note">No source URLs added yet.</p>')+
-  '<h4>Extracted information awaiting your approval</h4>'+
-  ((sourceData.candidates||[]).length?sourceData.candidates.map(item=>
-   '<form class="sfSourceReview" data-id="'+esc(item.id)+'" style="border-top:1px solid #e3e5ef;padding:12px 0">'+
-   '<p class="muted-note">'+esc(item.category)+' · Proposed from school website</p>'+
-   '<label>Approved label<input type="text" name="label" maxlength="120" required value="'+esc(item.label||'')+'"></label>'+
-   '<label>Verified details<textarea name="details" maxlength="900" required rows="3">'+esc(item.details||'')+'</textarea></label>'+
-   '<p class="muted-note">Evidence preview: '+esc(item.evidence||'')+'</p>'+
-   '<div class="button-row"><button class="btn primary small" type="submit">Approve & publish</button>'+
-   '<button class="btn small" type="button" data-action="chat-source-reject" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):
-   '<p class="muted-note">No extracted information awaiting review.</p>')+'</section>';
- const analytics='<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Most asked admissions topics</h3>'+
-  '<p class="muted-note">Aggregated topics with the most recent answer actually shown to parents. Counts omit raw personal chat messages. AI responses require administrator verification before becoming reusable FAQs.</p>'+
-  ((report.topics||[]).length?(report.topics||[]).map(item=>
-    '<details style="padding:12px 0;border-bottom:1px solid #e3e5ef"><summary><b>'+esc(item.topic)+(item.grade?' · Class '+esc(item.grade):'')+(item.academic_year?' · '+esc(item.academic_year):'')+'</b> · '+Number(item.count||0)+' times · '+esc(item.last_source||'')+'</summary>'+
-    '<p class="muted-note">Last actual response:</p><p>'+esc(item.last_answer||'')+'</p>'+
-    '<p class="muted-note">AI replies are not verified school facts. Review and correct the draft against an official source before publishing.</p>'+
-    '<button type="button" class="btn small" data-action="chat-topic-draft" data-index="'+Number((report.topics||[]).indexOf(item))+'">Prepare FAQ draft for review</button></details>').join(''):
-    '<p class="muted-note">Questions will appear here once parents interact with the counsellor.</p>')+'</section>';
- const leads='<section class="panel" style="padding:20px"><h3>Leads & Conversations</h3>'+
-  '<p><b>'+chatbotCount+' chatbot leads</b> · '+Number(report.anonymous_conversations||0)+' anonymous enquiries</p>'+
-  '<p class="muted-note">Anonymous questions remain anonymised topic statistics until a parent consents to follow-up. Converted enquiries stay in the regular admissions pipeline, with interest score, intent and recommended next action.</p>'+
-  '<button type="button" class="btn primary" data-action="chat-goto-leads">Open Chatbot Leads</button></section>';
-
- const settingsForm='<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
- '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+'<label><input type="checkbox" name="ai_enabled" '+(settings.ai_enabled?'checked':'')+'> Allow external AI for general, nonpersonal questions (optional; local FAQs work without it)</label>'+
- '<div class="form-field"><label>Verified school overview</label><textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></div>'+
- '<h3>Returning visitor</h3><div class="form-field"><label>Remember enquiry on this browser after visitor opt-in</label><select name="remember_days">'+
- option(15,'15 days',String(settings.remember_days||30))+option(30,'30 days',String(settings.remember_days||30))+
- '</select></div>'+
- '<h3>Verified school information · multiple entries per campus</h3>'+
- '<p class="muted-note">Select the current school above, then add as many approved entries as needed (up to 36 per campus). Add separate entries for each grade, school fee, age eligibility, document checklist, facility, bus route or other detail. Answers will not mix information from different schools.</p>'+
- '<div id="sfSchoolFacts">'+(settings.school_facts||[]).map(schoolFactEditor).join('')+'</div>'+
- '<button type="button" class="btn small" data-action="chat-add-fact">＋ Add school information</button>'+
- '<h3>Published questions and answers</h3><p class="muted-note">Starter Q&As are safe handoff templates. Review each answer for your campus before saving.</p><div id="sfChatFaqs">'+(faqs.length?faqs.map(f=>row(f.question,f.answer)).join(''):row())+'</div>'+
- '<div class="button-row"><button type="button" class="btn small" data-action="chat-add-faq">＋ Add FAQ</button><button type="button" class="btn small" data-action="chat-starter-faq">Add 8 starter Q&As</button>'+
- '<button type="submit" class="btn primary">Save chatbot settings</button></div></form>';
- const providerForm='<form id="chatProviderForm" class="panel" style="padding:20px;margin-bottom:18px">'+
- '<h3>OpenRouter AI provider (optional)</h3>'+
- '<p class="muted-note">OpenRouter answers only general admissions questions using published campus knowledge. Parent names, phone numbers and lead records are never included in requests. Verified local FAQ answers work without a provider.</p>'+
- '<p><b>API key:</b> '+(ext.chatProvider?.connected?'Saved securely (connection not yet tested)':'Not configured')+'</p>'+'<p><b>Live AI for parents:</b> '+(ext.chatProvider?.enabled?'Enabled':'Disabled')+'</p>'+'<p class="muted-note">Saved key does not guarantee the model works. Test the actual OpenRouter request from this server. The test sends no parent details and may use a few billable tokens.</p>'+'<button type="button" class="btn small" data-action="chat-test-provider">Test OpenRouter connection</button>'+(ext.chatProviderTest?'<p class="muted-note" role="status"><b>Test result:</b> '+esc(ext.chatProviderTest.message||'No response')+'</p>':'')+
- '<div class="form-field"><label>OpenRouter model ID</label><input name="model" maxlength="100" required value="'+esc(ext.chatProvider?.model||'openai/gpt-4o-mini')+'" placeholder="openai/gpt-4o-mini"></div>'+
- '<div class="form-field"><label>API key (leave blank to keep existing key)</label><input name="api_key" type="password" maxlength="1024" autocomplete="new-password" placeholder="sk-or-…"></div>'+
- '<label><input type="checkbox" name="remove_key"> Disconnect and remove saved OpenRouter key</label>'+
- '<button type="submit" class="btn primary">Save AI connection</button></form>';
- const reviewQueue='<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Unanswered question review</h3>'+
- '<p class="muted-note">Topics are filtered for personal details; approve only after writing a verified answer. Reject unsuitable topics.</p>'+
- ((ext.chatQueue||[]).length?ext.chatQueue.map(item=>
-  '<form class="sfChatReview" data-id="'+esc(item.id)+'" style="padding:12px 0;border-bottom:1px solid #e3e5ef">'+
-  '<p><b>'+esc(item.question)+'</b> · '+Number(item.count||1)+' requests</p>'+
-  '<textarea name="answer" maxlength="800" rows="2" placeholder="Verified school response for approval"></textarea>'+
-  '<div class="button-row"><button type="submit" class="btn small primary">Approve & publish</button>'+
-  '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):'<p class="muted-note">No unanswered topics waiting for approval.</p>')+
- '</section>';
- const websiteEmbed='<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">The GUID embed serves both the enquiry form and the chatbot with automatically updated script versions. Older lexicon-form.js installations remain compatible. Only approved group websites can display it.</p>'+
- (groups.length?groups.map(g=>{const snippet=sfGroupEmbed(g.guid);
- return '<p><strong>'+esc(g.name)+'</strong> · '+esc(g.domain)+'</p><pre style="overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(snippet)+'</pre>'+
- '<button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy embed</button>'}).join(''):'<p class="muted-note">Connect a group website under Schools & Routing to obtain its embed snippet.</p>')+'</section>';
+ const navTabs=[['Overview','Overview'],['School Knowledge','Knowledge Library'],['Questions & Answers','Questions & Answers'],['Leads & Conversations','Leads'],['Settings','Settings']];
+ const files=ext.chatFiles?.files||[],sources=ext.chatSources?.sources||[],
+  candidates=ext.chatSources?.candidates||[],faqs=settings.faqs||[],review=ext.chatQueue||[],
+  topics=ext.counsellorReport?.topics||[];
+ const groups=(ext.chatGroups||[]).filter(g=>(g.schools||[]).some(x=>Number(x.school_id)===Number(state.schoolId)));
+ const leads=state.leads.filter(x=>!!x.chatbot_lead);
+ const activeFiles=files.filter(x=>x.status==='published'),draftFiles=files.filter(x=>x.status==='pending');
+ const guide='<div class="ai-guidance"><strong>School-safe publishing:</strong> Uploads and scanned facts remain private until an administrator reviews and publishes them. Year-specific fees, age rules and policies must match the selected campus and academic session.</div>';
+ const metrics='<div class="ai-kpi-grid">'+[
+  ['Knowledge files',activeFiles.length,files.length-activeFiles.length+' awaiting publication'],
+  ['Approved answers',faqs.length,'Reusable without AI generation'],
+  ['Questions to review',review.length+candidates.length,'Unanswered or unverified facts'],
+  ['Chatbot leads',leads.length,'Converted parent enquiries']
+ ].map(x=>'<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong><small>'+esc(x[2])+'</small></div>').join('')+'</div>';
+ const fileList=files.length?'<div class="ai-file-list">'+files.map(file=>
+  '<article class="ai-file-card">'+
+   '<div class="ai-file-icon" aria-hidden="true">MD</div>'+
+   '<div class="ai-file-main"><div class="ai-file-head"><strong>'+esc(file.filename)+'</strong>'+
+   '<span class="ai-status '+(file.status==='published'?'published':'pending')+'">'+(file.status==='published'?'Published':'Needs review')+'</span></div>'+
+   '<div class="ai-item-meta">'+Math.round(Number(file.bytes||0)/1024)+' KB · Uploaded '+esc(file.created_at||'—')+
+   (file.published_at?' · Published '+esc(file.published_at):'')+'</div>'+
+   '<details class="ai-file-preview"><summary>Preview and section outline</summary>'+
+    '<div class="ai-collection">'+(file.sections||[]).slice(0,14).map(x=>'<span>'+esc(x)+'</span>').join('')+'</div>'+
+    '<pre>'+esc(file.preview||'')+'</pre></details>'+
+   '<div class="ai-item-actions">'+
+    (file.status==='published'
+     ?'<button type="button" class="btn small" data-action="chat-file-unpublish" data-id="'+esc(file.id)+'">Unpublish</button>'
+     :'<button type="button" class="btn small primary" data-action="chat-file-publish" data-id="'+esc(file.id)+'">Review & publish</button>')+
+    '<button type="button" class="btn small ai-danger" data-action="chat-file-delete" data-id="'+esc(file.id)+'">Delete file</button>'+
+   '</div></div></article>').join('')+'</div>':
+   '<div class="ai-empty"><div aria-hidden="true" class="ai-empty-mark">▤</div><strong>No knowledge files yet</strong>'+
+   '<p>Upload school-approved Markdown or text. You can inspect it before publishing to parents.</p></div>';
+ const upload='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">01 · PRIMARY KNOWLEDGE</span>'+
+  '<h3>School knowledge files</h3><p>Give your counsellor the facts it needs—fee tables, age criteria, documents, transport and school features.</p></div>'+
+  '<span class="ai-status neutral">'+activeFiles.length+' live</span></div>'+
+  '<form id="chatKnowledgeUpload" class="ai-upload"><div class="ai-upload-icon" aria-hidden="true">↑</div>'+
+  '<div><strong>Choose a knowledge file to upload</strong><p>Markdown (.md) or plain text (.txt), maximum 120 KB. Up to 8 files per school.</p>'+
+  '<input type="file" name="knowledge_file" accept=".md,.txt,text/markdown,text/plain" required aria-label="Choose school knowledge file"></div>'+
+  '<button type="submit" class="btn primary">Upload for review</button></form>'+fileList+'</section>';
+ const sourceList=sources.length?sources.map(src=>
+  '<article class="ai-record"><div class="ai-record-body"><strong>'+esc(src.url)+'</strong>'+
+  '<small>'+esc(src.status||'not_scanned')+' · Last checked '+esc(src.last_checked_at||'Never')+'</small></div>'+
+  '<div class="ai-item-actions"><button type="button" class="btn small" data-action="chat-source-scan" data-id="'+esc(src.id)+'">Scan again</button>'+
+  '<button type="button" class="btn small ai-danger" data-action="chat-source-remove" data-id="'+esc(src.id)+'">Remove</button></div></article>').join(''):
+  '<p class="ai-muted">No website pages registered. A knowledge file is enough to get started.</p>';
+ const reviewSources=candidates.length?candidates.map(item=>
+  '<form class="sfSourceReview ai-record ai-review" data-id="'+esc(item.id)+'">'+
+  '<div class="ai-review-top"><span class="ai-status pending">Not published</span><small>'+esc(item.category)+'</small></div>'+
+  '<label>Information label<input name="label" maxlength="120" required value="'+esc(item.label||'')+'"></label>'+
+  '<label>School-verified details<textarea name="details" rows="3" maxlength="900" required>'+esc(item.details||'')+'</textarea></label>'+
+  '<p class="ai-muted">Source excerpt: '+esc(item.evidence||'')+'</p>'+
+  '<div class="ai-item-actions"><button type="submit" class="btn small primary">Approve fact</button>'+
+  '<button type="button" class="btn small ai-danger" data-action="chat-source-reject" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):
+  '<p class="ai-muted">No extracted website facts are awaiting review.</p>';
+ const website='<details class="ai-surface ai-advanced"><summary>Website URL sources and scanned facts <span class="ai-status neutral">'+sources.length+' URLs</span></summary>'+
+  '<div class="ai-inside"><p class="ai-muted">Scan public HTTPS pages belonging to this school. Scans create proposals—not published facts.</p>'+
+  '<form id="chatSourceAddForm" class="ai-inline-form"><input type="url" name="url" required maxlength="600" placeholder="https://school.example/admissions">'+
+  '<button type="submit" class="btn small primary">Add website URL</button></form>'+sourceList+
+  '<h4>Awaiting review</h4>'+reviewSources+'</div></details>';
+ const manualFacts='<details class="ai-surface ai-advanced"><summary>Manage structured facts manually <span class="ai-status neutral">'+(settings.school_facts||[]).length+' entries</span></summary>'+
+  '<div class="ai-inside"><p class="ai-muted">Use for grade-specific facts that need precise wording. Uploaded files offer an easier way to maintain long fee schedules.</p>'+
+  '<form id="chatFactsForm"><div id="sfSchoolFacts">'+(settings.school_facts||[]).map(schoolFactEditor).join('')+'</div>'+
+  '<div class="ai-item-actions"><button type="button" class="btn small" data-action="chat-add-fact">Add fact</button>'+
+  '<button type="submit" class="btn small primary">Save structured facts</button></div></form></div></details>';
+ const faqList=faqs.length?faqs.map((faq,i)=>
+  '<details class="ai-qa-row" '+(i===0?'open':'')+'><summary><span class="ai-qa-index">'+String(i+1).padStart(2,'0')+'</span>'+
+  '<span><strong>'+esc(faq.question)+'</strong><small>Approved · Reusable answer</small></span><span class="ai-chevron">⌄</span></summary>'+
+  '<form class="sfFaqEditor ai-qa-editor" data-original-question="'+esc(faq.question)+'">'+
+  '<label>Parent question<input name="question" maxlength="180" required value="'+esc(faq.question)+'"></label>'+
+  '<label>Verified school answer<textarea name="answer" maxlength="800" rows="4" required>'+esc(faq.answer)+'</textarea></label>'+
+  '<div class="ai-item-actions"><button type="submit" class="btn small primary">Save changes</button>'+
+  '<button type="button" class="btn small ai-danger" data-action="chat-delete-faq" data-question="'+esc(faq.question)+'">Delete answer</button></div></form></details>').join(''):
+  '<div class="ai-empty"><strong>No approved Q&As yet</strong><p>Publish an answer after verifying it against school information.</p></div>';
+ const faqPanel='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">ANSWER LIBRARY</span><h3>Approved questions & answers</h3>'+
+  '<p>Edit an answer or delete it directly. Changes are saved immediately.</p></div>'+
+  '<span class="ai-status published">'+faqs.length+' approved</span></div>'+
+  '<form id="chatAddFaqForm" class="ai-add-faq"><h4>Add a verified answer</h4>'+
+  '<label>Parent question<input name="question" required maxlength="180" placeholder="e.g. What is the admission process for Nursery?"></label>'+
+  '<label>School-approved answer<textarea name="answer" rows="3" required maxlength="800" placeholder="Enter an answer verified for this campus, grade and academic year."></textarea></label>'+
+  '<button type="submit" class="btn primary">Publish answer</button></form>'+
+  '<div class="ai-qa-list">'+faqList+'</div></section>';
+ const mostAsked=topics.length?topics.map((item,i)=>
+  '<article class="ai-topic"><div class="ai-topic-summary"><span class="ai-topic-count">'+Number(item.count||0)+'<small>asked</small></span>'+
+   '<div class="ai-record-body"><strong>'+esc(item.topic.replaceAll('_',' '))+
+   (item.grade?' · Class '+esc(item.grade):'')+(item.academic_year?' · '+esc(item.academic_year):'')+'</strong>'+
+   '<small>Answered using '+esc(item.last_source||'general guidance')+'</small></div></div>'+
+   '<details><summary>See last answer shown to parents</summary><div class="ai-answer-quote">'+esc(item.last_answer||'No answer recorded')+'</div></details>'+
+   '<div class="ai-item-actions"><button type="button" class="btn small" data-action="chat-topic-draft" data-index="'+i+'">Use as FAQ draft</button>'+
+   '<button type="button" class="btn small ai-danger" data-action="chat-topic-delete" data-index="'+i+'">Delete topic</button></div></article>').join(''):
+  '<div class="ai-empty"><strong>No question trends yet</strong><p>Questions will be grouped here as parents engage with the counsellor.</p></div>';
+ const unanswered=review.length?review.map(item=>
+  '<form class="sfChatReview ai-review-card" data-id="'+esc(item.id)+'"><div class="ai-review-top">'+
+  '<span class="ai-status pending">Needs answer</span><small>'+Number(item.count||1)+' enquiries</small></div>'+
+  '<strong>'+esc(item.question)+'</strong>'+
+  '<label>Verified response<textarea name="answer" maxlength="800" required rows="3" placeholder="Write an accurate school answer before publishing"></textarea></label>'+
+  '<div class="ai-item-actions"><button type="submit" class="btn small primary">Approve & publish</button>'+
+  '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Dismiss</button>'+
+  '<button type="button" class="btn small ai-danger" data-action="chat-delete-unanswered" data-id="'+esc(item.id)+'">Delete</button></div></form>').join(''):
+  '<div class="ai-empty"><strong>Nothing awaiting a response</strong><p>Unanswered questions from parents will appear here for review.</p></div>';
+ const qa='<div class="ai-grid-two"><div class="ai-col">'+faqPanel+'</div><div class="ai-col">'+
+  '<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">PARENT INSIGHTS</span><h3>Most asked topics</h3>'+
+  '<p>Grouped by topic, grade and academic year.</p></div><span class="ai-status neutral">'+topics.length+' topics</span></div>'+mostAsked+'</section>'+
+  '<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">EDITORIAL QUEUE</span><h3>Unanswered questions</h3>'+
+  '<p>Approve, dismiss or permanently delete each question.</p></div><span class="ai-status pending">'+review.length+' pending</span></div>'+
+  unanswered+'</section></div></div>';
+ const provider='<form id="chatProviderForm" class="ai-surface ai-settings-form">'+
+  '<div class="ai-section-head"><div><span class="ai-eyebrow">AI PROVIDER</span><h3>OpenRouter connection</h3>'+
+  '<p>AI expands on approved school knowledge. A saved key alone does not mean the model works.</p></div>'+
+  '<span class="ai-status '+(ext.chatProvider?.connected?'published':'pending')+'">'+(ext.chatProvider?.connected?'Key stored':'Not connected')+'</span></div>'+
+  '<div class="ai-form-grid"><label>Model identifier<input name="model" maxlength="100" required value="'+esc(ext.chatProvider?.model||'openai/gpt-4o-mini')+'"></label>'+
+  '<label>API key (blank retains existing)<input name="api_key" type="password" maxlength="1024" autocomplete="new-password" placeholder="sk-or-…"></label></div>'+
+  '<label class="ai-checkbox"><input type="checkbox" name="remove_key"> Disconnect and remove saved OpenRouter key</label>'+
+  (ext.chatProviderTest?'<p class="ai-guidance" role="status">'+esc(ext.chatProviderTest.message||'')+'</p>':'')+
+  '<div class="ai-item-actions"><button type="submit" class="btn primary">Save provider</button>'+
+  '<button type="button" class="btn small" data-action="chat-test-provider">Test connection</button></div></form>';
+ const settingsForm='<form id="chatSettingsForm" class="ai-surface ai-settings-form">'+
+  '<div class="ai-section-head"><div><span class="ai-eyebrow">ASSISTANT SETTINGS</span><h3>Behaviour & publishing</h3>'+
+  '<p>Configure this campus only. Other school settings remain independent.</p></div></div>'+
+  '<label class="ai-toggle"><span><strong>Enable the admission counsellor</strong><small>Make the assistant available on this campus website</small></span>'+
+  '<input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'></label>'+
+  '<label class="ai-toggle"><span><strong>Allow external AI replies</strong><small>Use approved school information and general education knowledge</small></span>'+
+  '<input type="checkbox" name="ai_enabled" '+(settings.ai_enabled?'checked':'')+'></label>'+
+  '<div class="ai-form-grid"><label>Visitor remembrance period<select name="remember_days">'+
+    option(15,'15 days',String(settings.remember_days||30))+option(30,'30 days',String(settings.remember_days||30))+'</select></label></div>'+
+  '<label>Verified campus overview<textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></label>'+
+  '<button type="submit" class="btn primary">Save school settings</button></form>';
+ const websiteEmbed='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">WEBSITE INTEGRATION</span>'+
+  '<h3>GUID-based embed</h3><p>One script loads the admission counsellor and existing enquiry form. There is no need to rotate the form ID.</p></div></div>'+
+  (groups.length?groups.map(g=>{
+    const snippet=sfGroupEmbed(g.guid);
+    return '<div class="ai-embed"><strong>'+esc(g.name)+'</strong><small>'+esc(g.domain)+'</small>'+
+      '<code>'+esc(snippet)+'</code><button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy code</button></div>';
+  }).join(''):'<p class="ai-muted">Connect a group website under Schools & Routing to get a script.</p>')+'</section>';
+ const leadPanel='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">ADMISSION PIPELINE</span>'+
+  '<h3>Chatbot leads & follow-ups</h3><p>Anonymous visitors can ask questions freely. A CRM lead is created when the parent consents to follow-up.</p></div></div>'+
+  '<div class="ai-kpi-grid">'+[['Converted leads',leads.length],['Anonymous conversations',Number(ext.counsellorReport?.anonymous_conversations||0)],
+   ['Callbacks requested',leads.filter(l=>l.contact_state==='Callback Requested').length]].map(x=>
+    '<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong></div>').join('')+'</div>'+
+   '<div class="ai-item-actions"><button type="button" class="btn primary" data-action="chat-goto-leads">Open Chatbot Leads</button></div></section>';
+ const overview='<div class="ai-overview">'+metrics+
+  '<div class="ai-grid-two"><section class="ai-surface ai-feature"><span class="ai-eyebrow">RECOMMENDED WORKFLOW</span>'+
+  '<h3>Teach the counsellor once. Answer consistently.</h3>'+
+  '<div class="ai-steps"><div><b>1</b><span><strong>Upload</strong><small>Add the school’s approved knowledge file</small></span></div>'+
+  '<div><b>2</b><span><strong>Review</strong><small>Check the campus, academic year, fees and exceptions</small></span></div>'+
+  '<div><b>3</b><span><strong>Publish</strong><small>Make verified material available to parents</small></span></div>'+
+  '<div><b>4</b><span><strong>Improve</strong><small>Resolve unanswered questions and reuse approved answers</small></span></div></div>'+
+  '<button type="button" class="btn primary" data-action="chat-open-knowledge">Manage school knowledge</button></section>'+
+  '<section class="ai-surface"><span class="ai-eyebrow">ASSISTANT READINESS</span><h3>Current setup</h3>'+
+  '<div class="ai-readiness"><span>Campus chatbot</span><b>'+ (settings.enabled?'Enabled':'Disabled')+'</b></div>'+
+  '<div class="ai-readiness"><span>External AI</span><b>'+(settings.ai_enabled?'Enabled':'Disabled')+'</b></div>'+
+  '<div class="ai-readiness"><span>OpenRouter key</span><b>'+(ext.chatProvider?.connected?'Saved':'Not configured')+'</b></div>'+
+  '<div class="ai-readiness"><span>Published knowledge files</span><b>'+activeFiles.length+'</b></div>'+
+  '<p class="ai-muted">Source uploads and AI-generated replies never become verified knowledge until an administrator publishes them.</p>'+
+  '<button type="button" class="btn small" data-action="chat-open-settings">Review settings</button></section></div></div>';
  const content=tab==='Overview'?overview:
-   tab==='School Knowledge'?sourcesPanel+settingsForm:
-   tab==='Questions & Answers'?analytics+reviewQueue:
-   tab==='Leads & Conversations'?leads:
-   providerForm+websiteEmbed;
- return heading+tabbar+content;
+  tab==='School Knowledge'?guide+upload+website+manualFacts:
+  tab==='Questions & Answers'?qa:
+  tab==='Leads & Conversations'?leadPanel:settingsForm+provider+websiteEmbed;
+ return '<div class="ai-workspace">'+
+  '<header class="ai-hero"><div class="ai-hero-copy"><span class="ai-eyebrow">SCHOOLFLOW · ADMISSIONS INTELLIGENCE</span>'+
+  '<h2>AI Admission Counsellor</h2><p>Verified school knowledge, natural conversations and qualified parent enquiries—all in one clear workspace.</p></div>'+
+  '<div class="ai-hero-live"><span class="ai-led"></span>'+(settings.enabled?'Assistant published':'Assistant not published')+'</div></header>'+
+  '<nav class="ai-nav" aria-label="Admissions AI sections">'+navTabs.map(([key,label])=>
+    '<button type="button" class="ai-nav-item '+(tab===key?'active':'')+'" data-action="chat-select-tab" data-tab="'+esc(key)+'"'+
+    (tab===key?' aria-current="page"':'')+'>'+esc(label)+'</button>').join('')+'</nav>'+
+  '<div class="ai-workspace-body">'+content+'</div></div>';
 }
 
 function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Connecting to SchoolFlow…</h2><p>Checking your application setup.</p></div></div>';return;}if(state.setup.needs_setup||!state.token||!state.me){root.innerHTML=loginPage();return;}
