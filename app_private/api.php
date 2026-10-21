@@ -736,7 +736,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -774,6 +774,23 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 unset($row);
                 foreach($group['routes'] as $route)sf_event($s,$route['school_id'],null,$uid,'group_key_rotated','Group source #'.$groupId);
                 return [200,['api_key'=>$key]];
+            }
+            if($method==='POST' && $operation==='refresh-form-id'){
+                // Rotating the public embed GUID invalidates previous embeds and
+                // public form endpoints. School routes, captured leads and private
+                // integration keys remain unchanged.
+                $newGuid=sf_uuid();
+                foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                    $row['guid']=$newGuid;
+                    $row['form_id_refreshed_at']=sf_time();
+                    $group=$row;
+                    break;
+                }
+                unset($row);
+                foreach($group['routes'] as $route)
+                    sf_event($s,(int)$route['school_id'],null,$uid,'group_form_id_refreshed',
+                        'Public embed identifier refreshed for group #'.$groupId);
+                return [200,sf_group_public_view($s,$group)];
             }
             if($method==='PATCH' && $operation==='') {
                 $name=sf_text($payload,'name',140,3);
