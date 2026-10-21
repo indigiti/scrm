@@ -69,7 +69,21 @@ function sf_chat_start(string $guid,array $p,array $headers,string $ip,SchoolFlo
         sf_limit($s,'chat-start-group:'.$group['id'],100,3600);
         foreach($s['receipts']??[] as $receipt)
             if(($receipt['public_challenge']??null)===$proof)sf_fail(409,'CAPTCHA already used');
-        $lead=sf_create_lead($s,(int)$route['school_id'],[
+        // A returning applicant may choose "new chat" but should not create
+        // a second lead for the same student/class/campus within 30 days.
+        $existing=null;
+        foreach($s['leads']??[] as $candidate){
+            if((int)($candidate['school_id']??0)!==(int)$route['school_id'] ||
+               empty($candidate['consent']) ||
+               !in_array((string)($candidate['utm_source']??''),['admissions_guided_chat','public_admissions_chat'],true) ||
+               preg_replace('/\D/','',(string)($candidate['phone']??''))!==$phone ||
+               strcasecmp(trim((string)($candidate['name']??'')),$student)!==0 ||
+               strcasecmp(trim((string)($candidate['grade']??'')),$grade)!==0 ||
+               strtotime((string)($candidate['created_at']??''))<time()-30*86400)continue;
+            $existing=$candidate;
+            break;
+        }
+        $lead=$existing?sf_lead_view($s,$existing):sf_create_lead($s,(int)$route['school_id'],[
             'parent_name'=>$guardian,'student_name'=>$student,
             'phone'=>'+91 '.$phone,'email'=>$email,'grade'=>$grade,'city'=>$city,
             'consent'=>true,'message'=>'Parent started a guided admission chat; follow up from CRM.',
@@ -89,7 +103,7 @@ function sf_chat_start(string $guid,array $p,array $headers,string $ip,SchoolFlo
             'chat_start_idempotency'=>$id,'public_challenge'=>$proof,
             'chat_session_lead_id'=>$lead['id'],'chat_expires_at'=>$expires,'created_at'=>sf_time()];
         return [201,['success'=>true,'session'=>sf_chat_token($store,(int)$group['id'],(int)$route['school_id'],
-            (int)$lead['id'],$expires,$origin),'duplicate_submission'=>false,
+            (int)$lead['id'],$expires,$origin),'duplicate_submission'=>false,'reused_lead'=>$existing!==null,
             'quick_questions'=>array_slice(array_column(sf_chat_settings($s,(int)$route['school_id'])['faqs'],'question'),0,8)]];
     },true);
 }
