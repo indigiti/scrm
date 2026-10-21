@@ -48,54 +48,92 @@ try{
   ai_assert(ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-2','question'=>'Which documents are required?'])[0]===422,
     'disabled campus cannot be asked');
-  // No provider key: exact verified knowledge remains useful offline.
+  // Parent must register an enquiry before the assistant may answer.
+  ai_assert(ai_req('POST',$base.'/chat',[
+    'school_code'=>'campus-1','question'=>'Which documents are required?'])[0]===422,
+    'no access without a signed chat session');
+  ai_assert(ai_req('POST',$base.'/chat-start',[
+    'school_code'=>'campus-1','parent_name'=>'Demo Parent','phone'=>'9876543210',
+    'student_name'=>'Demo Child','grade'=>'Nursery','consent'=>false
+  ],'https://example-school.test','chat-start-000001')[0]===422,
+    'consent needed before registering');
+  [$status,$challenge]=ai_req('GET',$base.'/challenge');
+  preg_match('/Solve: (\d+) \+ (\d+)/',$challenge['question'],$m);
+  $startPayload=['school_code'=>'campus-1','parent_name'=>'Demo Parent','phone'=>'9876543210',
+    'student_name'=>'Demo Child','grade'=>'Nursery','email'=>'guardian@example.invalid','consent'=>true,
+    'captcha_token'=>$challenge['token'],'captcha_answer'=>(string)((int)$m[1]+(int)$m[2]),'website'=>''];
+  [$status,$started]=ai_req('POST',$base.'/chat-start',$startPayload,
+    'https://example-school.test','chat-start-000002');
+  ai_assert($status===201 && !empty($started['session']),'chat creates lead before Q&A');
+  ai_assert(count($started['quick_questions'])===1,'published quick question after registration');
+  [$status,$repeated]=ai_req('POST',$base.'/chat-start',$startPayload,
+    'https://example-school.test','chat-start-000002');
+  ai_assert($status===200 && $repeated['session']===$started['session'],'registration is idempotent');
+  ai_assert(ai_req('POST',$base.'/chat-start',$startPayload,
+    'https://example-school.test','chat-start-000003')[0]===409,
+    'CAPTCHA replay rejected');
+  $session=$started['session'];
+  $question=['school_code'=>'campus-1','session'=>$session,'question'=>'Which documents are required?'];
+  ai_assert(ai_req('POST',$base.'/chat',[
+    'school_code'=>'campus-2','session'=>$session,'question'=>'Which documents are required?'])[0]===422,
+    'session cannot switch to another campus');
+  ai_assert(ai_req('POST',$base.'/chat',[
+    ...$question,'session'=>'invalid-token'])[0]===401,'forged token refused');
+  ai_assert(ai_req('POST',$base.'/chat',$question,'https://unrelated.test')[0]===403,
+    'other website origin refused');
   putenv('SCHOOLFLOW_OPENAI_API_KEY');
-  [$status,$answer]=ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','question'=>'Which documents are required?']);
-  ai_assert($status===200&&($answer['source']??'')==='approved_knowledge',
-    'offline verified source');
+  [$status,$answer]=ai_req('POST',$base.'/chat',$question);
+  ai_assert($status===200 && ($answer['source']??'')==='approved_knowledge','offline verified FAQ');
   ai_assert(str_contains($answer['answer'],'official admissions page'),'approved answer returned');
   [$status,$unknown]=ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','question'=>'What is the bus pickup schedule?']);
-  ai_assert($status===200 && ($unknown['source']??'')==='human_handoff','unknown question not guessed');
+    'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+  ai_assert($status===200 && ($unknown['source']??'')==='human_handoff','unknown question not invented');
   [$status,$review]=ai_req('GET','/api/schools/1/public-chat/review');
-  ai_assert($status===200&&count($review['items'])===1,'new topic review queue');
+  ai_assert($status===200 && count($review['items'])===1,'review queue of unanswered topics');
   ai_assert(ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','question'=>'My phone 9876543210 what is the bus pickup schedule?'])[0]===200,'private question blocked safely');
+    'school_code'=>'campus-1','session'=>$session,
+    'question'=>'My phone 9876543210 what is the bus pickup schedule?'])[0]===200,'contact data refused in chat');
   [$status,$reviewAfter]=ai_req('GET','/api/schools/1/public-chat/review');
-  ai_assert(count($reviewAfter['items'])===1,'personal question not learned');
+  ai_assert(count($reviewAfter['items'])===1,'private question not learned');
   $item=$review['items'][0];
   ai_assert(ai_req('POST','/api/schools/2/public-chat/review',[
-      'id'=>$item['id'],'decision'=>'approve','answer'=>'Wrong school'])[0]===404,
-      'cross-school review isolation');
+      'id'=>$item['id'],'decision'=>'approve','answer'=>'Wrong school'])[0]===404,'review isolation');
   [$status,$approved]=ai_req('POST','/api/schools/1/public-chat/review',[
-      'id'=>$item['id'],'decision'=>'approve','answer'=>'Contact the transport desk for current routes.']);
-  ai_assert($status===200&&$approved['ok'],'approved learning');
+      'id'=>$item['id'],'decision'=>'approve','answer'=>'Contact transport admissions for current routes.']);
+  ai_assert($status===200 && $approved['ok'],'staff approval of verified information');
   [$status,$result]=ai_req('POST',$base.'/chat',[
-      'school_code'=>'campus-1','question'=>'What is the bus pickup schedule?']);
-  ai_assert(($result['source']??'')==='approved_knowledge','approved previous question reused without AI');
-  // Callback must verify guardian consent, CAPTCHA and idempotency.
-  [$status,$challenge]=ai_req('GET',$base.'/challenge');
-  preg_match('/Solve: (\\d+) \\+ (\\d+)/',$challenge['question'],$m);
-  $callback=[
-    'school_code'=>'campus-1','parent_name'=>'Demo Guardian','phone'=>'9876543210',
-    'student_name'=>'Demo Child','consent'=>true,'captcha_token'=>$challenge['token'],
-    'captcha_answer'=>(string)((int)$m[1]+(int)$m[2])
-  ];
-  ai_assert(ai_req('POST',$base.'/callback',[...$callback,'consent'=>false],
-     'https://example-school.test','chat-callback-00001')[0]===422,'consent enforcement');
-  [$status,$lead]=ai_req('POST',$base.'/callback',$callback,'https://example-school.test','chat-callback-00002');
-  ai_assert($status===201 && !empty($lead['guid']),'callback creates lead');
-  ai_assert(ai_req('POST',$base.'/callback',$callback,'https://example-school.test',
-    'chat-callback-00002')[1]['duplicate_submission']===true,'idempotent callback');
-  ai_assert(ai_req('POST',$base.'/callback',$callback,'https://example-school.test',
-    'chat-callback-00003')[0]===409,'replayed challenge blocked');
+      'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+  ai_assert(($result['source']??'')==='approved_knowledge','approved answer works offline');
+  // Provider key is encrypted per school. No API response ever returns it.
+  $rawKey='sk-or-v1-'.str_repeat('a',32);
+  [$status,$provider]=ai_req('PATCH','/api/schools/1/public-chat/provider',[
+    'api_key'=>$rawKey,'model'=>'openai/gpt-4o-mini'
+  ]);
+  ai_assert($status===200 && $provider['connected'],'OpenRouter configured');
+  ai_assert(!str_contains(json_encode($provider),$rawKey),'provider response redacted');
+  [$status,$providerGet]=ai_req('GET','/api/schools/1/public-chat/provider');
+  ai_assert($status===200 && $providerGet['connected'],'provider status');
+  [$status,$settingsGet]=ai_req('GET','/api/schools/1/public-chat');
+  ai_assert(!str_contains(json_encode($settingsGet),$rawKey),'chat settings redacted');
   $state=$store->transaction(static fn(array $s)=>$s);
-  ai_assert(count($state['leads'])===1 && $state['leads'][0]['school_id']===1,
-    'callback lead bound to approved campus');
-  ai_assert($state['leads'][0]['contact_state']==='Callback Requested','callback state');
-  ai_assert(!empty($state['leads'][0]['consent']),'consent stored');
-  echo "PASS: published knowledge, offline FAQ, admin review, tenant isolation, callback and consent\n";
+  ai_assert(!str_contains(json_encode($state),$rawKey),'OpenRouter key encrypted in JSON store');
+  ai_assert($store->unseal($state['public_chat_settings']['1']['openrouter_key'])===$rawKey,
+    'encrypted key decrypts with private store key');
+  ai_assert(ai_req('GET','/api/schools/2/public-chat/provider')[1]['connected']===false,'provider school isolation');
+  ai_assert(ai_req('POST',$base.'/chat-followup',[
+    'school_code'=>'campus-1','session'=>'fake'])[0]===401,'unauthorized callback denied');
+  [$status,$followup]=ai_req('POST',$base.'/chat-followup',[
+    'school_code'=>'campus-1','session'=>$session]);
+  ai_assert($status===200 && $followup['ok'],'session parent callback');
+  $state=$store->transaction(static fn(array $s)=>$s);
+  ai_assert(count($state['leads'])===1 && $state['leads'][0]['school_id']===1,'single school-scoped chat lead');
+  ai_assert($state['leads'][0]['contact_state']==='Callback Requested','followup on same lead');
+  ai_assert(!empty($state['leads'][0]['consent']),'lead consent stored');
+  [$status,$disconnected]=ai_req('PATCH','/api/schools/1/public-chat/provider',[
+    'model'=>'openai/gpt-4o-mini','remove_key'=>true
+  ]);
+  ai_assert($status===200 && !$disconnected['connected'],'provider key can be removed');
+  echo "PASS: mandatory consented chat lead, signed token, offline FAQ, OpenRouter encryption, campus isolation, callback\n";
 }finally{
   foreach(glob($dir.'/*')?:[] as $file)@unlink($file);
   @rmdir($dir);
