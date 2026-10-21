@@ -666,23 +666,67 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='chat-topic-draft'){
    const item=(ext.counsellorReport?.topics||[])[Number(el.dataset.index)];
    if(!item)return;
-   ext.chatTab='School Knowledge';render();
-   const container=root.querySelector('#sfChatFaqs');
-   if(!container)return;
-   let editor=container.querySelector('.sf-chat-faq');
-   if(editor && editor.querySelector('.sf-chat-q')?.value.trim()){
-     const blank=root.querySelector('#sfChatFaqs .sf-chat-faq');
-     if(blank){editor=blank.cloneNode(true);container.appendChild(editor);}
-   }
-   if(!editor)return;
+   ext.chatTab='Questions & Answers';render();
+   const form=root.querySelector('#chatAddFaqForm');
+   if(!form)return;
    const label=item.topic==='fees'?'What is the admission fee structure?':
-     'What can you tell me about '+item.topic.replaceAll('_',' ')+'?';
+     'What can you tell me about '+String(item.topic||'school admissions').replaceAll('_',' ')+'?';
    const qualifier=(item.grade?' Class '+item.grade+'.':'')+
      (item.academic_year?' Academic year '+item.academic_year+'.':'');
-   editor.querySelector('.sf-chat-q').value=(label+qualifier).slice(0,180);
-   editor.querySelector('.sf-chat-a').value=String(item.last_answer||'').slice(0,800);
-   toast('FAQ draft prepared. Verify all details against official school evidence, then Save settings to publish.');
+   form.elements.question.value=(label+qualifier).slice(0,180);
+   form.elements.answer.value=String(item.last_answer||'').slice(0,800);
+   form.scrollIntoView({block:'center',behavior:'smooth'});
+   toast('Draft prepared. Verify school facts and academic year before publishing.');
    return;
+ }
+ if(action==='chat-open-knowledge'||action==='chat-open-settings'){
+   ext.chatTab=action==='chat-open-knowledge'?'School Knowledge':'Settings';render();return;
+ }
+ if(action==='chat-file-publish'||action==='chat-file-unpublish'||action==='chat-file-delete'){
+   if(!isAdmin())return;
+   const id=el.dataset.id||'';
+   const record=(ext.chatFiles?.files||[]).find(x=>x.id===id);
+   if(!record)return toast('Knowledge file not found',true);
+   const op=action==='chat-file-publish'?'publish':action==='chat-file-unpublish'?'unpublish':'delete';
+   const text=op==='publish'
+     ?'Confirm you have reviewed "'+record.filename+'" and it applies to the currently selected school. Publishing makes its answers available to parents.'
+     :op==='delete'?'Permanently delete "'+record.filename+'"? This removes it from all counsellor answers.':
+      'Unpublish "'+record.filename+'"? It will immediately stop appearing in AI answers.';
+   if(!confirm(text))return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/knowledge-files','POST',
+       {action:op,id,confirmed:op==='publish'});
+     await loadPublicChat();
+     toast(op==='publish'?'School knowledge published.':op==='delete'?'Knowledge file deleted.':'Knowledge file unpublished.');
+   });return;
+ }
+ if(action==='chat-delete-faq'){
+   if(!isAdmin())return;
+   const question=el.dataset.question||'';
+   if(!confirm('Delete the approved answer for "'+question+'"? This cannot be undone.'))return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/faqs','POST',
+       {action:'delete',original_question:question});
+     await loadPublicChat();toast('Approved answer deleted.');
+   });return;
+ }
+ if(action==='chat-topic-delete'){
+   if(!isAdmin())return;
+   const item=(ext.counsellorReport?.topics||[])[Number(el.dataset.index)];
+   if(!item||!confirm('Delete this aggregated question topic and its saved answer example?'))return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/counsellor-report','POST',
+       {action:'delete_topic',topic:item.topic,grade:item.grade||'',academic_year:item.academic_year||''});
+     await loadPublicChat();toast('Question topic deleted.');
+   });return;
+ }
+ if(action==='chat-delete-unanswered'){
+   if(!isAdmin()||!confirm('Permanently delete this unanswered parent question?'))return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/review','POST',
+       {id:el.dataset.id,decision:'delete'});
+     await loadPublicChat();toast('Unanswered question deleted.');
+   });return;
  }
  if(action==='chat-select-tab'){
    ext.chatTab=el.dataset.tab||'Overview';render();return;
@@ -726,7 +770,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });return;
  }
  if(action==='chat-add-faq'){const area=root.querySelector('#sfChatFaqs');if(!area)return;const current=area.querySelectorAll('.sf-chat-faq').length;if(current>=60)return toast('Maximum 60 published FAQs',true);const template=area.querySelector('.sf-chat-faq');if(!template)return;const clone=template.cloneNode(true);clone.querySelectorAll('input,textarea').forEach(x=>x.value='');area.appendChild(clone);return;}
- if(action==='chat-remove-faq'){el.closest('.sf-chat-faq')?.remove();return;}
+
  if(action==='chat-reject-topic'){if(!isAdmin())return;perform(async()=>{await api('/api/schools/'+state.schoolId+'/public-chat/review','POST',{id:el.dataset.id,decision:'reject'});await loadPublicChat();toast('Topic rejected');});return;}
  if(action==='chat-copy-embed'){
    const group=(ext.chatGroups||[]).find(g=>g.id===Number(el.dataset.id));
