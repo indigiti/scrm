@@ -218,6 +218,24 @@ try{
     'model'=>'openai/gpt-4o-mini','remove_key'=>true
   ]);
   ai_assert($status===200 && !$disconnected['connected'],'provider key can be removed');
+  // Independent campus may publish different policies under its own Admin.
+  [$school2Status,$school2Config]=ai_req('PATCH','/api/schools/2/public-chat',[
+    'enabled'=>true,'ai_enabled'=>false,'overview'=>'Campus 2 office.',
+    'remember_days'=>15,
+    'school_facts'=>[
+      ['category'=>'fees','label'=>'Nursery Campus 2','details'=>'Verified Campus 2 tuition INR 31,000.'],
+      ['category'=>'facilities','label'=>'Campus 2 library','details'=>'Campus 2 has a student library.']
+    ],'faqs'=>[]]);
+  ai_assert($school2Status===200 && $school2Config['remember_days']===15,
+    'second school supports 15-day memory and independent knowledge');
+  ai_assert(count($school2Config['school_facts'])===2,'second school has multiple fact records');
+  ai_assert(str_contains(sf_chat_fact_answer('fees',$school2Config),'31,000'),
+    'second school publishes its own fees');
+  ai_assert(!str_contains(sf_chat_fact_answer('fees',$school2Config),'42,000'),
+    'first school fee does not leak into second school');
+  [$configStatus,$allCampuses]=ai_req('GET',$base.'/chat-config');
+  ai_assert($configStatus===200 && count($allCampuses['schools'])===2,
+    'single group GUID supports two active campus profiles');
   echo "PASS: mandatory consented chat lead, signed token, offline FAQ, OpenRouter encryption, campus isolation, callback\n";
 }finally{
   foreach(glob($dir.'/*')?:[] as $file)@unlink($file);
