@@ -273,6 +273,10 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             if($specific===null)$specific=sf_kfile_age_answer($combined,$q,$profile);
             if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
         }
+        if($reply===null && $knowledgeFiles){
+            $schoolAnswer=sf_kfile_school_brief_answer($knowledgeFiles,$q);
+            if($schoolAnswer!==null){$reply=$schoolAnswer;$source='approved_knowledge_file';}
+        }
         if($reply===null){
             $documentAnswer=sf_kfile_example_answer($knowledgeFiles,$q,$profile);
             if($documentAnswer!==null){$reply=$documentAnswer;$source='approved_knowledge_file';}
@@ -288,6 +292,15 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             // The provider receives a de-identified topic, never contact data.
             // For personal questions build a topic-only synopsis.
             $aiTopic=sf_counsellor_ai_topic($topics,$profile);
+            // "is CBSE?" and "school features" ask about THIS campus;
+            // a general AI essay must not substitute for missing affiliation
+            // or a list of facilities that the school has not approved.
+            $schoolBoardQuestion=preg_match('/\b(?:cbse|icse|affiliat(?:ed|ion)?|board)\b/iu',$message)
+                && !preg_match('/^(?:what\s+is|explain|meaning\s+of|difference\s+between|compare)\s+(?:the\s+)?(?:cbse|icse)\b/iu',trim($message));
+            $schoolFeatureQuestion=preg_match('/\b(?:school\s+features?|school\s+facilities|campus\s+features?|facilities)\b/iu',$message)
+                && !preg_match('/^(?:what\s+are\s+the\s+typical|how\s+to\s+compare)\b/iu',trim($message));
+            if(($schoolBoardQuestion||$schoolFeatureQuestion)
+               || in_array('fees',$topics,true))$aiTopic=null;
             if($aiTopic!==null&&!empty($config['ai_enabled'])){
                 $config['file_context']=sf_kfile_context($knowledgeFiles,$q,$profile);
                 $reply=!empty($config['openrouter_key'])
@@ -318,6 +331,15 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
                 "This is general guidance, not a confirmed checklist for this campus. The admissions team can clarify the exact documents required.";
         elseif(in_array('age_eligibility',$topics,true))
             $reply='I can help you check the age requirement. Which class and academic year are you considering? The school can confirm the final eligibility.';
+        elseif(in_array('curriculum',$topics,true) &&
+            preg_match('/\b(?:cbse|icse|board|affiliation)\b/iu',$message))
+            $reply=$route===null
+                ?'Which campus are you asking about? I can check its published board information.'
+                :'I can’t confirm the selected campus’s CBSE or board affiliation from its approved school information yet. The admissions team can verify the current board and affiliation details.';
+        elseif(in_array('school_features',$topics,true)||in_array('facilities',$topics,true))
+            $reply=$route===null
+                ?'Which campus would you like to know about? I can check its published features and facilities.'
+                :'I don’t have a confirmed list of this campus’s facilities in its published information. Are you most interested in sports, learning spaces or extracurricular activities? The admissions team can confirm the latest offerings.';
         elseif($route===null)
             $reply='Happy to help. Which campus are you interested in? I can then share relevant information about fees, age eligibility, documents, facilities and transport.';
         else
