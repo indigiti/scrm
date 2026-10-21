@@ -50,7 +50,8 @@ function sf_chat_openrouter(string $question,string $campus,array $config,School
     if(empty($config['openrouter_key']) || !function_exists('curl_init'))return null;
     $model=$config['openrouter_model']??'openai/gpt-4o-mini';
     if(!is_string($model)||!preg_match('~^[a-zA-Z0-9._-]+/[a-zA-Z0-9._:-]+$~D',$model))return null;
-    $key=$store->unseal($config['openrouter_key']);
+    try {$key=$store->unseal($config['openrouter_key']);}
+    catch(Throwable $e){return null;} // Missing encryption key: never expose secrets or interrupt FAQs.
     $knowledge='Campus: '.$campus."\nOverview: ".($config['overview']??'')."\n";
     foreach($config['faqs']??[] as $faq)$knowledge.='Q: '.$faq['question']."\nA: ".$faq['answer']."\n";
     $body=['model'=>$model,'max_tokens'=>220,'temperature'=>0.2,'stream'=>false,
