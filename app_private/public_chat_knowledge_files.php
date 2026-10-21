@@ -148,6 +148,34 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
     if($grade==='Class XI')$answer.=' One-time Class XI admission-fee notes conflict; please confirm those separately.';
     return $answer.' These figures come from the school-provided fee document, not live billing.';
 }
+/** Reuse school-supplied example replies, but only when unambiguous.
+ * Academic-year and fees questions are handled separately.
+ */
+function sf_kfile_example_answer(array $docs,string $question,array $profile):?string {
+    $topics=sf_counsellor_classify($question);
+    $q=strtolower($question);
+    $example=null;
+    if(in_array('documents',$topics,true))$example='What are the admission documents?';
+    elseif(in_array('transport',$topics,true))$example='Do you provide bus transport to my area?';
+    elseif(str_contains($q,'address')||str_contains($q,'location'))$example='What is the address?';
+    elseif(preg_match('/lucky\s*draw/i',$question))$example='When is the lucky draw?';
+    elseif(str_contains($q,'class xi')&&str_contains($q,'subject'))$example='What subjects can I choose in Class XI?';
+    if($example===null)return null;
+    foreach($docs as $doc){
+        $content=(string)($doc['content']??'');
+        foreach(preg_split('/\R/u',$content)?:[] as $index=>$line){
+            if(trim($line)!=='**Q: '.$example.'**')continue;
+            $lines=preg_split('/\R/u',$content);
+            for($j=$index+1;$j<min($index+5,count($lines));$j++){
+                if(preg_match('/^\s*A:\s*(.+)/u',trim($lines[$j]),$m))
+                    return trim(preg_replace('/\*\*/','',$m[1])??$m[1]);
+                if(preg_match('/^\*\*Q:/',$lines[$j]))break;
+            }
+        }
+    }
+    return null;
+}
+
 function sf_kfile_context(array $docs,string $question,array $profile):string {
     $topics=sf_counsellor_classify($question);
     $relevant=[];
