@@ -62,6 +62,7 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
         'script.setAttribute("data-schoolflow-chat-css-version",meta.versions[3]);'."\n".
+        '["data-thank-you","data-logo"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
         'document.head.appendChild(script);'."\n".
         '})();'."\n";
 }
