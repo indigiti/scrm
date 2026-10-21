@@ -417,6 +417,7 @@ const schoolInfoCategories=[
 function schoolFactEditor(fact={}){
  const category=fact.category||'fees';
  return '<div class="sf-school-fact panel" style="padding:12px;margin-bottom:10px">'+
+  (fact.needs_recheck?'<p role="alert" class="app-alert">The source page changed. This fact is excluded from chatbot answers until you verify it and save the updated information.</p>':'')+
   '<div class="form-field"><label>Information category</label><select class="sf-fact-category">'+
   schoolInfoCategories.map(([code,label])=>option(code,label,category)).join('')+'</select></div>'+
   '<div class="form-field"><label>Campus / class / topic label</label><input class="sf-fact-label" maxlength="120" value="'+esc(fact.label||'')+'" placeholder="e.g. Nursery annual tuition 2026–27"></div>'+
@@ -476,9 +477,10 @@ function publicChatPage(){
  const analytics='<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Most asked admissions topics</h3>'+
   '<p class="muted-note">Aggregated topics with the most recent answer actually shown to parents. Counts omit raw personal chat messages. AI responses require administrator verification before becoming reusable FAQs.</p>'+
   ((report.topics||[]).length?(report.topics||[]).map(item=>
-    '<details style="padding:12px 0;border-bottom:1px solid #e3e5ef"><summary><b>'+esc(item.topic)+'</b> · '+Number(item.count||0)+' times · '+esc(item.last_source||'')+'</summary>'+
+    '<details style="padding:12px 0;border-bottom:1px solid #e3e5ef"><summary><b>'+esc(item.topic)+(item.grade?' · Class '+esc(item.grade):'')+(item.academic_year?' · '+esc(item.academic_year):'')+'</b> · '+Number(item.count||0)+' times · '+esc(item.last_source||'')+'</summary>'+
     '<p class="muted-note">Last actual response:</p><p>'+esc(item.last_answer||'')+'</p>'+
-    '<p class="muted-note">AI replies are not automatically approved. Add a verified school FAQ under School Knowledge or review unanswered topics below.</p></details>').join(''):
+    '<p class="muted-note">AI replies are not verified school facts. Review and correct the draft against an official source before publishing.</p>'+
+    '<button type="button" class="btn small" data-action="chat-topic-draft" data-index="'+Number((report.topics||[]).indexOf(item))+'">Prepare FAQ draft for review</button></details>').join(''):
     '<p class="muted-note">Questions will appear here once parents interact with the counsellor.</p>')+'</section>';
  const leads='<section class="panel" style="padding:20px"><h3>Leads & Conversations</h3>'+
   '<p><b>'+chatbotCount+' chatbot leads</b> · '+Number(report.anonymous_conversations||0)+' anonymous enquiries</p>'+
@@ -589,6 +591,27 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(action==='chat-remove-fact'){
    el.closest('.sf-school-fact')?.remove();return;
+ }
+ if(action==='chat-topic-draft'){
+   const item=(ext.counsellorReport?.topics||[])[Number(el.dataset.index)];
+   if(!item)return;
+   ext.chatTab='School Knowledge';render();
+   const container=root.querySelector('#sfChatFaqs');
+   if(!container)return;
+   let editor=container.querySelector('.sf-chat-faq');
+   if(editor && editor.querySelector('.sf-chat-q')?.value.trim()){
+     const blank=root.querySelector('#sfChatFaqs .sf-chat-faq');
+     if(blank){editor=blank.cloneNode(true);container.appendChild(editor);}
+   }
+   if(!editor)return;
+   const label=item.topic==='fees'?'What is the admission fee structure?':
+     'What can you tell me about '+item.topic.replaceAll('_',' ')+'?';
+   const qualifier=(item.grade?' Class '+item.grade+'.':'')+
+     (item.academic_year?' Academic year '+item.academic_year+'.':'');
+   editor.querySelector('.sf-chat-q').value=(label+qualifier).slice(0,180);
+   editor.querySelector('.sf-chat-a').value=String(item.last_answer||'').slice(0,800);
+   toast('FAQ draft prepared. Verify all details against official school evidence, then Save settings to publish.');
+   return;
  }
  if(action==='chat-select-tab'){
    ext.chatTab=el.dataset.tab||'Overview';render();return;
