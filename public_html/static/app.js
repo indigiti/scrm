@@ -27,7 +27,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatQueue:[],chatGroups:[]};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -372,7 +372,7 @@ async function loadPublicChat(){
  const [settings,provider,review,groups]=await Promise.all([
    api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites')
  ]);
- ext.chatSettings=settings;ext.chatProvider=provider;ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
  render();
 }
 
@@ -407,7 +407,7 @@ function publicChatPage(){
  '<form id="chatProviderForm" class="panel" style="padding:20px;margin-bottom:18px">'+
  '<h3>OpenRouter AI provider (optional)</h3>'+
  '<p class="muted-note">OpenRouter answers only general admissions questions using published campus knowledge. Parent names, phone numbers and lead records are never included in requests. Verified local FAQ answers work without a provider.</p>'+
- '<p><b>Connection:</b> '+(ext.chatProvider?.connected?'Key saved securely':'Not connected')+'</p>'+
+ '<p><b>API key:</b> '+(ext.chatProvider?.connected?'Saved securely (connection not yet tested)':'Not configured')+'</p>'+'<p><b>Live AI for parents:</b> '+(ext.chatProvider?.enabled?'Enabled':'Disabled')+'</p>'+'<p class="muted-note">Saved key does not guarantee the model works. Test the actual OpenRouter request from this server. The test sends no parent details and may use a few billable tokens.</p>'+'<button type="button" class="btn small" data-action="chat-test-provider">Test OpenRouter connection</button>'+(ext.chatProviderTest?'<p class="muted-note" role="status"><b>Test result:</b> '+esc(ext.chatProviderTest.message||'No response')+'</p>':'')+
  '<div class="form-field"><label>OpenRouter model ID</label><input name="model" maxlength="100" required value="'+esc(ext.chatProvider?.model||'openai/gpt-4o-mini')+'" placeholder="openai/gpt-4o-mini"></div>'+
  '<div class="form-field"><label>API key (leave blank to keep existing key)</label><input name="api_key" type="password" maxlength="1024" autocomplete="new-password" placeholder="sk-or-…"></div>'+
  '<label><input type="checkbox" name="remove_key"> Disconnect and remove saved OpenRouter key</label>'+
@@ -492,6 +492,15 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
      area.appendChild(clone);existing.add(question.toLowerCase());
    }
    toast('Starter questions added to the editor. Review and save to publish.');return;
+ }
+ if(action==='chat-test-provider'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const result=await api('/api/schools/'+state.schoolId+'/public-chat/provider/test','POST',{});
+     ext.chatProviderTest=result;
+     render();
+     toast(result.status==='connected'?'OpenRouter model responded successfully':result.message,true);
+   });return;
  }
  if(action==='chat-add-faq'){const area=root.querySelector('#sfChatFaqs');if(!area)return;const current=area.querySelectorAll('.sf-chat-faq').length;if(current>=60)return toast('Maximum 60 published FAQs',true);const template=area.querySelector('.sf-chat-faq');if(!template)return;const clone=template.cloneNode(true);clone.querySelectorAll('input,textarea').forEach(x=>x.value='');area.appendChild(clone);return;}
  if(action==='chat-remove-faq'){el.closest('.sf-chat-faq')?.remove();return;}
