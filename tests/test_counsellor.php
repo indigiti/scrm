@@ -75,6 +75,14 @@ try {
  co_assert(($state['leads'][0]['lead_channel']??'')==='chatbot','lead channel labelled chatbot');
  co_assert($state['leads'][0]['ai_intent']==='High interest','lead qualification stored');
  co_assert($state['leads'][0]['consent']==1,'CRM permission persisted');
+ [$resumeCode,$resume]=co_req('POST',$base.'/counsel',[
+    'message'=>'Could you explain the admission documents?',
+    'school_code'=>'campus-1','chat_session'=>$converted['session']]);
+ co_assert($resumeCode===200 && $resume['existing_lead'],
+     'remembered signed CRM session attaches to the same enquiry');
+ co_assert(sf_counsellor_ai_topic(['fees','curriculum'],['grade'=>'2'])==='Explain general school admission information about fees, curriculum for class 2. If specific campus facts are unavailable, state what needs confirmation.',
+    'AI prompt is derived solely from nonpersonal topics');
+
  [$reportStatus,$report]=co_req('GET','/api/schools/1/public-chat/counsellor-report');
  co_assert($reportStatus===200 && count($report['topics'])>0,'anonymised topic counts available');
  co_assert(co_req('GET','/api/schools/3/public-chat/counsellor-report')[0]!==200,
