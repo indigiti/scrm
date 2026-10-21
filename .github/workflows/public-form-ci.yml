@@ -36,3 +36,4 @@ jobs:
           node tests/check_frontend_v2.js
           node tests/check_group_routing.js
           node tests/check_lexicon_chat_autoload.js
+          node tests/check_conversational_chat.js
