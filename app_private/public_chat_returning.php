@@ -85,3 +85,26 @@ function sf_chat_remember_response(string $guid,string $action,array $p,array $h
         ])];
     },true);
 }
+
+function sf_chat_remember_create(string $guid,array $p,array $headers,SchoolFlowStore $store):array {
+    $origin=(string)($headers['origin']??'');
+    $session=sf_text($p,'session',500);
+    $code=sf_text($p,'school_code',50,3);
+    return $store->transaction(static function(array &$s)use($guid,$origin,$session,$code,$store):array {
+        $group=sf_public_group($s,$guid);
+        if(!$group||!sf_public_origin_ok($group,$origin))sf_fail(403,'Website unauthorized');
+        foreach(sf_group_campuses($s,$group) as $route)
+          if($route['code']===$code){
+            $sid=(int)$route['school_id'];
+            $config=sf_chat_settings($s,$sid);
+            if(empty($config['enabled']))sf_fail(403,'Campus unavailable');
+            $leadId=sf_chat_session_lead($store,$session,(int)$group['id'],$sid,$origin,$s);
+            $lead=sf_find($s['leads'],$leadId);
+            if(!$lead||empty($lead['consent']))sf_fail(403,'Enquiry consent required');
+            $days=(int)($config['remember_days']??30);
+            $data=sf_chat_remember_issue($s,(int)$group['id'],$sid,$leadId,$days);
+            return [201,$data];
+          }
+        sf_fail(422,'Select an available campus');
+    },true);
+}
