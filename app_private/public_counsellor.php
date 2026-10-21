@@ -273,8 +273,11 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             if($specific===null)$specific=sf_kfile_age_answer($combined,$q,$profile);
             if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
         }
-        if($reply===null && $knowledgeFiles){
-            $schoolAnswer=sf_kfile_school_brief_answer($knowledgeFiles,$q);
+        if($reply===null){
+            $schoolSources=$knowledgeFiles;
+            if(trim((string)($config['overview']??''))!=='')
+                $schoolSources[]=['content'=>"## School information\n".(string)$config['overview']];
+            $schoolAnswer=sf_kfile_school_brief_answer($schoolSources,$q);
             if($schoolAnswer!==null){$reply=$schoolAnswer;$source='approved_knowledge_file';}
         }
         if($reply===null){
