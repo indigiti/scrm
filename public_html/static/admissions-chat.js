@@ -108,7 +108,7 @@ function suggested(){
    for(const year of ['2026–27','2027–28'])
      options.push({label:year,onClick:()=>chat(year)});
   }else if(needDetail==='grade'){
-   for(const grade of ['Nursery','Class I','Class II','Class XI'])
+   for(const grade of ['Nursery','Class I','Class II','Class V','Class XI'])
      options.push({label:grade,onClick:()=>chat(grade)});
   }
  }
@@ -193,7 +193,9 @@ async function chat(message,echo=true){
   });
   updateProfile(result);bubble('assistant',result.reply);
   answeredCount++;
-  if(!introductionOffered && answeredCount===1 && !crmSession){
+  // A class/year clarification is NOT a finished answer. The optional
+  // introduction belongs after useful guidance, never in the middle of fees.
+  if(!introductionOffered && result.can_introduce===true && !crmSession){
    introductionOffered=true;
    bubble('assistant','By the way, what should I call you?');
    choices([{label:'Tell you my name',onClick:introduce},
@@ -334,7 +336,11 @@ async function begin(){
   const data=await request('/chat-config');
   schools=Array.isArray(data.schools)?data.schools.filter(s=>typeof s.name==='string'&&typeof s.code==='string'):[];
   if(schools.length===1)schoolCode=schools[0].code;
-  conversationToken=loadAnonymous();
+  // The chat window starts fresh on a new page load. Do not silently
+  // inherit yesterday's anonymous class or admission year from sessionStorage.
+  // Long-term returning CRM enquiries are restored only by explicit opt-in.
+  conversationToken='';
+  saveAnonymous();
   if(savedReturn()){
    bubble('assistant','Welcome back! Would you like to continue your previous enquiry or start a new conversation?');
    choices([{label:'Continue previous enquiry',onClick:restore},
