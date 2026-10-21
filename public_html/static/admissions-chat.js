@@ -35,9 +35,22 @@ let profile={},contactState='',contactDraft={},suggestedContact=false,callbackRe
 let introductionOffered=false,answeredCount=0;
 let verification=null,attemptId='',pendingCampusContact=false;
 function status(s){$('.sfac-status').textContent=s||'';}
+/** The assistant returns Markdown occasionally. Show readable plain text,
+ * preserving bullet lines, without interpreting untrusted HTML/JS.
+ */
+function displayText(value){
+ return String(value||'').replace(/\r\n?/g,'\n')
+  .replace(/^\s{0,3}#{1,5}\s+/gm,'')
+  .replace(/\*\*([^*\n]+)\*\*/g,'$1')
+  .replace(/^\s*[-*]\s+/gm,'• ')
+  .replace(/\[([^\]\n]+)\]\(https?:\/\/[^)\s]+\)/g,'$1')
+  .replace(/\n{3,}/g,'\n\n')
+  .trim();
+}
 function bubble(who,s){
  const element=document.createElement('p');element.className='sfac-bubble '+(who==='parent'?'parent':'assistant');
- element.textContent=String(s);history.append(element);history.scrollTop=history.scrollHeight;
+ element.textContent=who==='assistant'?displayText(s):String(s);
+ history.append(element);history.scrollTop=history.scrollHeight;
 }
 function choices(items){
  chips.replaceChildren();

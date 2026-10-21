@@ -37,7 +37,7 @@ async function fetch(url,options){
  case '/counsel':result={conversation_token:'a'.repeat(43),
   school_code:'campus-1',campus_name:'Campus 1',profile:{grade:'2',interests:['fees']},
   qualified:'Considering admission',suggest_contact:body.message.includes('visit'),
-  reply:body.message.includes('visit')?'We can request a Saturday visit. Would you like help?':'The fee is confirmed by the school.'};break;
+  reply:body.message.includes('visit')?'We can request a Saturday visit. Would you like help?':'**The approved fee**\n- **Class II:** ₹116,725\n- **Confirmation:** Ask admissions'};break;
  case '/challenge':result={question:'Solve: 4 + 7',token:'signed-challenge'};break;
  case '/counsel-lead':result={success:true,lead_created:true,session:'signed-chat-session',school_code:'campus-1'};break;
  case '/chat-remember':result={remember_token:'b'.repeat(43),remember_expires_at:Math.floor(Date.now()/1000)+2592000};break;
@@ -66,6 +66,9 @@ function choose(label){
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'opening never registers lead');
  assert.equal($('.sfac-entry').hidden,false,'parents can immediately ask a question');
  await submit('Grade 2 fees?');
+ const bubbleTexts=$('.sfac-history').children.map(x=>x.textContent);
+ assert.ok(bubbleTexts.some(x=>x.includes('• Class II: ₹116,725')),'list shown with readable bullets');
+ assert.ok(!bubbleTexts.some(x=>x.includes('**')),'Markdown bold markers are removed from UI');
  assert.equal(requests.filter(x=>x.route==='/counsel').length,1,'first question answered before details');
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no covert lead');
  // First useful answer introduces the option to share a name, but does not

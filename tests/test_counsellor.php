@@ -158,6 +158,14 @@ try {
  // when the parent chooses the relevant branch in the next chat bubble.
  $md=<<<'MARKDOWN'
 # Approved campus fees
+## 2. Board and curriculum
+The school is affiliated to CBSE.
+
+## 3. Campus facilities
+- Library
+- Science laboratory
+- Outdoor sports area
+
 ## 6. Age eligibility for the 2026–27 session
 | Class | Eligible date of birth | Approximate age |
 |---|---|---|
@@ -183,7 +191,9 @@ try {
 ### Annual fee table, 2026–27
 | Class | Term component | Tuition | Stated annual total |
 |---|---:|---:|---:|
+| Class I | 10,000 | 65,000 | **75,000** |
 | Class II | 16,675 | 100,050 | **116,725** |
+| Class V | 17,500 | 102,500 | **120,000** |
 
 ## 10. School fees — academic year 2027–28
 ### Annual fee table, 2027–28
@@ -232,6 +242,40 @@ MARKDOWN;
  co_assert($separateStatus===200 && str_contains($separate['reply'],'105,927'),
    'different academic year returns different approved total');
  co_assert(!str_contains($gradeReply['reply'],'105,927'),'two years never mixed');
+ [$class1Status,$class1]=co_req('POST',$base.'/counsel',[
+   'message'=>'Class I annual fees 2026-27','school_code'=>'campus-1']);
+ co_assert($class1Status===200 && str_contains($class1['reply'],'75,000'),
+   'Class I fee read from exact approved table');
+ [$class5Status,$class5]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$class1['conversation_token'],'school_code'=>'campus-1',
+   'message'=>'fees for 5 th']);
+ co_assert($class5Status===200 && str_contains($class5['reply'],'Class V') &&
+   str_contains($class5['reply'],'120,000') &&
+   !str_contains($class5['reply'],'75,000'),
+   'Class V ordinal query overrides older Class I and returns only Grade V price');
+ [$boardStatus,$board]=co_req('POST',$base.'/counsel',[
+   'message'=>'is cbse','school_code'=>'campus-1']);
+ co_assert($boardStatus===200 && $board['source']==='approved_knowledge_file' &&
+   str_contains($board['reply'],'CBSE-affiliated') &&
+   !str_contains($board['reply'],'General context'),
+   'brief school CBSE question gets a direct confirmed school answer');
+ [$featureStatus,$feature]=co_req('POST',$base.'/counsel',[
+   'message'=>'school features','school_code'=>'campus-1']);
+ co_assert($featureStatus===200 && $feature['source']==='approved_knowledge_file' &&
+   str_contains($feature['reply'],'• Library') &&
+   !str_contains($feature['reply'],'general considerations'),
+   'features response is a short list of approved campus facilities');
+ [$unverifiedStatus,$unverified]=co_req('POST',$base.'/counsel',[
+   'message'=>'is cbse','school_code'=>'campus-2']);
+ co_assert($unverifiedStatus===200 &&
+   str_contains($unverified['reply'],'can’t confirm') &&
+   !str_contains($unverified['reply'],'CBSE-affiliated'),
+   'no other campus may inherit positive CBSE affiliation');
+ co_assert(!str_contains((string)sf_counsellor_fact_answer(
+   'fees for 5 th',['grade'=>'V'],[
+   'school_facts'=>[['category'=>'fees','label'=>'Class I fee','details'=>'₹75,000']]]),
+   '75,000'),'single structured fee record cannot leak another class price');
+
  [$ageStatus,$ageResult]=co_req('POST',$base.'/counsel',[
     'message'=>'What is the age eligibility for 2026-27?','school_code'=>'campus-1']);
  co_assert($ageStatus===200 && $ageResult['source']==='approved_knowledge_file' &&

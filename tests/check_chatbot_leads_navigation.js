@@ -17,6 +17,6 @@ assert.ok(ui.includes('leadTable(rows)'),'normal lead detail actions preserved')
 assert.ok(api.includes("'chatbot_lead'")||api.includes("['chatbot_lead']"),'lead channel exposed in CRM view');
 assert.ok(session.includes("$saved['lead_channel']='chatbot'"),'guided chat tags lead');
 assert.ok(callback.includes("$saved['lead_channel']='chatbot'"),'chat callback tags lead');
-assert.ok(router.includes('GENERAL questions about schooling'),'AI answers general school questions');
+assert.ok(router.includes('General education explanations are appropriate') && router.includes('what a concept means'),'general educational explanations remain available when requested');
 assert.ok(router.includes('Never invent'),'AI does not invent campus-specific facts');
 console.log('PASS: Chatbot Leads workspace, general AI grounding and click-only enquiry popup');

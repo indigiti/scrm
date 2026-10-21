@@ -38,8 +38,19 @@ function sf_counsellor_classify(string $question):array {
 function sf_counsellor_extract(string $message,array $profile):array {
     $profile=array_merge(['grade'=>'','academic_year'=>'','residential_area'=>'',
         'interests'=>[],'visit_preference'=>'','lead_intent'=>'Browsing'], $profile);
-    if(preg_match('/\b(?:grade|class|std|standard)\s*(?:is\s*)?([0-9]{1,2}|nursery|jr\.?\s*kg|sr\.?\s*kg|lkg|ukg|kindergarten|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/i',$message,$m))
-        $profile['grade']=substr(trim($m[1]),0,40);
+    // Explicit grade in this turn overrides remembered context. In particular
+    // "fees for 5 th" must replace a prior Class I and become Class V.
+    $explicitGrade=sf_kfile_explicit_grade($message);
+    if($explicitGrade!==''){
+        $short=str_starts_with($explicitGrade,'Class ')
+            ?substr($explicitGrade,6):$explicitGrade;
+        // CRM records historically store grade 2 as "2", not Roman "II".
+        // Keep that contract and only normalise at knowledge lookup time.
+        $roman=['I'=>'1','II'=>'2','III'=>'3','IV'=>'4','V'=>'5',
+            'VI'=>'6','VII'=>'7','VIII'=>'8','IX'=>'9','X'=>'10',
+            'XI'=>'11','XII'=>'12'];
+        $profile['grade']=$roman[$short]??$short;
+    }
     if(preg_match('/\b(20\d{2}\s*[-–—\/]\s*(?:20)?\d{2})(?!\d)/u',$message,$m))
         $profile['academic_year']=preg_replace('/\s+/','',$m[1]);
     if(preg_match('/\b(?:we live in|i live in|reside in|from|we are in)\s+([\p{L} \-]{3,50})/ui',$message,$m)){
@@ -75,17 +86,19 @@ function sf_counsellor_fact_answer(string $question,array $profile,array $settin
     $facts=array_values(array_filter($settings['school_facts']??[],
         static fn($f)=>($f['category']??'')===$category&&!empty($f['details'])&&empty($f['needs_recheck'])));
     if(!$facts)return null;
-    $grade=strtolower(trim((string)($profile['grade']??'')));
-    if($grade!=='' && in_array($category,['fees','age_eligibility'],true)){
-        $matched=array_values(array_filter($facts,static function($f)use($grade):bool {
-            $label=strtolower((string)($f['label']??''));
-            return preg_match('/(?<![a-z0-9])'.preg_quote($grade,'/').'(?![a-z0-9])/i',$label)===1;
+    if(in_array($category,['fees','age_eligibility'],true)){
+        $grade=sf_kfile_grade($question,$profile);
+        if($grade==='')return 'The school has class-wise '.($category==='fees'?'fee details':'eligibility requirements').
+            '. Which class are you looking at?';
+        $matched=array_values(array_filter($facts,static function($f)use($grade):bool{
+            // Never show another grade's price or age criterion, even if the
+            // school has only one saved fact.
+            return sf_kfile_explicit_grade((string)($f['label']??''))===$grade;
         }));
-        if($matched)$facts=$matched;
-        elseif(count($facts)>1)return 'I have verified information for other classes, but not yet for Grade '.$grade.'. The admissions team can confirm the applicable '.$category.' for your class.';
+        if(!$matched)return 'I don’t have a confirmed '.($category==='fees'?'fee amount':'eligibility rule').
+            ' for '.$grade.' in the school’s approved information. The admissions office can confirm it.';
+        $facts=$matched;
     }
-    if($grade==='' && in_array($category,['fees','age_eligibility'],true)&&count($facts)>1)
-        return 'The school has different '.($category==='fees'?'fee structures':'age requirements').' by class. Which grade are you considering? I can check the verified details.';
     $answers=[];
     foreach(array_slice($facts,0,5) as $f)
         $answers[]=(string)$f['label'].': '.(string)$f['details'];
@@ -268,6 +281,13 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
         }
         if($reply===null){
+            $schoolSources=$knowledgeFiles;
+            if(trim((string)($config['overview']??''))!=='')
+                $schoolSources[]=['content'=>"## School information\n".(string)$config['overview']];
+            $schoolAnswer=sf_kfile_school_brief_answer($schoolSources,$q);
+            if($schoolAnswer!==null){$reply=$schoolAnswer;$source='approved_knowledge_file';}
+        }
+        if($reply===null){
             $documentAnswer=sf_kfile_example_answer($knowledgeFiles,$q,$profile);
             if($documentAnswer!==null){$reply=$documentAnswer;$source='approved_knowledge_file';}
         }
@@ -282,6 +302,15 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             // The provider receives a de-identified topic, never contact data.
             // For personal questions build a topic-only synopsis.
             $aiTopic=sf_counsellor_ai_topic($topics,$profile);
+            // "is CBSE?" and "school features" ask about THIS campus;
+            // a general AI essay must not substitute for missing affiliation
+            // or a list of facilities that the school has not approved.
+            $schoolBoardQuestion=preg_match('/\b(?:cbse|icse|affiliat(?:ed|ion)?|board)\b/iu',$message)
+                && !preg_match('/^(?:what\s+is|explain|meaning\s+of|difference\s+between|compare)\s+(?:the\s+)?(?:cbse|icse)\b/iu',trim($message));
+            $schoolFeatureQuestion=preg_match('/\b(?:school\s+features?|school\s+facilities|campus\s+features?|facilities)\b/iu',$message)
+                && !preg_match('/^(?:what\s+are\s+the\s+typical|how\s+to\s+compare)\b/iu',trim($message));
+            if(($schoolBoardQuestion||$schoolFeatureQuestion)
+               || in_array('fees',$topics,true))$aiTopic=null;
             if($aiTopic!==null&&!empty($config['ai_enabled'])){
                 $config['file_context']=sf_kfile_context($knowledgeFiles,$q,$profile);
                 $reply=!empty($config['openrouter_key'])
@@ -312,6 +341,15 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
                 "This is general guidance, not a confirmed checklist for this campus. The admissions team can clarify the exact documents required.";
         elseif(in_array('age_eligibility',$topics,true))
             $reply='I can help you check the age requirement. Which class and academic year are you considering? The school can confirm the final eligibility.';
+        elseif(in_array('curriculum',$topics,true) &&
+            preg_match('/\b(?:cbse|icse|board|affiliation)\b/iu',$message))
+            $reply=$route===null
+                ?'Which campus are you asking about? I can check its published board information.'
+                :'I can’t confirm the selected campus’s CBSE or board affiliation from its approved school information yet. The admissions team can verify the current board and affiliation details.';
+        elseif(in_array('school_features',$topics,true)||in_array('facilities',$topics,true))
+            $reply=$route===null
+                ?'Which campus would you like to know about? I can check its published features and facilities.'
+                :'I don’t have a confirmed list of this campus’s facilities in its published information. Are you most interested in sports, learning spaces or extracurricular activities? The admissions team can confirm the latest offerings.';
         elseif($route===null)
             $reply='Happy to help. Which campus are you interested in? I can then share relevant information about fees, age eligibility, documents, facilities and transport.';
         else
