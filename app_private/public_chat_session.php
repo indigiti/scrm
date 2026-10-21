@@ -76,7 +76,7 @@ function sf_chat_start(string $guid,array $p,array $headers,string $ip,SchoolFlo
             if((int)($candidate['school_id']??0)!==(int)$route['school_id'] ||
                empty($candidate['consent']) ||
                !in_array((string)($candidate['utm_source']??''),['admissions_guided_chat','public_admissions_chat'],true) ||
-               preg_replace('/\D/','',(string)($candidate['phone']??''))!==$phone ||
+               substr(preg_replace('/\D/','',(string)($candidate['phone']??'')),-10)!==$phone ||
                strcasecmp(trim((string)($candidate['name']??'')),$student)!==0 ||
                strcasecmp(trim((string)($candidate['grade']??'')),$grade)!==0 ||
                strtotime((string)($candidate['created_at']??''))<time()-30*86400)continue;
