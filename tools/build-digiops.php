@@ -30,6 +30,7 @@ $publicChat = phpBody($root . '/app_private/public_chat.php');
 $publicSession = phpBody($root . '/app_private/public_chat_session.php');
 $publicReturn = phpBody($root . '/app_private/public_chat_returning.php');
 $publicCounsellor = phpBody($root . '/app_private/public_counsellor.php');
+$publicSources = phpBody($root . '/app_private/public_chat_sources.php');
 $publicProvider = phpBody($root . '/app_private/public_chat_provider.php');
 $publicKnowledge = phpBody($root . '/app_private/public_chat_knowledge.php');
 $publicCallback = phpBody($root . '/app_private/public_chat_callback.php');
@@ -48,6 +49,7 @@ $api = str_replace("require_once __DIR__ . '/public_chat.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_session.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_returning.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_counsellor.php';", '', $api);
+$api = str_replace("require_once __DIR__ . '/public_chat_sources.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_provider.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_knowledge.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_callback.php';", '', $api);
@@ -106,7 +108,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
