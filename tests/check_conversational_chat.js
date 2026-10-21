@@ -22,7 +22,8 @@ const host=element();
 host.attachShadow=({mode})=>{assert.equal(mode,'open');return {append(item){if(item===widget)host.widget=widget;}}};
 const loader={src:'https://crm.example.test/scrm/static/admissions-chat.js?v=hash',
  getAttribute:key=>({'data-schoolflow-group':guid,'data-schoolflow-chat-css-version':'123'}[key]||null)};
-const doc={currentScript:loader,head:{append(){}},body:{append(e){assert.equal(e,host);}},
+const chatStateEvents=[];
+const doc={currentScript:loader,head:{append(){}},body:{append(e){assert.equal(e,host);}},dispatchEvent(e){chatStateEvents.push(e);},
  createElement:type=>type==='section'?widget:type==='div'?host:element()};
 const requests=[],store=new Map(),anon=new Map();
 const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
@@ -45,7 +46,7 @@ async function fetch(url,options){
  }
  return {ok:true,json:async()=>result};
 }
-const context={document:doc,window:{},URL,crypto:webcrypto,fetch,localStorage,sessionStorage,console};
+const context={document:doc,window:{},URL,crypto:webcrypto,fetch,localStorage,sessionStorage,console,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}};
 vm.runInNewContext(source,context,{filename:'admissions-chat.js'});
 const $=s=>cache[s],tick=()=>new Promise(r=>setImmediate(r));
 async function submit(text){
@@ -62,6 +63,8 @@ function choose(label){
 (async()=>{
  assert.ok(host.widget===widget,'Shadow DOM isolation');
  $('.sfac-launch').click();await tick();
+ assert.equal(context.window.__schoolflowAdmissionsChatState.open,true,'launch publishes chat-open state');
+ assert.equal(chatStateEvents[0].detail.open,true,'enquiry fallback receives chat-open event');
  assert.ok(widget.innerHTML.includes('Admission Counsellor'));
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'opening never registers lead');
  assert.equal($('.sfac-entry').hidden,false,'parents can immediately ask a question');
