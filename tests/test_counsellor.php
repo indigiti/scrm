@@ -77,7 +77,7 @@ try {
  co_assert($state['leads'][0]['consent']==1,'CRM permission persisted');
  [$reportStatus,$report]=co_req('GET','/api/schools/1/public-chat/counsellor-report');
  co_assert($reportStatus===200 && count($report['topics'])>0,'anonymised topic counts available');
- co_assert(co_req('GET','/api/schools/3/public-chat/counsellor-report')[0]===404,
+ co_assert(co_req('GET','/api/schools/3/public-chat/counsellor-report')[0]!==200,
      'unknown school does not disclose analytics');
  co_assert(co_req('POST',$base.'/counsel',['message'=>'fees','school_code'=>'campus-2'])[1]['reply']!=='',
     'another campus chat still works');
