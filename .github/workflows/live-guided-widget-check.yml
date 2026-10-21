@@ -1,0 +1,17 @@
+name: Live Guided Admissions Widget Diagnostic
+on:
+  pull_request:
+    paths:
+      - 'tools/check-live-guided-widget.mjs'
+      - '.github/workflows/live-guided-widget-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public website assets (read only)
+        run: node tools/check-live-guided-widget.mjs
