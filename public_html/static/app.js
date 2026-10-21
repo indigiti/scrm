@@ -386,10 +386,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 async function loadPublicChat(){
  if(!isAdmin())return;
  const base='/api/schools/'+state.schoolId+'/public-chat';
- const [settings,provider,review,groups]=await Promise.all([
-   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites')
+ const [settings,provider,review,groups,report,sources]=await Promise.all([
+   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites'),
+   api(base+'/counsellor-report'),api(base+'/sources')
  ]);
- ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;
+ ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ ext.counsellorReport=report;ext.chatSources=sources;
  render();
 }
 
