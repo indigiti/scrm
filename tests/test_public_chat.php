@@ -37,9 +37,28 @@ try{
     'enabled'=>true,'overview'=>'Other campus','faqs'=>[]])[0]===403,'nonmember cannot publish');
   [$status,$settings]=ai_req('PATCH','/api/schools/1/public-chat',[
     'enabled'=>true,'overview'=>'Campus 1 admissions office.',
+    'remember_days'=>30,
+    'school_facts'=>[
+      ['category'=>'fees','label'=>'Nursery tuition 2026–27','details'=>'Approved tuition fee is INR 42,000 annually.'],
+      ['category'=>'fees','label'=>'Class 1 tuition 2026–27','details'=>'Approved tuition fee is INR 48,000 annually.'],
+      ['category'=>'age_eligibility','label'=>'Nursery age eligibility','details'=>'Minimum age is 3 years by the school cut-off date.'],
+      ['category'=>'documents','label'=>'General admission documents','details'=>'Birth certificate, proof of address and photographs.'],
+      ['category'=>'transport','label'=>'Bus availability','details'=>'Bus operates on selected approved routes. Confirm the pickup point with admissions.']
+    ],
     'faqs'=>[['question'=>'Which documents are required?',
               'answer'=>'Bring the documents listed on the official admissions page.']]]);
   ai_assert($status===200&&$settings['enabled'],'admin publishing');
+  ai_assert(count($settings['school_facts'])===5,'multiple approved school facts saved');
+  ai_assert($settings['remember_days']===30,'school-selected visitor memory period');
+  ai_assert(str_contains(sf_chat_fact_answer('fees',$settings),'INR 42,000'),
+    'approved classwise fees can be answered without AI');
+  ai_assert(str_contains(sf_chat_fact_answer('fees',$settings),'INR 48,000'),
+    'multiple grade fee entries are preserved');
+  ai_assert(str_contains(sf_chat_fact_answer('bus available',$settings),'approved routes'),
+    'verified bus availability answered');
+  ai_assert(sf_chat_fact_answer('School fees',['school_facts'=>[]])===null,
+    'unknown fees are not fabricated');
+
   ai_assert(ai_req('GET',$base.'/chat-config',[],
        'https://unrelated.test')[0]===403,'unapproved origin denied');
   [$status,$config]=ai_req('GET',$base.'/chat-config');
@@ -82,6 +101,50 @@ try{
     'https://example-school.test','chat-start-000003')[0]===409,
     'CAPTCHA replay rejected');
   $session=$started['session'];
+  // Browser storage receives an opaque token only if parent opts in.
+  $beforeOpt=$store->transaction(static fn(array $s)=>count($s['public_chat_remember']??[]));
+  ai_assert($beforeOpt===0,'no remembered identity stored before opt-in');
+  [$rememberStatus,$remembered]=ai_req('POST',$base.'/chat-remember',[
+      'school_code'=>'campus-1','session'=>$session]);
+  ai_assert($rememberStatus===201 && strlen($remembered['remember_token'])===43,
+      'opt-in issues 256-bit opaque return credential');
+  ai_assert($remembered['remember_expires_at']>time()+29*86400,'30-day expiry');
+  $stored=$store->transaction(static fn(array $s)=>$s);
+  ai_assert(!str_contains(json_encode($stored),$remembered['remember_token']),
+    'return credential stored hashed only');
+  ai_assert(ai_req('POST',$base.'/chat-resume',[
+    'remember_token'=>$remembered['remember_token']],'https://unrelated.test')[0]===403,
+    'remembered session remains origin bound');
+  [$resumeStatus,$resumed]=ai_req('POST',$base.'/chat-resume',[
+    'remember_token'=>$remembered['remember_token']]);
+  ai_assert($resumeStatus===200 && !empty($resumed['session']) &&
+      $resumed['school_code']==='campus-1','returning parent resumes same campus without details');
+  ai_assert(ai_req('POST',$base.'/chat-resume',[
+    'remember_token'=>$remembered['remember_token']])[0]===401,
+    'return credential rotates after use');
+  ai_assert(ai_req('POST',$base.'/chat',[
+    'school_code'=>'campus-1','session'=>$resumed['session'],
+    'question'=>'What documents are required?'])[0]===200,
+    'resumed session can ask admission questions');
+  [$forgetStatus,$forgot]=ai_req('POST',$base.'/chat-forget',[
+    'remember_token'=>$resumed['remember_token']]);
+  ai_assert($forgetStatus===200 && $forgot['ok'],'parent can forget this browser');
+  ai_assert(ai_req('POST',$base.'/chat-resume',[
+    'remember_token'=>$resumed['remember_token']])[0]===401,
+    'forgotten remembered credential cannot return');
+  // Even choosing New Chat and resubmitting the same student/grade should
+  // reuse one lead, without scheduling a duplicate First Contact task.
+  [$st2,$challenge2]=ai_req('GET',$base.'/challenge');
+  preg_match('/Solve: (\d+) \+ (\d+)/',$challenge2['question'],$m2);
+  $sameLeadPayload=[...$startPayload,'captcha_token'=>$challenge2['token'],
+    'captcha_answer'=>(string)((int)$m2[1]+(int)$m2[2])];
+  [$againStatus,$again]=ai_req('POST',$base.'/chat-start',$sameLeadPayload,
+       'https://example-school.test','chat-start-returning-0003');
+  ai_assert($againStatus===201 && ($again['reused_lead']??false)===true,
+    'new chat with same student and class reuses earlier lead');
+  $afterNew=$store->transaction(static fn(array $s)=>$s);
+  ai_assert(count($afterNew['leads'])===1,'repeat enquiry does not duplicate CRM lead');
+
   $question=['school_code'=>'campus-1','session'=>$session,'question'=>'Which documents are required?'];
   ai_assert(ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-2','session'=>$session,'question'=>'Which documents are required?'])[0]===422,
@@ -95,7 +158,7 @@ try{
   ai_assert($status===200 && ($answer['source']??'')==='approved_knowledge','offline verified FAQ');
   ai_assert(str_contains($answer['answer'],'official admissions page'),'approved answer returned');
   [$status,$unknown]=ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+    'school_code'=>'campus-1','session'=>$session,'question'=>'What is the weekend holiday policy?']);
   ai_assert($status===200 && ($unknown['source']??'')==='human_handoff','unknown question not invented');
   [$status,$review]=ai_req('GET','/api/schools/1/public-chat/review');
   ai_assert($status===200 && count($review['items'])===1,'review queue of unanswered topics');
@@ -111,12 +174,13 @@ try{
       'id'=>$item['id'],'decision'=>'approve','answer'=>'Contact transport admissions for current routes.']);
   ai_assert($status===200 && $approved['ok'],'staff approval of verified information');
   [$status,$result]=ai_req('POST',$base.'/chat',[
-      'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+      'school_code'=>'campus-1','session'=>$session,'question'=>'What is the weekend holiday policy?']);
   ai_assert(($result['source']??'')==='approved_knowledge','approved answer works offline');
   [$feeStatus,$feeReply]=ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-1','session'=>$session,'question'=>'fees']);
-  ai_assert($feeStatus===200 && str_contains($feeReply['answer'],'verified fee'),
-    'short fee enquiry gets useful callback guidance without inventing prices');
+  ai_assert($feeStatus===200 && ($feeReply['source']??'')==='approved_school_information' &&
+    str_contains($feeReply['answer'],'INR 42,000'),
+    'fees are answered from approved school facts without needing AI');
 
   // Provider key is encrypted per school. No API response ever returns it.
   $rawKey='sk-or-v1-'.str_repeat('a',32);
@@ -154,6 +218,24 @@ try{
     'model'=>'openai/gpt-4o-mini','remove_key'=>true
   ]);
   ai_assert($status===200 && !$disconnected['connected'],'provider key can be removed');
+  // Independent campus may publish different policies under its own Admin.
+  [$school2Status,$school2Config]=ai_req('PATCH','/api/schools/2/public-chat',[
+    'enabled'=>true,'ai_enabled'=>false,'overview'=>'Campus 2 office.',
+    'remember_days'=>15,
+    'school_facts'=>[
+      ['category'=>'fees','label'=>'Nursery Campus 2','details'=>'Verified Campus 2 tuition INR 31,000.'],
+      ['category'=>'facilities','label'=>'Campus 2 library','details'=>'Campus 2 has a student library.']
+    ],'faqs'=>[]]);
+  ai_assert($school2Status===200 && $school2Config['remember_days']===15,
+    'second school supports 15-day memory and independent knowledge');
+  ai_assert(count($school2Config['school_facts'])===2,'second school has multiple fact records');
+  ai_assert(str_contains(sf_chat_fact_answer('fees',$school2Config),'31,000'),
+    'second school publishes its own fees');
+  ai_assert(!str_contains(sf_chat_fact_answer('fees',$school2Config),'42,000'),
+    'first school fee does not leak into second school');
+  [$configStatus,$allCampuses]=ai_req('GET',$base.'/chat-config');
+  ai_assert($configStatus===200 && count($allCampuses['schools'])===2,
+    'single group GUID supports two active campus profiles');
   echo "PASS: mandatory consented chat lead, signed token, offline FAQ, OpenRouter encryption, campus isolation, callback\n";
 }finally{
   foreach(glob($dir.'/*')?:[] as $file)@unlink($file);

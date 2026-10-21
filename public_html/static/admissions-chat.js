@@ -49,6 +49,70 @@ const prompts={
 };
 let current='campus',started=false,busy=false,session='',captcha=null,attemptId='';
 let campusCode='',schools=[],draft={},quickQuestions=[],callbackRequested=false;
+const rememberStorageKey='schoolflow:admissions:return:'+guid;
+function readRemembered(){
+ try{
+  const stored=JSON.parse(localStorage.getItem(rememberStorageKey)||'null');
+  return stored && /^[A-Za-z0-9_-]{43}$/.test(stored.token||'') &&
+   Number(stored.expires)>Date.now()/1000 ? stored:null;
+ }catch(e){return null;}
+}
+function saveRemembered(data){
+ try{
+  if(data?.remember_token&&data?.remember_expires_at)
+   localStorage.setItem(rememberStorageKey,JSON.stringify({
+    token:data.remember_token,expires:data.remember_expires_at
+   }));
+ }catch(e){feedback('This browser does not allow saved sessions. You can still chat now.');}
+}
+function clearRemembered(){
+ try{localStorage.removeItem(rememberStorageKey);}catch(e){}
+}
+function beginNew(){
+ history.replaceChildren();choices.replaceChildren();session='';draft={};
+ current='loading';captcha=null;attemptId='';campusCode='';callbackRequested=false;
+ stage('loading');
+ question('campus');
+}
+async function forgetRemembered(){
+ const saved=readRemembered();
+ clearRemembered();
+ if(saved)try{await post('/chat-forget',{remember_token:saved.token});}
+ catch(e){} // Local forget must always work even with a temporary CRM outage.
+}
+async function resumeRemembered(){
+ const saved=readRemembered();
+ if(!saved)return beginNew();
+ if(busy)return;busy=true;choices.replaceChildren();feedback('Restoring your enquiry…');
+ try{
+  const result=await post('/chat-resume',{remember_token:saved.token});
+  session=result.session;campusCode=result.school_code;
+  quickQuestions=Array.isArray(result.quick_questions)?result.quick_questions:[];
+  callbackRequested=false;
+  saveRemembered(result);
+  stage('qa');bubble('assistant','Welcome back! Your existing enquiry for '+(result.campus_name||'your campus')+' is ready. You can continue asking questions without submitting your details again.');
+  renderQuickQuestions();setInput(true,{maxLength:400,placeholder:'Ask about admissions…'});
+  feedback('Your previous enquiry was resumed.');
+ }catch(e){
+  clearRemembered();
+  bubble('assistant','Your saved session has expired or is unavailable. We can start a new conversation.');
+  question('campus');
+ }finally{busy=false;}
+}
+function offerRemember(){
+ buttons([{label:'Remember this browser',action:rememberThisBrowser},
+  {label:'Not now',action:()=>{renderQuickQuestions();feedback('You can continue chatting without saving this session.');}}]);
+ bubble('assistant','Would you like this browser to remember your enquiry for the school’s selected period (15 or 30 days)? On a shared device, other people using this browser may be able to resume it. No contact details or transcript will be stored in browser storage.');
+}
+async function rememberThisBrowser(){
+ if(!session||busy)return;
+ busy=true;feedback('Saving the return option…');
+ try{
+  const data=await post('/chat-remember',{school_code:campusCode,session});
+  saveRemembered(data);bubble('assistant','Saved. Next time, choose Continue previous enquiry; your details will not be requested again.');
+ }catch(e){bubble('assistant','This browser could not save a returning session. You may continue chatting now.');}
+ finally{busy=false;renderQuickQuestions();feedback('');}
+}
 
 function feedback(text){$('.sfac-status').textContent=text||'';}
 function bubble(who,text){
@@ -207,8 +271,8 @@ async function register(value){
   // Do not retain guardian or student contact details after successful submission.
   draft={};captcha=null;attemptId='';
   stage('qa');bubble('assistant','Thank you! Your enquiry is registered. You can now ask about the admission process, classes, fees, documents or campus visits. Please avoid sharing personal details in questions.');
-  renderQuickQuestions();
   setInput(true,{maxLength:400,placeholder:'Ask about admissions…'});
+  offerRemember();
   feedback('Your admission enquiry has been saved.');
  }catch(err){
   stage('captcha');bubble('assistant','I could not complete the enquiry. '+(err.message||'Please try again.')+' I’ll provide a new verification question.');
@@ -259,7 +323,13 @@ async function start(){
    bubble('assistant','Admissions chat is not enabled for this website yet.');
    feedback('No campuses available');return;
   }
-  question('campus');
+  const stored=readRemembered();
+  if(stored){
+   stage('returning');setInput(false);
+   bubble('assistant','Welcome back! Would you like to continue your previous admission enquiry, or start a new chat?');
+   buttons([{label:'Continue previous enquiry',action:resumeRemembered},
+      {label:'Start new chat',action:async()=>{await forgetRemembered();beginNew();}}]);
+  }else question('campus');
  }catch(e){
   bubble('assistant','I could not load the campus list. Please retry.');
   feedback('Campus list unavailable.');

@@ -6,6 +6,7 @@ require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/public_chat_knowledge.php';
 require_once __DIR__ . '/public_chat_callback.php';
 require_once __DIR__ . '/public_chat_session.php';
+require_once __DIR__ . '/public_chat_returning.php';
 require_once __DIR__ . '/public_chat_provider.php';
 require_once __DIR__ . '/public_chat.php';
 require_once __DIR__ . '/admission_workflow.php';
@@ -522,7 +523,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         return sf_import_process($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2],$payload);
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/([a-f0-9-]{36})/rollback$#iD',$path,$importMatch))
         return sf_import_rollback($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2]);
-    if(preg_match('~^/api/public/forms/([a-f0-9-]{36})/(chat-config|chat|chat-start|chat-followup|callback)$~iD',$path,$chatMatch))
+    if(preg_match('~^/api/public/forms/([a-f0-9-]{36})/(chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback)$~iD',$path,$chatMatch))
         return sf_chat_public($method,strtolower($chatMatch[1]),$chatMatch[2],$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/provider/test$~iD',$path,$providerTest))
         return sf_chat_provider_test($providerTest[1],$headers,$store);
