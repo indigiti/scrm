@@ -22,7 +22,7 @@ function sf_public_origin_ok(array $group, string $origin): bool {
     return preg_replace('/^www\./', '', $website) === preg_replace('/^www\./', '', $request);
 }
 function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, string $origin): bool {
-    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|pin/[0-9]{6})$~iD', $path, $m)) return false;
+    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|chat-config|chat|pin/[0-9]{6})$~iD', $path, $m)) return false;
     return $store->transaction(static function (array $s) use ($m, $origin): bool {
         $group = sf_public_group($s, strtolower($m[1]));
         return $group !== null && sf_public_origin_ok($group, $origin) && count(sf_group_campuses($s, $group)) > 0;
@@ -79,7 +79,7 @@ function sf_public_fetch_pin(string $pin): ?array {
     return sf_public_parse_pin($body);
 }
 function sf_public_handle(string $method, string $path, array $p, array $headers, string $ip, SchoolFlowStore $store): array {
-    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|pin/[0-9]{6})$~iD',$path,$m))
+    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|chat-config|chat|pin/[0-9]{6})$~iD',$path,$m))
         sf_fail(404,'Public form not found');
     $guid=strtolower($m[1]);$action=$m[2];$origin=(string)($headers['origin']??'');
     $group=$store->transaction(static function (array $s) use ($guid,$origin) {
