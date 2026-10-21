@@ -385,7 +385,7 @@ function publicChatPage(){
  return pageHead('Public Admissions AI','School-specific chatbot settings and approved answers. No AI provider is required for verified FAQ matches.')+
  '<div class="app-alert">Answers published here are visible to parents. Check fees, documents, dates and policies before publishing. Past questions enter a private review queue and never publish automatically.</div>'+
  '<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
- '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+
+ '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+'<label><input type="checkbox" name="ai_enabled" '+(settings.ai_enabled?'checked':'')+'> Allow external AI for general, nonpersonal questions (optional; local FAQs work without it)</label>'+
  '<div class="form-field"><label>Verified school overview</label><textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></div>'+
  '<h3>Published questions and answers</h3><div id="sfChatFaqs">'+(faqs.length?faqs.map(f=>row(f.question,f.answer)).join(''):row())+'</div>'+
  '<div class="button-row"><button type="button" class="btn small" data-action="chat-add-faq">＋ Add FAQ</button>'+
@@ -691,7 +691,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      })).filter(x=>x.question||x.answer);
      if(faqs.some(x=>!x.question||!x.answer))throw new Error('Complete both the question and answer for each FAQ');
      await api('/api/schools/'+state.schoolId+'/public-chat','PATCH',{
-       enabled:!!f.elements.enabled.checked,overview:fd.overview||'',faqs
+       enabled:!!f.elements.enabled.checked,ai_enabled:!!f.elements.ai_enabled.checked,overview:fd.overview||'',faqs
      });
      await loadPublicChat();toast('Admissions chatbot settings saved');
    });return;
