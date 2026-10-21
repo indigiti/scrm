@@ -81,6 +81,51 @@ try {
      'unknown school does not disclose analytics');
  co_assert(co_req('POST',$base.'/counsel',['message'=>'fees','school_code'=>'campus-2'])[1]['reply']!=='',
     'another campus chat still works');
+
+ // School-source scanner only accepts school-registered public domains.
+ co_assert(co_req('POST','/api/schools/1/public-chat/sources',[
+    'action'=>'add','url'=>'http://admissions.school.test/fees'])[0]===422,
+    'HTTP school source rejected');
+ co_assert(co_req('POST','/api/schools/1/public-chat/sources',[
+    'action'=>'add','url'=>'https://127.0.0.1/admin'])[0]===422,
+    'private-IP source forbidden');
+ co_assert(co_req('POST','/api/schools/1/public-chat/sources',[
+    'action'=>'add','url'=>'https://other.example.test/fees'])[0]===422,
+    'unregistered source domain forbidden');
+ [$sourceStatus,$sourceAdd]=co_req('POST','/api/schools/1/public-chat/sources',[
+    'action'=>'add','url'=>'https://admissions.school.test/fees']);
+ co_assert($sourceStatus===201,'registered school source URL added safely');
+ [$listStatus,$sourceList]=co_req('GET','/api/schools/1/public-chat/sources');
+ co_assert($listStatus===200 && count($sourceList['sources'])===1,'school source library accessible');
+ $sourceId=$sourceList['sources'][0]['id'];
+ $draftId=sf_uuid();
+ $store->transaction(static function(array &$s)use($sourceId,$draftId):void{
+    $s['public_chat_source_candidates'][]=[
+      'id'=>$draftId,'school_id'=>1,'source_id'=>$sourceId,
+      'category'=>'fees','label'=>'Grade 3 tuition',
+      'details'=>'Proposed unapproved 123','evidence'=>'Unverified source text',
+      'source_hash'=>'hash','status'=>'pending'];
+ },true);
+ co_assert(!str_contains(json_encode(co_req('GET','/api/schools/1/public-chat')[1]),'Proposed unapproved'),
+    'unreviewed website content is not published');
+ [$approveStatus,$approved]=co_req('POST','/api/schools/1/public-chat/sources',[
+    'action'=>'approve','candidate_id'=>$draftId,
+    'label'=>'Grade 3 verified tuition','details'=>'The Grade 3 fee is ₹55,000 in 2026–27.']);
+ co_assert($approveStatus===200 && $approved['ok'],'admin-approved source fact published');
+ $settings=co_req('GET','/api/schools/1/public-chat')[1];
+ co_assert(str_contains(sf_counsellor_fact_answer('grade 3 fees',
+     ['grade'=>'3'],$settings),'55,000'),'reviewed source fact reused for school response');
+ $state=$store->transaction(static fn(array $s)=>$s);
+ co_assert(count($state['public_chat_sources'])===1,'source still belongs to current school');
+ // Changed sources must not silently continue publishing stale facts.
+ $store->transaction(static function(array &$s)use($sourceId):void{
+    foreach($s['public_chat_settings']['1']['school_facts'] as &$fact)
+      if(($fact['source_id']??'')===$sourceId)$fact['needs_recheck']=true;
+ },true);
+ $settings=co_req('GET','/api/schools/1/public-chat')[1];
+ co_assert(!str_contains((string)sf_counsellor_fact_answer('grade 3 fees',
+     ['grade'=>'3'],$settings),'55,000'),'stale source fact suspended pending re-verification');
+
  echo "PASS: answer-first AI admission counsellor, anonymous intent, school facts, contact consent, qualification and CRM conversion\n";
 }finally{
  foreach(glob($dir.'/*')?:[] as $file)@unlink($file);
