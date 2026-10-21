@@ -157,22 +157,22 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
     foreach($ym[1]??[] as $y)$foundYears[]=str_replace(['-','—'],'–',$y);
     $foundYears=array_unique($foundYears);
     if($year!=='' && $foundYears && !in_array($year,$foundYears,true))
-        return 'The approved school knowledge does not list fees for '.$year.'. Please check with the admissions office.';
-    if(count($foundYears)>1 && $year==='')return 'I have fee information for multiple academic years. Do you mean 2026–27 or 2027–28?';
+        return 'I don’t have a fee amount for '.$year.'. The admissions team can help confirm it.';
+    if(count($foundYears)>1 && $year==='')return 'Which academic year are you interested in — 2026–27 or 2027–28?';
     if($year==='' && $foundYears)$year=reset($foundYears);
-    if($grade==='')return 'Which class are you considering? I can check the school’s published fee details for '.($year?:'the relevant academic year').'.';
+    if($grade==='')return 'Which class are you looking at? I can check the fees for '.($year?:'the relevant academic year').'.';
     $oneTime=preg_match('/one[ -]?time|\badmission fee\b/iu',$question)===1;
     if($oneTime){
         if($grade==='Class XI')
-            return 'The school’s supplied one-time Class XI admission-fee notes conflict (₹20,000 and ₹30,000). Please confirm the correct amount with the admissions office.';
+            return 'I have two different one-time Class XI admission-fee amounts: ₹20,000 and ₹30,000. The admissions team can confirm the correct amount.';
         if(in_array($grade,['Nursery','LKG','UKG'],true))
-            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹10,000. Confirm the final payable amount with admissions.';
+            return 'The one-time admission fee for '.$grade.' in '.$year.' is ₹10,000. Confirm the final payable amount with admissions.';
         $levels=['Class I','Class II','Class III','Class IV','Class V','Class VI','Class VII','Class VIII','Class IX'];
         if(in_array($grade,$levels,true))
-            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹20,000. Confirm the latest amount with admissions.';
+            return 'The one-time admission fee for '.$grade.' in '.$year.' is ₹20,000. Confirm the latest amount with admissions.';
         if(in_array($grade,['Class X','Class XII'],true))
-            return 'The supplied one-time admission fee for '.$grade.' in '.$year.' is ₹30,000. Confirm the latest amount with admissions.';
-        return 'The supplied school knowledge does not specify a one-time admission fee for '.$grade.'. Please confirm with admissions.';
+            return 'The one-time admission fee for '.$grade.' in '.$year.' is ₹30,000. Confirm the latest amount with admissions.';
+        return 'I don’t have the one-time admission fee for '.$grade.'. Please confirm with admissions.';
     }
     if($year==='')return null;
     $sections=preg_split('/(?=^##\s+(?:\d+\.\s*)?School fees\s*[—–-]\s*academic year\s+20\d\d[–—-]\d\d)/miu',$content);
@@ -185,7 +185,7 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
     $term=preg_match('/\b(?:first[ -]?term|term[ -]?i|term 1|1st term)\b/iu',$question)?'Term I':
         (preg_match('/\b(?:second[ -]?term|term[ -]?ii|term 2|2nd term)\b/iu',$question)?'Term II':'');
     if($term!=='' && $year==='2027–28')
-        return 'The supplied 2027–28 school fee information provides annual totals only; the '.$term.' payment amount is not listed. Please confirm with admissions.';
+        return 'For 2027–28, I have annual fee amounts but not the '.$term.' instalment amount. Admissions can confirm it.';
     $heading=$term==='Term I'?'First-term fee table':($term==='Term II'?'Second-term fee table':'Annual fee table');
     if(!preg_match('/###\s+'.preg_quote($heading,'/').'.*?(?=^###\s+|\z)/misu',$section,$table))return null;
     if($grade==='Class XI'&&$year==='2027–28'&&
@@ -203,14 +203,14 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
             $row=$cols;break;
         }
     }
-    if($row===null)return 'I do not have a confirmed '.$grade.' '.($term?:'annual').' fee for '.$year.' in this school’s approved document. Please check with admissions.';
+    if($row===null)return 'I don’t have the current '.$grade.' '.($term?:'annual').' fee for '.$year.' for this class. The admissions team can confirm it.';
     $value=trim(str_replace('*','',end($row)));
     if(!preg_match('/^[₹]?\s*[\d,]+(?:\.\d+)?$/u',$value))return null;
-    $answer='For '.$grade.' in '.$year.', the school’s stated '.($term?:'annual').' fee is ₹'.ltrim($value,'₹ ').'.';
+    $answer='For '.$grade.' in '.$year.', the '.($term?:'annual').' fee is ₹'.ltrim($value,'₹ ').'.';
     if(preg_match('/(Nursery|LKG|UKG)/',$grade) && $value==='96,296')
-        $answer.=' The supplied fee components have a ₹1 discrepancy; please confirm the final payable amount with admissions.';
-    if($grade==='Class XI')$answer.=' One-time Class XI admission-fee notes conflict; please confirm those separately.';
-    return $answer.' These figures come from the school-provided fee document, not live billing.';
+        $answer.=' There is a ₹1 difference between the fee components and the total. Admissions can confirm the final payable amount.';
+    if($grade==='Class XI')$answer.=' The one-time admission fee also needs confirmation from admissions.';
+    return $answer.' The admissions team can confirm the final payable amount.';
 }
 /** Reuse school-supplied example replies, but only when unambiguous.
  * Academic-year and fees questions are handled separately.
@@ -234,7 +234,7 @@ function sf_kfile_age_answer(string $content,string $question,array $profile):?s
         else return 'I can help with the school’s age requirements. Which academic year would you like to check — '.implode(' or ',array_keys($available)).'?';
     }
     if(!isset($available[$year]))
-        return 'I don’t have the school’s published age criteria for '.$year.'. The admissions team can confirm the correct requirements.';
+        return 'I don’t have age requirements for '.$year.'. The admissions team can confirm the correct requirements.';
     $rows=[];
     foreach(explode("\n",$available[$year]) as $line){
         if(!str_starts_with(trim($line),'|'))continue;
@@ -249,10 +249,10 @@ function sf_kfile_age_answer(string $content,string $question,array $profile):?s
         $rows[$label]=['eligibility'=>$dob,'age'=>$age];
     }
     if(!$rows)return null;
-    $note="\n\nThese are the school’s published criteria for ".$year.
+    $note="\n\nThese age criteria are for ".$year.
         ". Dates shown are inclusive. Final eligibility is subject to verification by the school admissions team.";
     if($grade===''){
-        $lines=['Here’s the school’s age eligibility guidance for '.$year.':'];
+        $lines=['Here are the age requirements for '.$year.':'];
         foreach($rows as $label=>$entry){
             $eligibility=$entry['eligibility'];$age=$entry['age'];
             $isDob=preg_match('/\d{4}/',$eligibility)===1;
@@ -265,9 +265,9 @@ function sf_kfile_age_answer(string $content,string $question,array $profile):?s
     $key=$grade;
     if(preg_match('/^Class (II|III|IV|V|VI|VII|VIII|IX)$/',$grade))$key='Classes II–IX';
     if(!isset($rows[$key]))
-        return 'I don’t have a published age criterion for '.$grade.' in '.$year.'. The admissions team can help confirm it.';
+        return 'I don’t have the age requirement for '.$grade.' in '.$year.'. The admissions team can help confirm it.';
     $entry=$rows[$key];$isDob=preg_match('/\d{4}/',$entry['eligibility'])===1;
-    return 'For '.$grade.' in '.$year.', the school’s guidance is: '.
+    return 'For '.$grade.' in '.$year.', the age requirement is: '.
         ($isDob?'date of birth from ':'').$entry['eligibility'].
         ($entry['age']!=='' && strtolower($entry['age'])!=='dob cutoff not supplied'
           ?' (approximately '.$entry['age'].')':'').'.'.$note;
@@ -291,7 +291,7 @@ function sf_kfile_documents_answer(array $docs,string $question,array $profile):
                 if(count($lines)>=12)break;
             }
             if($lines){
-                return 'For admission'.($grade!==''?' to '.$grade:'').', the school’s document checklist includes:'.
+                return 'For admission'.($grade!==''?' to '.$grade:'').', you’ll generally need:'.
                     "\n\n".implode("\n",$lines).
                     "\n\nRequirements may vary by class and admission stage. The school admissions team can confirm the final checklist.";
             }
@@ -311,7 +311,7 @@ function sf_kfile_format_example(string $answer,string $question):string {
     $items=array_values(array_filter(array_map('trim',$items),static fn($i)=>$i!==''));
     if(count($items)<2||count($items)>12)return $answer.
         "\n\nPlease confirm the final requirements for your class with the admissions office.";
-    return "Based on the school’s admission information, the documents include:\n\n".
+    return "The admission documents include:\n\n".
         implode("\n",array_map(static fn($i)=>'• '.ucfirst($i),$items)).
         "\n\nThe exact checklist may depend on the class and admission stage. Our admissions team can confirm the latest requirements.";
 }
@@ -358,9 +358,9 @@ function sf_kfile_school_brief_answer(array $docs,string $question):?string {
                     continue;
                 if(preg_match('/\b(?:not|non)[ -]?CBSE\b|\bCBSE\s+not\s+affiliated\b/iu',$section))continue;
                 if(preg_match('/\b(?:affiliated\s+(?:to|with)|affiliation\s+(?:with|to))\s+(?:the\s+)?CBSE\b|\bCBSE[ -]affiliated\b/iu',$section))
-                    return 'Yes. The school’s approved information identifies it as CBSE-affiliated. The admissions office can confirm the current affiliation details if you need them.';
+                    return 'Yes, this school is CBSE-affiliated.';
                 if(preg_match('/\b(?:follows?|offers?|uses?)\s+(?:the\s+)?CBSE\s+(?:curriculum|board|syllabus)\b|\bCBSE\s+(?:curriculum|syllabus|board)\s+(?:is|offered|followed)\b/iu',$section))
-                    return 'The school’s published information says it follows the CBSE curriculum. For confirmation of its current formal affiliation, the admissions team can help.';
+                    return 'This school follows the CBSE curriculum. The admissions team can also confirm its affiliation details.';
             }
         }
         if($features){
@@ -377,9 +377,9 @@ function sf_kfile_school_brief_answer(array $docs,string $question):?string {
                         $items[]='• '.$item;
                     if(count($items)>=5)break;
                 }
-                if($items)return "Here are some of the features listed in the school’s published information:\n\n".
+                if($items)return "Here are some of the school’s features:\n\n".
                     implode("\n",$items).
-                    "\n\nFacilities and availability can change. The admissions office can confirm the latest details.";
+                    "\n\nThe admissions team can help with more details about these facilities.";
             }
         }
     }
