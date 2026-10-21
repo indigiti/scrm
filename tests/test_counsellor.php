@@ -134,6 +134,25 @@ try {
  co_assert(!str_contains((string)sf_counsellor_fact_answer('grade 3 fees',
      ['grade'=>'3'],$settings),'55,000'),'stale source fact suspended pending re-verification');
 
+ [$staleSaveStatus,$staleSaved]=co_req('PATCH','/api/schools/1/public-chat',[
+   'enabled'=>true,'ai_enabled'=>false,'overview'=>'Campus 1 approved school information.',
+   'faqs'=>[],'school_facts'=>$settings['school_facts'],'remember_days'=>30
+ ]);
+ co_assert($staleSaveStatus===200,'unrelated school settings save accepted');
+ $stillStale=co_req('GET','/api/schools/1/public-chat')[1];
+ co_assert((bool)end($stillStale['school_facts'])['needs_recheck']===true,
+     'stale source fact cannot be silently reapproved by saving settings');
+ $confirmed=$stillStale['school_facts'];
+ $confirmed[count($confirmed)-1]['confirm_recheck']=true;
+ [$approvedStatus,$approvedConfig]=co_req('PATCH','/api/schools/1/public-chat',[
+   'enabled'=>true,'ai_enabled'=>false,'overview'=>'Campus 1 approved school information.',
+   'faqs'=>[],'school_facts'=>$confirmed,'remember_days'=>30
+ ]);
+ co_assert($approvedStatus===200 &&
+   str_contains((string)sf_counsellor_fact_answer('grade 3 fees',['grade'=>'3'],$approvedConfig),'55,000'),
+   'explicit administrator re-verification restores changed source fact');
+
+
  echo "PASS: answer-first AI admission counsellor, anonymous intent, school facts, contact consent, qualification and CRM conversion\n";
 }finally{
  foreach(glob($dir.'/*')?:[] as $file)@unlink($file);
