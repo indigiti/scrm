@@ -179,6 +179,36 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
 /** Reuse school-supplied example replies, but only when unambiguous.
  * Academic-year and fees questions are handled separately.
  */
+/** Extract the published inclusive DOB window for a known class/session. */
+function sf_kfile_age_answer(string $content,string $question,array $profile):?string {
+    if(!preg_match('/age|eligib|birth|dob|वय|आयु/iu',$question))return null;
+    $year=sf_kfile_year($question,$profile);
+    $grade=sf_kfile_grade($question,$profile);
+    if($year==='')return 'The school supplies different age criteria for 2026–27 and 2027–28. Which academic year are you considering?';
+    if($grade==='')return 'Which class are you considering? I can check that year’s published age requirement.';
+    $blocks=preg_split('/(?=^##\s)/m',$content)?:[];
+    $target=null;
+    foreach($blocks as $block){
+        $first=strtok($block,"\n")?:'';
+        if(!preg_match('/^##\s+\d+\.?\s*Age eligibility/i',$first))continue;
+        if(str_contains(str_replace(['-','—'],'–',$first),$year)){$target=$block;break;}
+    }
+    if($target===null)return null;
+    $gradeLabel=$grade;
+    if(preg_match('/^Class (II|III|IV|V|VI|VII|VIII|IX)$/',$grade))
+        $gradeLabel='Classes II–IX';
+    foreach(explode("\n",$target) as $line){
+        if(!str_starts_with(trim($line),'|'))continue;
+        $cols=array_map('trim',explode('|',trim($line,' |')));
+        if(count($cols)<2)continue;
+        if(trim(str_replace('**','',$cols[0]))!==$gradeLabel)continue;
+        $rule=trim(str_replace('**','',$cols[1]));
+        return 'For '.$grade.' in '.$year.', the school lists this age/eligibility criterion: '.$rule.
+            '. Dates in the published range are inclusive. Admission is subject to the school’s process.';
+    }
+    return 'The approved document does not specify an age cutoff for '.$grade.' in '.$year.'. Please confirm with the admissions office.';
+}
+
 function sf_kfile_example_answer(array $docs,string $question,array $profile):?string {
     $topics=sf_counsellor_classify($question);
     $q=strtolower($question);
