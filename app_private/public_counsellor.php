@@ -152,10 +152,22 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             foreach($routes as $v)if((int)$v['school_id']===(int)$rec['school_id']){$school=$v;break;}
         elseif(count($routes)===1)$school=array_values($routes)[0];
         elseif($selected!=='')sf_fail(422,'Choose an available campus');
-        // Determine branch from explicitly mentioned campus name only.
-        if($school===null)foreach($routes as $v){
-            $name=strtolower((string)$v['name']);
-            if(strlen($name)>=4&&str_contains(strtolower($message),$name)){$school=$v;break;}
+        // Parent may say "Wakad branch" instead of the formal registered
+        // campus name. Accept only an unambiguous distinctive locality token.
+        if($school===null){
+            $mentioned=[];
+            $q=strtolower($message);
+            foreach($routes as $v){
+                $name=strtolower((string)$v['name']);
+                if(strlen($name)>=4&&str_contains($q,$name)){$mentioned[]=$v;continue;}
+                $tokens=preg_split('/[^a-z0-9]+/',$name,-1,PREG_SPLIT_NO_EMPTY)?:[];
+                foreach($tokens as $word)
+                    if(strlen($word)>=4 && !in_array($word,['school','international','academy','lexicon','campus','public','branch','english','medium'],true) &&
+                       preg_match('/\\b'.preg_quote($word,'/').'\\b/i',$q)){
+                        $mentioned[]=$v;break;
+                    }
+            }
+            if(count($mentioned)===1)$school=$mentioned[0];
         }
         if($school!==null&&!empty($p['chat_session'])){
             $leadId=sf_chat_session_lead($store,(string)$p['chat_session'],
