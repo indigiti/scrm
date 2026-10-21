@@ -590,6 +590,25 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='chat-remove-fact'){
    el.closest('.sf-school-fact')?.remove();return;
  }
+ if(action==='chat-select-tab'){
+   ext.chatTab=el.dataset.tab||'Overview';render();return;
+ }
+ if(action==='chat-goto-leads'){
+   state.page='Chatbot Leads';render();return;
+ }
+ if(action==='chat-source-scan'||action==='chat-source-remove'||action==='chat-source-reject'){
+   if(!isAdmin())return;
+   const id=el.dataset.id||'';
+   if(action==='chat-source-remove'&&!confirm('Remove this source URL? Its previously imported facts will require re-verification.'))return;
+   perform(async()=>{
+     const actionName=action==='chat-source-scan'?'scan':action==='chat-source-remove'?'remove':'reject';
+     const data=actionName==='reject'?{action:'reject',candidate_id:id}:{action:actionName,source_id:id};
+     const result=await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',data);
+     await loadPublicChat();
+     toast(actionName==='scan'?'Source scanned: '+Number(result.candidates||0)+' fact candidates awaiting review.':
+       actionName==='remove'?'Source removed; linked facts need re-verification.':'Extracted fact rejected');
+   });return;
+ }
  if(action==='chat-starter-faq'){
    const area=root.querySelector('#sfChatFaqs');if(!area)return;
    const template=area.querySelector('.sf-chat-faq');if(!template)return;
@@ -859,6 +878,24 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
        remove_key:!!f.elements.remove_key.checked
      });
      await loadPublicChat();toast('OpenRouter connection settings saved securely');
+   });return;
+ }
+ if(f.id==='chatSourceAddForm'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',
+       {action:'add',url:String(fd.url||'').trim()});
+     await loadPublicChat();toast('Source URL added. Select Scan / Rescan to stage facts for review.');
+   });return;
+ }
+ if(f.classList?.contains('sfSourceReview')){
+   if(!isAdmin())return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',{
+       action:'approve',candidate_id:f.dataset.id,label:String(fd.label||'').trim(),
+       details:String(fd.details||'').trim()
+     });
+     await loadPublicChat();toast('Verified source information approved for this campus.');
    });return;
  }
  if(f.id==='chatSettingsForm'){
