@@ -242,6 +242,54 @@ MARKDOWN;
  co_assert($separateStatus===200 && str_contains($separate['reply'],'105,927'),
    'different academic year returns different approved total');
  co_assert(!str_contains($gradeReply['reply'],'105,927'),'two years never mixed');
+
+ // A fresh question in an EXISTING anonymous session must NOT recycle its
+ // prior class/year. This reproduces the Kalyani Nagar screenshot where
+ // "What are the school fees?" unexpectedly returned a Class I amount.
+ [$oldTopicCode,$oldTopic]=co_req('POST',$base.'/counsel',[
+   'message'=>'Class II annual fees 2027-28','school_code'=>'campus-1'
+ ]);
+ co_assert($oldTopicCode===200 && str_contains($oldTopic['reply'],'105,927'),
+   'previous parent topic establishes a valid old grade and year');
+ [$newQuestionCode,$newQuestion]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$oldTopic['conversation_token'],
+   'message'=>'What are the school fees?','school_code'=>'campus-1'
+ ]);
+ co_assert($newQuestionCode===200 &&
+    str_contains($newQuestion['reply'],'Which class') &&
+    $newQuestion['needs_detail']==='grade' &&
+    !preg_match('/₹\s*[\d,]+/u',$newQuestion['reply']) &&
+    $newQuestion['can_introduce']===false,
+    'fresh general fee question cannot quote previous grade/year or prompt for name');
+ co_assert(($newQuestion['profile']['grade']??'')==='' &&
+   ($newQuestion['profile']['academic_year']??'')==='',
+    'stale class/year are cleared from anonymous profile on new general fee topic');
+ [$freshGradeStatus,$freshGrade]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$oldTopic['conversation_token'],
+   'message'=>'Class II','school_code'=>'campus-1'
+ ]);
+ co_assert($freshGradeStatus===200 &&
+   $freshGrade['needs_detail']==='academic_year' &&
+   str_contains($freshGrade['reply'],'academic year') &&
+   !str_contains($freshGrade['reply'],'105,927'),
+   'after class clarification do not silently reinstate old academic year');
+ [$freshYearStatus,$freshYear]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$oldTopic['conversation_token'],
+   'message'=>'2026–27','school_code'=>'campus-1'
+ ]);
+ co_assert($freshYearStatus===200 &&
+   str_contains($freshYear['reply'],'116,725') &&
+   $freshYear['can_introduce']===true,
+   'only after class and year confirmed may school give the fee and offer introduction');
+ // Explicit year but missing class must not assume previously discussed class.
+ [$yearOnlyCode,$yearOnly]=co_req('POST',$base.'/counsel',[
+   'conversation_token'=>$oldTopic['conversation_token'],
+   'message'=>'What are the fees for 2027–28?','school_code'=>'campus-1'
+ ]);
+ co_assert($yearOnlyCode===200 && $yearOnly['needs_detail']==='grade' &&
+   !str_contains($yearOnly['reply'],'105,927'),
+   'year-only new fee query cannot quote a stale class');
+
  [$class1Status,$class1]=co_req('POST',$base.'/counsel',[
    'message'=>'Class I annual fees 2026-27','school_code'=>'campus-1']);
  co_assert($class1Status===200 && str_contains($class1['reply'],'75,000'),
