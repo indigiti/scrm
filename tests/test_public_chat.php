@@ -158,7 +158,7 @@ try{
   ai_assert($status===200 && ($answer['source']??'')==='approved_knowledge','offline verified FAQ');
   ai_assert(str_contains($answer['answer'],'official admissions page'),'approved answer returned');
   [$status,$unknown]=ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+    'school_code'=>'campus-1','session'=>$session,'question'=>'What is the weekend holiday policy?']);
   ai_assert($status===200 && ($unknown['source']??'')==='human_handoff','unknown question not invented');
   [$status,$review]=ai_req('GET','/api/schools/1/public-chat/review');
   ai_assert($status===200 && count($review['items'])===1,'review queue of unanswered topics');
@@ -174,7 +174,7 @@ try{
       'id'=>$item['id'],'decision'=>'approve','answer'=>'Contact transport admissions for current routes.']);
   ai_assert($status===200 && $approved['ok'],'staff approval of verified information');
   [$status,$result]=ai_req('POST',$base.'/chat',[
-      'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
+      'school_code'=>'campus-1','session'=>$session,'question'=>'What is the weekend holiday policy?']);
   ai_assert(($result['source']??'')==='approved_knowledge','approved answer works offline');
   [$feeStatus,$feeReply]=ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-1','session'=>$session,'question'=>'fees']);
