@@ -122,6 +122,8 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
     preg_match_all('/##\s+\d*\.?\s*(?:School )?fees\s*[—–-]\s*academic year\s*(20\d\d[–—-]\d\d)/iu',$content,$ym);
     foreach($ym[1]??[] as $y)$foundYears[]=str_replace(['-','—'],'–',$y);
     $foundYears=array_unique($foundYears);
+    if($year!=='' && $foundYears && !in_array($year,$foundYears,true))
+        return 'The approved school knowledge does not list fees for '.$year.'. Please check with the admissions office.';
     if(count($foundYears)>1 && $year==='')return 'I have fee information for multiple academic years. Do you mean 2026–27 or 2027–28?';
     if($year==='' && $foundYears)$year=reset($foundYears);
     if($grade==='')return 'Which class are you considering? I can check the school’s published fee details for '.($year?:'the relevant academic year').'.';
