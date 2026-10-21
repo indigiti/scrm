@@ -12,7 +12,7 @@ var url=new URL(loader.src),base=url.href.replace(/\/static\/lexicon-form\.js(?:
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
 var thankYou=loader.dataset.thankYou||'https://lexiconedu.in/thank-you/';
 var logo=loader.dataset.logo||'https://lexiconedu.in/wp-content/uploads/2025/10/The-Lexicon-Schools-Logo.png';
-var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/lexicon-form.css?v=1';document.head.appendChild(css);
+var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/lexicon-form.css?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-form-css-version')||'1');document.head.appendChild(css);
 
 /**
  * Reuse the existing one-tag installation: load Admissions AI automatically
@@ -35,7 +35,8 @@ function loadAdmissionsChat(){
   }
   var script=document.createElement('script');
   script.async=true;
-  script.src=base+'/static/admissions-chat.js?v=single-loader-1';
+  script.src=base+'/static/admissions-chat.js?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-chat-version')||'single-loader-1');
+  script.setAttribute('data-schoolflow-chat-css-version',loader.getAttribute('data-schoolflow-chat-css-version')||'1');
   script.setAttribute('data-schoolflow-group',guid);
   script.setAttribute('data-schoolflow-chat-autoload','');
   document.head.appendChild(script);
