@@ -1,3 +1,4 @@
+:host { all: initial; }
 /* SchoolFlow: responsive conversation-led admissions, no upfront form. */
 .sfac{position:fixed;right:20px;bottom:20px;z-index:2147483000;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1d2c49}
 .sfac *{box-sizing:border-box}
@@ -31,3 +32,19 @@
 .sfac-sr{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}
 @media(max-width:480px){.sfac{right:10px;bottom:10px}.sfac-panel{bottom:58px;width:min(420px,calc(100vw - 20px));height:min(700px,calc(100dvh - 80px))}.sfac-head{padding:12px 13px}.sfac-history{padding:12px 10px}.sfac-bubble{font-size:13px}.sfac-quick{max-height:140px}.sfac-launch{padding:10px 15px}}
 @media(prefers-reduced-motion:reduce){.sfac *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Component-local controls are insulated from WordPress globals. */
+.sfac button,.sfac input{appearance:none;-webkit-appearance:none;text-transform:none;letter-spacing:normal;box-shadow:none;margin:0}
+.sfac button{line-height:1.35;vertical-align:middle}
+.sfac .sfac-headings{flex:1;min-width:0}
+.sfac .sfac-headings strong,.sfac .sfac-step{display:block}
+.sfac .sfac-headings strong{font-size:15px;line-height:1.4}
+.sfac .sfac-step{font-size:11px;line-height:1.4}
+.sfac .sfac-close{display:grid;place-items:center;height:32px;width:32px;min-height:32px;min-width:32px;padding:0;background:transparent;border:0;color:#42516b;border-radius:9px;font-size:24px;font-weight:400}
+.sfac .sfac-close:hover{background:#f0f3f9}
+.sfac .sfac-launch{display:inline-flex;align-items:center;justify-content:center;width:auto;min-height:44px;line-height:1.2;background:#344480;border:1px solid #5363a2;border-radius:28px;color:#fff;padding:12px 18px;font-size:13px;font-weight:700}
+.sfac .sfac-chip{display:inline-flex;align-items:center;justify-content:flex-start;min-height:33px;width:auto;max-width:100%;padding:8px 11px;white-space:normal;border:1px solid #b9cbea;border-radius:18px;background:#f5f8fe;color:#284575;font-weight:500;text-align:left}
+.sfac .sfac-send{display:grid;place-items:center;width:43px;height:43px;min-width:43px;min-height:43px;border:0;background:#36488d;color:#fff;border-radius:12px;padding:0}
+.sfac .sfac-entry input{box-sizing:border-box;height:43px;min-height:43px;min-width:0;flex:1;padding:0 12px;border:1px solid #cbd7e8;border-radius:13px;background:#fff;color:#1d2c49;outline:none}
+.sfac .sfac-entry input:focus-visible{border-color:#6582c7;outline:2px solid #c2d0f0;outline-offset:0}
+.sfac .sfac-panel{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.5}
