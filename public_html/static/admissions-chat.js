@@ -1,4 +1,4 @@
-/* SchoolFlow Admissions Assistant: one-message-at-a-time enquiry, then Q&A. */
+/* SchoolFlow AI Admission Counsellor — answer first, contact by permission. */
 (function(){
 'use strict';
 const loader=document.currentScript;
@@ -8,347 +8,301 @@ if(window.__schoolflowAdmissionsChatMounted)return;
 window.__schoolflowAdmissionsChatMounted=guid;
 const base=new URL(loader.src).href.replace(/\/static\/admissions-chat\.js(?:\?.*)?$/,'');
 const api=base+'/api/public/forms/'+encodeURIComponent(guid);
-// Keep WordPress/theme CSS and global button styles outside this widget.
-const host=document.createElement('div');
-host.className='schoolflow-admissions-host';
+const host=document.createElement('div');host.className='schoolflow-admissions-host';
 const mount=typeof host.attachShadow==='function'?host.attachShadow({mode:'open'}):host;
-const css=document.createElement('link');
-css.rel='stylesheet';
+const css=document.createElement('link');css.rel='stylesheet';
 css.href=base+'/static/admissions-chat.css?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-chat-css-version')||'1');
 mount.append(css);
-
-const root=document.createElement('section');
-root.className='sfac';
+const root=document.createElement('section');root.className='sfac';
 root.innerHTML=
- '<button type="button" class="sfac-launch" aria-label="Open admissions assistant" aria-expanded="false">✦ Ask Admissions</button>'+
- '<div class="sfac-panel" hidden role="dialog" aria-label="Admissions assistant">'+
- '<header class="sfac-head"><span class="sfac-avatar" aria-hidden="true">✦</span><div class="sfac-headings"><strong>Admissions Assistant</strong><span class="sfac-step">Start an enquiry</span></div>'+
- '<button type="button" class="sfac-close" aria-label="Close admissions assistant">×</button></header>'+
- '<div class="sfac-history" role="log" aria-label="Admissions conversation" aria-live="polite" aria-relevant="additions text"></div>'+
- '<div class="sfac-quick" aria-label="Chat suggestions"></div>'+
- '<form class="sfac-entry" hidden><label class="sfac-sr" for="sfac-reply">Your reply</label>'+
- '<input id="sfac-reply" type="text" maxlength="400" autocomplete="off" placeholder="Type your answer…" required>'+
- '<button class="sfac-send" type="submit" aria-label="Send reply">➤</button></form>'+
+ '<button type="button" class="sfac-launch" aria-label="Open admission counsellor" aria-expanded="false">✦ Ask Admissions</button>'+
+ '<div class="sfac-panel" hidden role="dialog" aria-label="AI Admission Counsellor">'+
+ '<header class="sfac-head"><span class="sfac-avatar" aria-hidden="true">✦</span><div class="sfac-headings"><strong>Admission Counsellor</strong><span class="sfac-step">Here to help with your questions</span></div>'+
+ '<button type="button" class="sfac-close" aria-label="Close admission counsellor">×</button></header>'+
+ '<div class="sfac-history" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions"></div>'+
+ '<div class="sfac-quick" aria-label="Suggested questions and choices"></div>'+
+ '<form class="sfac-entry"><label class="sfac-sr" for="sfac-reply">Your question or reply</label>'+
+ '<input id="sfac-reply" type="text" maxlength="400" autocomplete="off" placeholder="Ask about fees, admissions, transport…" required>'+
+ '<button class="sfac-send" type="submit" aria-label="Send message">➤</button></form>'+
  '<div class="sfac-footer"><span class="sfac-status" role="status" aria-live="polite"></span></div></div>';
-mount.append(root);
-document.body.append(host);
-
+mount.append(root);document.body.append(host);
 const $=selector=>root.querySelector(selector);
-const panel=$('.sfac-panel'),history=$('.sfac-history'),choices=$('.sfac-quick');
-const entry=$('.sfac-entry'),input=$('#sfac-reply'),sendButton=$('.sfac-send'),stepLabel=$('.sfac-step');
-const steps=['campus','parent_name','phone','student_name','grade','email','city','consent','captcha'];
-const prompts={
- parent_name:'May I have the parent or guardian’s full name?',
- phone:'What 10-digit mobile number should our admissions team use to contact you?',
- student_name:'What is the student’s name?',
- grade:'Which class or grade are you interested in?',
- email:'Would you like to share an email address? This is optional.',
- city:'Which city are you enquiring from? This is optional.',
- consent:'Before I register your enquiry: do you agree that the selected school may store these details and contact you about admissions? If the school enables an AI provider, general questions may be processed by it; your contact details are not sent to the AI.',
- captcha:'For verification, please solve the maths question below.'
-};
-let current='campus',started=false,busy=false,session='',captcha=null,attemptId='';
-let campusCode='',schools=[],draft={},quickQuestions=[],callbackRequested=false;
-const rememberStorageKey='schoolflow:admissions:return:'+guid;
-function readRemembered(){
+const panel=$('.sfac-panel'),history=$('.sfac-history'),chips=$('.sfac-quick'),
+entry=$('.sfac-entry'),input=$('#sfac-reply'),sendButton=$('.sfac-send');
+const storageKey='schoolflow:admissions:return:'+guid,anonKey='schoolflow:counsellor:anonymous:'+guid;
+let started=false,busy=false,schoolCode='',schools=[],conversationToken='',crmSession='';
+let profile={},contactState='',contactDraft={},suggestedContact=false,callbackRequested=false;
+let verification=null,attemptId='',pendingCampusContact=false;
+function status(s){$('.sfac-status').textContent=s||'';}
+function bubble(who,s){
+ const element=document.createElement('p');element.className='sfac-bubble '+(who==='parent'?'parent':'assistant');
+ element.textContent=String(s);history.append(element);history.scrollTop=history.scrollHeight;
+}
+function choices(items){
+ chips.replaceChildren();
+ for(const item of items){
+  const b=document.createElement('button');b.type='button';b.className='sfac-chip';
+  b.textContent=item.label;b.addEventListener('click',item.onClick);chips.append(b);
+ }
+}
+function field(visible,options={}){
+ entry.hidden=!visible;input.value='';
+ input.type=options.type||'text';input.inputMode=options.inputMode||'text';
+ input.maxLength=options.maxLength||400;input.placeholder=options.placeholder||'Ask me about admissions…';
+ if(visible&&!panel.hidden)input.focus();
+}
+function headline(s){$('.sfac-step').textContent=s;}
+function nonce(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),
+ b=>b.toString(16).padStart(2,'0')).join('');}
+async function request(path,body=null,headers={}){
+ const response=await fetch(api+path,{method:body?'POST':'GET',cache:'no-store',credentials:'omit',
+  headers:{Accept:'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},
+  ...(body?{body:JSON.stringify(body)}:{})});
+ const result=await response.json().catch(()=>({}));
+ if(!response.ok)throw new Error(result.detail||'The school service is temporarily unavailable.');
+ return result;
+}
+function saveAnonymous(){
  try{
-  const stored=JSON.parse(localStorage.getItem(rememberStorageKey)||'null');
-  return stored && /^[A-Za-z0-9_-]{43}$/.test(stored.token||'') &&
-   Number(stored.expires)>Date.now()/1000 ? stored:null;
+  if(conversationToken)sessionStorage.setItem(anonKey,conversationToken);
+  else sessionStorage.removeItem(anonKey);
+ }catch(e){}
+}
+function loadAnonymous(){
+ try{const t=sessionStorage.getItem(anonKey)||'';return /^[A-Za-z0-9_-]{43}$/.test(t)?t:'';}
+ catch(e){return '';}
+}
+function savedReturn(){
+ try{const v=JSON.parse(localStorage.getItem(storageKey)||'null');
+  return v&&/^[A-Za-z0-9_-]{43}$/.test(v.token||'')&&Number(v.expires)>Date.now()/1000?v:null;
  }catch(e){return null;}
 }
-function saveRemembered(data){
+function saveReturn(v){
+ try{if(v.remember_token&&v.remember_expires_at)
+   localStorage.setItem(storageKey,JSON.stringify({token:v.remember_token,expires:v.remember_expires_at}));}
+ catch(e){status('Your browser cannot save this setting. Your conversation can continue.');}
+}
+function forgetLocal(){
+ try{localStorage.removeItem(storageKey);}catch(e){}
+}
+function suggested(){
+ const options=[];
+ if(!schoolCode && schools.length>1)
+   for(const s of schools.slice(0,8))
+     options.push({label:s.name,onClick:()=>pickCampus(s)});
+ if(!schoolCode && schools.length===1)
+   options.push({label:schools[0].name,onClick:()=>pickCampus(schools[0])});
+ if(suggestedContact)
+   options.push({label:'Request a visit / callback',onClick:beginContact});
+ if(!contactState&&crmSession)
+   options.push({label:'Request admissions callback',onClick:requestCallback});
+ if(!contactState&& !crmSession && schoolCode)
+   options.push({label:'Ask admissions to contact me',onClick:beginContact});
+ choices(options);
+}
+async function pickCampus(s){
+ schoolCode=s.code;bubble('parent',s.name);
+ // Always leave the question box available; campus choice isn't a form.
+ if(pendingCampusContact){pendingCampusContact=false;beginContact();return;}
+ const text='I am interested in the '+s.name+' campus.';
+ await chat(text,false);
+}
+function updateProfile(result){
+ if(result.school_code)schoolCode=result.school_code;
+ if(result.conversation_token){conversationToken=result.conversation_token;saveAnonymous();}
+ profile=result.profile||profile;
+ suggestedContact=!!result.suggest_contact;
+ if(result.qualified)headline(result.campus_name?
+  result.campus_name+' · '+result.qualified:'School admissions · '+result.qualified);
+}
+function textSafe(raw){
+ return String(raw||'').trim().slice(0,400);
+}
+async function chat(message,echo=true){
+ if(busy||contactState)return;
+ let cleaned=textSafe(message);
+ if(cleaned.length<2)return status('Please ask a question to continue.');
+ // If the parent volunteers a mobile number, do not put it in the AI prompt.
+ const phone=(cleaned.match(/(?:^|[^\d])([6-9]\d{9})(?!\d)/)||[])[1];
+ if(phone && !crmSession){
+  const name=cleaned.replace(phone,'').replace(/^[,\s]+|[,\s]+$/g,'').replace(/[.,;:]/g,'').trim();
+  if(name.length>=2&&name.length<=100)contactDraft.parent_name=name;
+  contactDraft.phone=phone;
+  bubble('parent','Contact details provided');
+  bubble('assistant','Thank you. May the admissions team use this number to follow up about your enquiry?');
+  contactState='consent';field(false);choices([
+   {label:'Yes, I agree',onClick:()=>consent(true)},
+   {label:'No, thanks',onClick:()=>consent(false)}]);
+  return;
+ }
+ if(echo)bubble('parent',cleaned);
+ busy=true;sendButton.disabled=true;status('Finding a helpful answer…');
  try{
-  if(data?.remember_token&&data?.remember_expires_at)
-   localStorage.setItem(rememberStorageKey,JSON.stringify({
-    token:data.remember_token,expires:data.remember_expires_at
-   }));
- }catch(e){feedback('This browser does not allow saved sessions. You can still chat now.');}
-}
-function clearRemembered(){
- try{localStorage.removeItem(rememberStorageKey);}catch(e){}
-}
-function beginNew(){
- history.replaceChildren();choices.replaceChildren();session='';draft={};
- current='loading';captcha=null;attemptId='';campusCode='';callbackRequested=false;
- stage('loading');
- question('campus');
-}
-async function forgetRemembered(){
- const saved=readRemembered();
- clearRemembered();
- if(saved)try{await post('/chat-forget',{remember_token:saved.token});}
- catch(e){} // Local forget must always work even with a temporary CRM outage.
-}
-async function resumeRemembered(){
- const saved=readRemembered();
- if(!saved)return beginNew();
- if(busy)return;busy=true;choices.replaceChildren();feedback('Restoring your enquiry…');
- try{
-  const result=await post('/chat-resume',{remember_token:saved.token});
-  session=result.session;campusCode=result.school_code;
-  quickQuestions=Array.isArray(result.quick_questions)?result.quick_questions:[];
-  callbackRequested=false;
-  saveRemembered(result);
-  stage('qa');bubble('assistant','Welcome back! Your existing enquiry for '+(result.campus_name||'your campus')+' is ready. You can continue asking questions without submitting your details again.');
-  renderQuickQuestions();setInput(true,{maxLength:400,placeholder:'Ask about admissions…'});
-  feedback('Your previous enquiry was resumed.');
+  const result=await request('/counsel',{
+   message:cleaned,school_code:schoolCode,
+   conversation_token:conversationToken, ...(crmSession?{chat_session:crmSession}:{})
+  });
+  updateProfile(result);bubble('assistant',result.reply);
+  suggested();
  }catch(e){
-  clearRemembered();
-  bubble('assistant','Your saved session has expired or is unavailable. We can start a new conversation.');
-  question('campus');
- }finally{busy=false;}
+  if(/expired/i.test(e.message)){conversationToken='';saveAnonymous();}
+  bubble('assistant','I could not load that answer right now. Please try again or ask our admissions team.');
+  status(e.message);suggested();
+ }finally{busy=false;sendButton.disabled=false;if(!$('.sfac-status').textContent.includes('expired'))status('');}
 }
-function offerRemember(){
- buttons([{label:'Remember this browser',action:rememberThisBrowser},
-  {label:'Not now',action:()=>{renderQuickQuestions();feedback('You can continue chatting without saving this session.');}}]);
- bubble('assistant','Would you like this browser to remember your enquiry for the school’s selected period (15 or 30 days)? On a shared device, other people using this browser may be able to resume it. No contact details or transcript will be stored in browser storage.');
+function beginContact(){
+ if(busy)return;
+ if(!schoolCode){
+  pendingCampusContact=true;bubble('assistant','Which campus should follow up with you?');
+  choices(schools.map(s=>({label:s.name,onClick:()=>pickCampus(s)})));
+  return;
+ }
+ if(crmSession){requestCallback();return;}
+ contactState='name';contactDraft={};bubble('assistant',
+  'I can help request an admissions callback or campus visit. What name should the admissions team use? You may skip this.');
+ headline('Optional follow-up request');field(true,{maxLength:140,placeholder:'Your name (optional)'});
+ choices([{label:'Skip name',onClick:()=>captureContact('')}]);
 }
-async function rememberThisBrowser(){
- if(!session||busy)return;
- busy=true;feedback('Saving the return option…');
+function captureContact(raw){
+ const value=textSafe(raw);
+ if(contactState==='name'){
+  contactDraft.parent_name=value;
+  if(value)bubble('parent','Name provided');
+  else bubble('parent','Skip name');
+  contactState='phone';
+  bubble('assistant','Which 10-digit mobile number can admissions use to reach you?');
+  field(true,{type:'tel',inputMode:'numeric',maxLength:10,placeholder:'Mobile number'});
+  choices([]);
+ }else if(contactState==='phone'){
+  if(!/^[6-9][0-9]{9}$/.test(value))return status('Please provide a valid 10-digit mobile number.');
+  contactDraft.phone=value;bubble('parent','Mobile number provided');
+  contactState='consent';field(false);
+  bubble('assistant','Do you agree that the selected school can store this number and contact you about the enquiry or visit?');
+  choices([{label:'Yes, I agree',onClick:()=>consent(true)},
+   {label:'No, thanks',onClick:()=>consent(false)}]);
+ }
+}
+function consent(ok){
+ if(contactState!=='consent')return;
+ if(!ok){
+  contactDraft={};contactState='';bubble('assistant','No problem. We can keep discussing the school without storing your contact details.');
+  headline('Here to answer your questions');field(true);suggested();return;
+ }
+ contactState='verification';bubble('parent','I agree to admission follow-up.');
+ choices([]);field(false);loadCaptcha();
+}
+async function loadCaptcha(){
+ if(contactState!=='verification')return;
+ status('Preparing verification…');
  try{
-  const data=await post('/chat-remember',{school_code:campusCode,session});
-  saveRemembered(data);bubble('assistant','Saved. Next time, choose Continue previous enquiry; your details will not be requested again.');
- }catch(e){bubble('assistant','This browser could not save a returning session. You may continue chatting now.');}
- finally{busy=false;renderQuickQuestions();feedback('');}
-}
-
-function feedback(text){$('.sfac-status').textContent=text||'';}
-function bubble(who,text){
- const p=document.createElement('p');p.className='sfac-bubble '+(who==='parent'?'parent':'assistant');
- p.textContent=String(text);
- history.append(p);
- history.scrollTop=history.scrollHeight;
- return p;
-}
-function buttons(options){
- choices.replaceChildren();
- for(const choice of options){
-  const b=document.createElement('button');
-  b.type='button';b.className='sfac-chip';b.textContent=choice.label;
-  b.addEventListener('click',choice.action);choices.append(b);
- }
-}
-function setInput(visible,opts={}){
- entry.hidden=!visible;
- if(!visible){input.value='';return;}
- input.type=opts.type||'text';
- input.inputMode=opts.inputMode||'text';
- input.maxLength=opts.maxLength||400;
- input.placeholder=opts.placeholder||'Type your reply…';
- input.required=true;
- input.value='';
- input.autocomplete=opts.autocomplete||'off';
- sendButton.disabled=busy;
- if(!panel.hidden)input.focus();
-}
-function stage(name){
- current=name;
- stepLabel.textContent=name==='qa'?'Enquiry registered · Ask anything':
-   name==='loading'?'Connecting to your campus':
-   name==='registering'?'Registering your enquiry':
-   'Enquiry details · Step '+(Math.max(steps.indexOf(name),0)+1)+' of '+steps.length;
-}
-async function get(route){
- const r=await fetch(api+route,{method:'GET',credentials:'omit',cache:'no-store',headers:{Accept:'application/json'}});
- const data=await r.json().catch(()=>({}));
- if(!r.ok)throw new Error(data.detail||'The admissions service is temporarily unavailable.');
- return data;
-}
-async function post(route,data,headers={}){
- const r=await fetch(api+route,{method:'POST',credentials:'omit',cache:'no-store',
-  headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(data)});
- const body=await r.json().catch(()=>({}));
- if(!r.ok)throw new Error(body.detail||'The admissions service is temporarily unavailable.');
- return body;
-}
-function nonce(){
- const values=crypto.getRandomValues(new Uint8Array(16));
- return Array.from(values,x=>x.toString(16).padStart(2,'0')).join('');
-}
-function question(name){
- stage(name);
- choices.replaceChildren();feedback('');
- if(name==='campus'){
-  setInput(false);
-  bubble('assistant','Hello! 👋 I can help with admissions. Which school campus are you interested in?');
-  buttons(schools.map(s=>({label:s.name,action:()=>selectCampus(s)})));
-  return;
- }
- bubble('assistant',prompts[name]);
- if(name==='consent'){
-  setInput(false);
-  buttons([
-   {label:'I agree · Continue',action:()=>giveConsent(true)},
-   {label:'Not now',action:()=>giveConsent(false)}
-  ]);
-  return;
- }
- if(name==='captcha'){
-  setInput(false);
-  loadChallenge();
-  return;
- }
- const optional=name==='email'||name==='city';
- buttons(optional?[{label:'Skip this question',action:()=>accept('') }]:[]);
- if(name==='phone')setInput(true,{type:'tel',inputMode:'numeric',maxLength:10,placeholder:'10-digit mobile number',autocomplete:'tel'});
- else if(name==='email')setInput(true,{type:'email',maxLength:160,placeholder:'Email address (optional)',autocomplete:'email'});
- else setInput(true,{maxLength:name==='grade'?80:name==='city'?100:140,
-  placeholder:({parent_name:'Parent / guardian name',student_name:'Student name',grade:'Class or grade',city:'City (optional)'})[name]||'Your answer',
-  autocomplete:name==='parent_name'?'name':'off'});
-}
-function selectCampus(s){
- if(busy||current!=='campus')return;
- campusCode=s.code;
- bubble('parent',s.name);
- question('parent_name');
-}
-function validate(name,answer){
- if(name==='phone')return /^[6-9][0-9]{9}$/.test(answer)?'':'Please enter a valid 10-digit Indian mobile number.';
- if(name==='parent_name'||name==='student_name')return answer.length>=2&&answer.length<=140?'':'Please enter at least 2 characters.';
- if(name==='grade')return answer.length>=1&&answer.length<=80?'':'Please enter the intended class or grade.';
- if(name==='email')return !answer||(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(answer)&&answer.length<=160)?'':'Please enter a valid email address, or select Skip.';
- if(name==='city')return answer.length<=100?'':'Please enter a city of at most 100 characters.';
- return '';
-}
-function accept(raw){
- if(busy||!steps.includes(current)||['campus','consent','captcha'].includes(current))return;
- const answer=String(raw).trim().replace(/\s+/g,' ');
- const error=validate(current,answer);
- if(error){feedback(error);input.focus();return;}
- // Do not display contact data in the visible transcript.
- bubble('parent',current==='phone'?'Mobile number provided ✓':
-  current==='email'?(answer?'Email provided ✓':'Skipped'):
-  answer||'Skipped');
- draft[current]=answer;
- const next=steps[steps.indexOf(current)+1];
- if(next)question(next);
-}
-function giveConsent(agreed){
- if(current!=='consent'||busy)return;
- if(!agreed){
-  feedback('Your details have not been submitted.');
-  bubble('assistant','That’s fine. I cannot register an enquiry or start admissions Q&A without consent. You can close this chat or agree when ready.');
-  return;
- }
- draft.consent=true;bubble('parent','I agree to be contacted about admissions.');
- question('captcha');
-}
-async function loadChallenge(){
- captcha=null;feedback('Loading verification question…');
- try{
-  const result=await get('/challenge');
-  if(current!=='captcha')return;
-  captcha=result;
-  bubble('assistant',result.question);
-  choices.replaceChildren();
-  setInput(true,{type:'text',inputMode:'numeric',maxLength:3,placeholder:'Your maths answer'});
-  feedback('');
+  verification=await request('/challenge');
+  bubble('assistant','One quick check before I send your request: '+verification.question);
+  field(true,{maxLength:3,inputMode:'numeric',placeholder:'Maths verification answer'});
+  choices([]);
+  status('');
  }catch(e){
-  feedback('Could not load verification. Please try again.');
-  buttons([{label:'Retry verification',action:loadChallenge}]);
+  status('Verification unavailable.');
+  choices([{label:'Retry verification',onClick:loadCaptcha}]);
  }
 }
-async function register(value){
- if(busy||current!=='captcha')return;
- if(!captcha)return feedback('Load the verification question first.');
- if(!/^[0-9]{1,3}$/.test(value))return feedback('Enter the numeric answer to the maths question.');
- const data={
-  school_code:campusCode,parent_name:draft.parent_name,phone:draft.phone,
-  student_name:draft.student_name,grade:draft.grade,
-  email:draft.email||'',city:draft.city||'',
-  consent:true,captcha_token:captcha.token,captcha_answer:value,website:''
- };
+async function convert(answer){
+ if(contactState!=='verification'||busy)return;
+ if(!verification)return status('Please load verification first.');
+ if(!/^\d{1,3}$/.test(answer))return status('Enter the maths answer as digits.');
  if(!attemptId)attemptId=nonce();
- busy=true;stage('registering');setInput(false);choices.replaceChildren();
- bubble('parent','Verification completed');
- feedback('Creating your school enquiry…');
+ busy=true;sendButton.disabled=true;status('Saving your request with the school…');
  try{
-  const created=await post('/chat-start',data,{'Idempotency-Key':attemptId});
-  if(!created.session)throw new Error('Could not start the admissions session.');
-  session=created.session;quickQuestions=Array.isArray(created.quick_questions)?created.quick_questions:[];
-  // Do not retain guardian or student contact details after successful submission.
-  draft={};captcha=null;attemptId='';
-  stage('qa');bubble('assistant','Thank you! Your enquiry is registered. You can now ask about the admission process, classes, fees, documents or campus visits. Please avoid sharing personal details in questions.');
-  setInput(true,{maxLength:400,placeholder:'Ask about admissions…'});
-  offerRemember();
-  feedback('Your admission enquiry has been saved.');
- }catch(err){
-  stage('captcha');bubble('assistant','I could not complete the enquiry. '+(err.message||'Please try again.')+' I’ll provide a new verification question.');
-  feedback('Your enquiry is not confirmed.');await loadChallenge();
+  const result=await request('/counsel-lead',{
+   conversation_token:conversationToken,school_code:schoolCode,
+   parent_name:contactDraft.parent_name||'',phone:contactDraft.phone,
+   consent:true,captcha_token:verification.token,captcha_answer:answer
+  },{'Idempotency-Key':attemptId});
+  crmSession=result.session;
+  contactDraft={};verification=null;contactState='';attemptId='';
+  bubble('assistant','Thank you! Your contact request is recorded with the selected school. The admissions team can confirm visit times and other campus-specific details.');
+  headline('Enquiry registered · Ask anything');
+  field(true);suggested();
+  // Do not persist a returning credential without a separate opt-in.
+  choices([{label:'Remember this browser (up to 30 days)',onClick:remember},
+    {label:'Not now',onClick:suggested},
+    {label:'Request callback',onClick:requestCallback}]);
+ }catch(e){
+  status(e.message);
+  bubble('assistant','Your request has not been confirmed. I can offer a fresh verification question.');
+  await loadCaptcha();
  }finally{busy=false;sendButton.disabled=false;}
 }
-function renderQuickQuestions(){
- const options=quickQuestions.slice(0,8).filter(s=>typeof s==='string'&&s.length<181)
-   .map(q=>({label:q,action:()=>ask(q)}));
- if(!callbackRequested)options.push({label:'Request admissions callback',action:requestCallback});
- buttons(options);
-}
-async function ask(text){
- if(!session||current!=='qa'||busy)return;
- const questionText=String(text).trim();
- if(questionText.length<3||questionText.length>400)return feedback('Enter a question of 3–400 characters.');
- bubble('parent',questionText);input.value='';
- busy=true;sendButton.disabled=true;feedback('Finding an answer…');
+async function remember(){
+ if(!crmSession)return;
  try{
-  const result=await post('/chat',{school_code:campusCode,question:questionText,session});
-  bubble('assistant',result.answer);
- }catch(e){
-  bubble('assistant','I cannot answer that right now. You can request a callback from the admissions team.');
- }
- finally{busy=false;sendButton.disabled=false;feedback('');}
+  const v=await request('/chat-remember',{school_code:schoolCode,session:crmSession});
+  saveReturn(v);bubble('assistant','This browser can now continue the same enquiry next time. On a shared device, others using this browser could also resume it.');
+ }catch(e){status('Could not save return access. You can still chat.');}
+ suggested();
 }
 async function requestCallback(){
- if(!session||busy||callbackRequested)return;
- busy=true;feedback('Sending callback request…');
- try{
-  await post('/chat-followup',{school_code:campusCode,session});
-  callbackRequested=true;
-  bubble('assistant','Your callback request is recorded. The admissions team will follow up using the contact details you provided.');
-  renderQuickQuestions();
-  feedback('');
- }catch(err){feedback(err.message||'Could not request a callback.');}
- finally{busy=false;}
+ if(!crmSession||!schoolCode||busy||callbackRequested)return;
+ busy=true;
+ try{await request('/chat-followup',{school_code:schoolCode,session:crmSession});
+  callbackRequested=true;bubble('assistant','The admissions team has your callback request. They will contact you using the details you consented to share.');
+ }catch(e){status('Could not request a callback. Please retry.');}
+ finally{busy=false;suggested();}
 }
-async function start(){
- if(started)return;
- started=true;stage('loading');setInput(false);
- bubble('assistant','Welcome! I’ll take a few details through this conversation, one question at a time, before we begin admissions Q&A.');
- feedback('Loading available school campuses…');
+async function restore(){
+ const v=savedReturn();if(!v)return;
+ busy=true;status('Restoring your admission enquiry…');
  try{
-  const data=await get('/chat-config');
-  schools=(Array.isArray(data.schools)?data.schools:[]).filter(s=>typeof s.name==='string'&&typeof s.code==='string');
-  if(!schools.length){
-   bubble('assistant','Admissions chat is not enabled for this website yet.');
-   feedback('No campuses available');return;
-  }
-  const stored=readRemembered();
-  if(stored){
-   stage('returning');setInput(false);
-   bubble('assistant','Welcome back! Would you like to continue your previous admission enquiry, or start a new chat?');
-   buttons([{label:'Continue previous enquiry',action:resumeRemembered},
-      {label:'Start new chat',action:async()=>{await forgetRemembered();beginNew();}}]);
-  }else question('campus');
+  const r=await request('/chat-resume',{remember_token:v.token});
+  crmSession=r.session;schoolCode=r.school_code;conversationToken='';
+  saveAnonymous();saveReturn(r);profile={};headline(r.campus_name+' · Enquiry resumed');
+  bubble('assistant','Welcome back! Your previous school enquiry is still available. I can continue helping without asking for your contact details again. Previous chat messages are not stored.');
+  suggested();field(true);
  }catch(e){
-  bubble('assistant','I could not load the campus list. Please retry.');
-  feedback('Campus list unavailable.');
-  buttons([{label:'Retry',action:async()=>{started=false;history.replaceChildren();choices.replaceChildren();await start();}}]);
+  forgetLocal();bubble('assistant','The previous enquiry can no longer be resumed. You can start a new conversation with no registration required.');
+  choices([]);field(true);
+ }finally{busy=false;status('');}
+}
+async function begin(){
+ if(started)return;started=true;
+ bubble('assistant','Hello! 👋 I’m here to help with admissions. Ask me about fees, age requirements, documents, transport, or anything you would like to know about the school.');
+ field(true);
+ try{
+  const data=await request('/chat-config');
+  schools=Array.isArray(data.schools)?data.schools.filter(s=>typeof s.name==='string'&&typeof s.code==='string'):[];
+  if(schools.length===1)schoolCode=schools[0].code;
+  conversationToken=loadAnonymous();
+  if(savedReturn()){
+   bubble('assistant','Welcome back! Would you like to continue your previous enquiry or start a new conversation?');
+   choices([{label:'Continue previous enquiry',onClick:restore},
+     {label:'Start new chat',onClick:async()=>{const v=savedReturn();forgetLocal();
+       if(v)request('/chat-forget',{remember_token:v.token}).catch(()=>{});
+       crmSession='';conversationToken='';saveAnonymous();schoolCode=schools.length===1?schools[0].code:'';
+       history.replaceChildren();bubble('assistant','Of course. What would you like to know about admissions?');suggested();}}]);
+  }else {
+   choices([{label:'Fees',onClick:()=>chat('What are the school fees?')},
+    {label:'Admission documents',onClick:()=>chat('What documents are required for admission?')},
+    {label:'Age eligibility',onClick:()=>chat('What is the admission age requirement?')},
+    {label:'Bus transport',onClick:()=>chat('Is bus transport available?')},
+    ...((schools.length>1)?schools.slice(0,4).map(s=>({label:s.name,onClick:()=>pickCampus(s)})):[])]);
+  }
+ }catch(e){
+  bubble('assistant','I can still chat when the school service is available again. Please retry.');
+  status(e.message);started=false;
  }
 }
 $('.sfac-launch').addEventListener('click',()=>{
  panel.hidden=!panel.hidden;$('.sfac-launch').setAttribute('aria-expanded',String(!panel.hidden));
- if(!panel.hidden){start();if(current==='qa')input.focus();}
+ if(!panel.hidden){begin();input.focus();}
 });
 $('.sfac-close').addEventListener('click',()=>{
  panel.hidden=true;$('.sfac-launch').setAttribute('aria-expanded','false');$('.sfac-launch').focus();
 });
 entry.addEventListener('submit',e=>{
- e.preventDefault();
- if(busy)return;
- const value=input.value.trim();
- if(current==='captcha')register(value);
- else if(current==='qa')ask(value);
- else accept(value);
+ e.preventDefault();if(busy)return;
+ const value=input.value.trim();if(!value)return;
+ input.value='';
+ if(contactState==='name'||contactState==='phone')captureContact(value);
+ else if(contactState==='verification')convert(value);
+ else chat(value);
 });
 })();

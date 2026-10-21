@@ -1,126 +1,93 @@
-/* Browser-free interactive regression of one-message-at-a-time admission intake. */
+/* Node DOM-mock regression: parents can ask before giving any contact details. */
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {webcrypto}=require('node:crypto');
-const src=fs.readFileSync(__dirname+'/../public_html/static/admissions-chat.js','utf8');
-assert.ok(!src.includes('sfac-register'),'bulk registration form must be absent');
-assert.ok(src.includes('sfac-entry')&&src.includes('question('),'one active chat input');
+const source=fs.readFileSync(__dirname+'/../public_html/static/admissions-chat.js','utf8');
 const guid='3b8a718d-4521-4c31-8c48-5898524be892';
-function el(){
- const e={
-  children:[],listeners:{},textContent:'',value:'',hidden:false,disabled:false,
-  append(...children){this.children.push(...children);},
-  replaceChildren(...children){this.children=[...children];},
-  focus(){this.focused=true;},
-  setAttribute(name,v){this[name]=v;},
-  addEventListener(type,handler){this.listeners[type]=handler;},
-  click(){const fn=this.listeners.click;assert.ok(fn,'button click listener');return fn({target:this,preventDefault(){}});}
+function element(){
+ return {children:[],listeners:{},value:'',textContent:'',hidden:false,disabled:false,
+   append(...children){this.children.push(...children);},
+   replaceChildren(...children){this.children=[...children];},
+   focus(){this.focused=true;},setAttribute(n,v){this[n]=v;},
+   getAttribute(){return null;},
+   addEventListener(type,fn){this.listeners[type]=fn;},
+   click(){assert.ok(this.listeners.click,'control is active');return this.listeners.click({preventDefault(){}});}
  };
- return e;
 }
 const cache={};
-for(const selector of ['.sfac-panel','.sfac-history','.sfac-quick','.sfac-entry',
- '#sfac-reply','.sfac-send','.sfac-step','.sfac-status','.sfac-launch','.sfac-close'])cache[selector]=el();
-// HTML hidden attributes are not parsed by the mock DOM.
+for(const s of ['.sfac-panel','.sfac-history','.sfac-quick','.sfac-entry','#sfac-reply',
+'.sfac-send','.sfac-step','.sfac-status','.sfac-launch','.sfac-close'])cache[s]=element();
 cache['.sfac-panel'].hidden=true;
-cache['.sfac-entry'].hidden=true;
-const root=el();root.querySelector=s=>{if(!cache[s])throw Error('missing UI node '+s);return cache[s];};
+const widget=element();widget.querySelector=k=>cache[k];
+const host=element();
+host.attachShadow=({mode})=>{assert.equal(mode,'open');return {append(item){if(item===widget)host.widget=widget;}}};
 const loader={src:'https://crm.example.test/scrm/static/admissions-chat.js?v=hash',
- getAttribute(key){return {'data-schoolflow-group':guid,'data-schoolflow-chat-css-version':'1234'}[key]||null;}};
-const host=el();
-host.attachShadow=({mode})=>{
- assert.equal(mode,'open','theme-safe Shadow DOM expected');
- host.hasShadow=true;
- return {append(item){if(item===root)host.widget=root;}};
-};
-const doc={
- currentScript:loader,
- body:{append(item){assert.equal(item,host,'only isolated host mounts into WordPress page');}},
- head:{append(){}},
- createElement(tag){return tag==='section'?root:tag==='div'?host:el();}
-};
-const getUrl=url=>url.replace('https://crm.example.test/scrm/api/public/forms/'+guid,'');
-const storage=new Map();
-const localStorage={
- getItem:k=>storage.has(k)?storage.get(k):null,
- setItem:(k,v)=>storage.set(k,String(v)),
- removeItem:k=>storage.delete(k)
-};
-const requests=[];
-async function fetch(url,config){
- const route=getUrl(url);
- requests.push({route,method:config.method,body:config.body?JSON.parse(config.body):null,headers:config.headers});
+ getAttribute:key=>({'data-schoolflow-group':guid,'data-schoolflow-chat-css-version':'123'}[key]||null)};
+const doc={currentScript:loader,head:{append(){}},body:{append(e){assert.equal(e,host);}},
+ createElement:type=>type==='section'?widget:type==='div'?host:element()};
+const requests=[],store=new Map(),anon=new Map();
+const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
+const sessionStorage={getItem:k=>anon.get(k)||null,setItem:(k,v)=>anon.set(k,v),removeItem:k=>anon.delete(k)};
+async function fetch(url,options){
+ const route=url.replace('https://crm.example.test/scrm/api/public/forms/'+guid,'');
+ const body=options.body?JSON.parse(options.body):null;
+ requests.push({route,body,headers:options.headers,method:options.method});
  let result;
- if(route==='/chat-config')result={schools:[{code:'campus-1',name:'Campus Kalyani Nagar'}]};
- else if(route==='/challenge')result={question:'Solve: 4 + 7',token:'signed-math-token'};
- else if(route==='/chat-start'){
-   assert.equal(config.method,'POST');
-   assert.equal(config.body.includes('consent'),true);
-   result={session:'signed-chat-session',quick_questions:['Which documents are required?']};
- }else if(route==='/chat')result={answer:'School will confirm the document checklist.'};
- else if(route==='/chat-remember')result={remember_token:'a'.repeat(43),remember_expires_at:Math.floor(Date.now()/1000)+2592000};
- else if(route==='/chat-followup')result={ok:true};
- else throw Error('Unexpected request '+route);
+ switch(route){
+ case '/chat-config':result={schools:[{code:'campus-1',name:'Campus 1'}]};break;
+ case '/counsel':result={conversation_token:'a'.repeat(43),
+  school_code:'campus-1',campus_name:'Campus 1',profile:{grade:'2',interests:['fees']},
+  qualified:'Considering admission',suggest_contact:body.message.includes('visit'),
+  reply:body.message.includes('visit')?'We can request a Saturday visit. Would you like help?':'The fee is confirmed by the school.'};break;
+ case '/challenge':result={question:'Solve: 4 + 7',token:'signed-challenge'};break;
+ case '/counsel-lead':result={success:true,lead_created:true,session:'signed-chat-session',school_code:'campus-1'};break;
+ case '/chat-remember':result={remember_token:'b'.repeat(43),remember_expires_at:Math.floor(Date.now()/1000)+2592000};break;
+ default:throw Error('Unexpected route '+route);
+ }
  return {ok:true,json:async()=>result};
 }
-const ctx={document:doc,window:{},URL,fetch,crypto:webcrypto,localStorage,console};
-vm.runInNewContext(src,ctx,{filename:'admissions-chat.js'});
-const $=s=>cache[s],submit=v=>{
- if(v!==undefined)$('#sfac-reply').value=v;
- const handler=$('.sfac-entry').listeners.submit;
- assert.ok(handler,'chat send handler installed');
- return handler({preventDefault(){}});
-};
-const choice=(label)=>{
- const btn=$('.sfac-quick').children.find(x=>x.textContent.includes(label));
- assert.ok(btn,'missing choice '+label+' actual '+$('.sfac-quick').children.map(x=>x.textContent));
+const context={document:doc,window:{},URL,crypto:webcrypto,fetch,localStorage,sessionStorage,console};
+vm.runInNewContext(source,context,{filename:'admissions-chat.js'});
+const $=s=>cache[s],tick=()=>new Promise(r=>setImmediate(r));
+async function submit(text){
+ $('#sfac-reply').value=text;
+ const fn=$('.sfac-entry').listeners.submit;
+ assert.ok(fn,'message send registered');fn({preventDefault(){}});
+ await tick();await tick();
+}
+function choose(label){
+ const btn=$('.sfac-quick').children.find(b=>b.textContent.includes(label));
+ assert.ok(btn,'missing choice '+label+': '+$('.sfac-quick').children.map(x=>x.textContent));
  return btn.click();
-};
-const tick=()=>new Promise(resolve=>setImmediate(resolve));
+}
 (async()=>{
- assert.equal(host.hasShadow,true,'chatbot is isolated from WordPress global styles');
- assert.equal(host.widget,root,'chatbot mounted inside shadow root');
- assert.ok(!root.innerHTML.includes('sfac-register'), 'no visible bulk lead form');
- assert.ok(root.innerHTML.includes('sfac-history'),'conversation is main interface');
+ assert.ok(host.widget===widget,'Shadow DOM isolation');
  $('.sfac-launch').click();await tick();
- assert.equal(requests.filter(x=>x.route==='/chat').length,0,'AI must not start at open');
- choice('Kalyani Nagar');
- assert.equal($('.sfac-step').textContent,'Enquiry details · Step 2 of 9');
- submit('Demo Guardian');submit('9876543210');submit('Demo Student');
- submit('Nursery');
- choice('Skip this question');choice('Skip this question');
- assert.equal(requests.filter(x=>x.route==='/chat-start').length,0,'no lead before consent');
- choice('Not now');
- assert.equal(requests.filter(x=>x.route==='/chat-start').length,0,'declined consent blocks lead');
- choice('I agree');await tick();
- assert.ok(requests.some(x=>x.route==='/challenge'),'math verification fetched');
- submit('11');await tick();
- const lead=requests.filter(x=>x.route==='/chat-start');
- assert.equal(lead.length,1,'create exactly one lead');
- assert.equal(lead[0].body.parent_name,'Demo Guardian');
- assert.equal(lead[0].body.phone,'9876543210');
- assert.equal(lead[0].body.student_name,'Demo Student');
- assert.equal(lead[0].body.grade,'Nursery');
- assert.equal(lead[0].body.email,'');
- assert.equal(lead[0].body.city,'');
- assert.equal(lead[0].body.consent,true);
- assert.equal(lead[0].body.captcha_answer,'11');
- assert.ok(lead[0].headers['Idempotency-Key'],'idempotency key');
- assert.equal($('.sfac-step').textContent,'Enquiry registered · Ask anything');
- choice('Remember this browser');await tick();
- assert.equal(requests.filter(x=>x.route==='/chat-remember').length,1,'only opt-in triggers persistent remember token');
- const saved=[...storage.values()].join('');
- assert.ok(saved.includes('a'.repeat(43)),'opaque token saved for return');
- assert.ok(!saved.includes('9876543210') && !saved.includes('Demo Student'),
-  'no contact or student details in browser storage');
- assert.equal(requests.filter(x=>x.route==='/chat').length,0,'Q&A has not started automatically');
- choice('Which documents');
- await tick();
- const questions=requests.filter(x=>x.route==='/chat');
- assert.equal(questions.length,1,'quick question submits once');
- assert.equal(questions[0].body.session,'signed-chat-session');
- assert.equal(questions[0].body.question,'Which documents are required?');
- assert.ok(!JSON.stringify(questions[0].body).includes('9876543210'),'phone excluded from AI payload');
- choice('Request admissions callback');await tick();
- assert.equal(requests.filter(x=>x.route==='/chat-followup').length,1);
- console.log('PASS: one-field-per-turn intake, decline/consent, secure lead, CAPTCHA, FAQ chips, callback');
-})().catch(error=>{console.error(error);process.exitCode=1;});
+ assert.ok(widget.innerHTML.includes('Admission Counsellor'));
+ assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'opening never registers lead');
+ assert.equal($('.sfac-entry').hidden,false,'parents can immediately ask a question');
+ await submit('Grade 2 fees?');
+ assert.equal(requests.filter(x=>x.route==='/counsel').length,1,'first question answered before details');
+ assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no covert lead');
+ await submit('Can we visit Saturday?');
+ assert.equal(requests.filter(x=>x.route==='/counsel').length,2);
+ choose('Request a visit');await tick();
+ choose('Skip name');await tick();
+ await submit('9876543210');
+ assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no lead without consent');
+ choose('Yes, I agree');await tick();await tick();
+ await submit('11');
+ const leads=requests.filter(x=>x.route==='/counsel-lead');
+ assert.equal(leads.length,1);
+ assert.equal(leads[0].body.phone,'9876543210');
+ assert.equal(leads[0].body.parent_name,'');
+ assert.equal(leads[0].body.consent,true);
+ assert.equal(leads[0].body.captcha_answer,'11');
+ assert.ok(leads[0].headers['Idempotency-Key'],'idempotency on conversion');
+ assert.equal(requests.filter(x=>x.route==='/chat-remember').length,0,'remember disabled until opt-in');
+ choose('Remember this browser');await tick();await tick();
+ const recorded=[...store.values()].join('');
+ assert.ok(recorded.includes('b'.repeat(43)),'explicitly remembered token');
+ assert.ok(!recorded.includes('9876543210'),'phone never persisted to browser storage');
+ assert.ok([...anon.values()].join('').includes('a'.repeat(43)),'anonymous session uses tab-scoped storage');
+ console.log('PASS: answer-first conversation, optional visit lead, consent, math, no contact storage, explicit return');
+})().catch(e=>{console.error(e);process.exitCode=1;});

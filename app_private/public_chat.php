@@ -21,14 +21,28 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         $schoolFacts=$input['school_facts']??[];
         if(!is_array($schoolFacts)||!array_is_list($schoolFacts)||count($schoolFacts)>36)sf_fail(422,'Invalid school information entries');
         $approvedFacts=[];
+        $previousFacts=sf_chat_settings($s,$sid)['school_facts']??[];
         $allowed=['fees','documents','age_eligibility','facilities','transport','curriculum','admissions','timings','school_features','contact','other'];
         foreach($schoolFacts as $entry){
             if(!is_array($entry))sf_fail(422,'Invalid school detail');
             $category=sf_text($entry,'category',40,3);
             if(!in_array($category,$allowed,true))sf_fail(422,'Unknown school detail category');
-            $approvedFacts[]=['category'=>$category,
-                'label'=>sf_text($entry,'label',120,3),
+            $fact=['category'=>$category,'label'=>sf_text($entry,'label',120,3),
                 'details'=>sf_text($entry,'details',900,3)];
+            // A source-linked fact flagged stale cannot be silently re-enabled
+            // by an unrelated settings save. Requires a specific confirmation.
+            $sourceId=sf_text($entry,'source_id',36);
+            if($sourceId!==''){
+                foreach($previousFacts as $original)
+                    if(($original['source_id']??'')===$sourceId&&($original['category']??'')===$category){
+                        $fact['source_id']=$sourceId;
+                        $fact['source_hash']=$original['source_hash']??'';
+                        $confirmed=($entry['confirm_recheck']??false)===true;
+                        $fact['needs_recheck']=!empty($original['needs_recheck'])&&!$confirmed;
+                        break;
+                    }
+            }
+            $approvedFacts[]=$fact;
         }
         $rememberDays=$input['remember_days']??30;
         if(!is_int($rememberDays)||!in_array($rememberDays,[15,30],true))sf_fail(422,'Invalid visitor memory period');
@@ -72,7 +86,7 @@ function sf_chat_fact_answer(string $question,array $config):?string {
     if($topic===null)return null;
     $matched=[];
     foreach($config['school_facts']??[] as $fact)
-        if(($fact['category']??'')===$topic && !empty($fact['details']))$matched[]=$fact;
+        if(($fact['category']??'')===$topic && !empty($fact['details']) && empty($fact['needs_recheck']))$matched[]=$fact;
     if(!$matched)return null;
     // Return all relevant published grade-specific entries instead of merging
     // different grades into an incorrect single fee/age amount.

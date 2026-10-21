@@ -386,10 +386,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 async function loadPublicChat(){
  if(!isAdmin())return;
  const base='/api/schools/'+state.schoolId+'/public-chat';
- const [settings,provider,review,groups]=await Promise.all([
-   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites')
+ const [settings,provider,review,groups,report,sources]=await Promise.all([
+   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites'),
+   api(base+'/counsellor-report'),api(base+'/sources')
  ]);
- ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;
+ ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ ext.counsellorReport=report;ext.chatSources=sources;
  render();
 }
 
@@ -414,6 +417,9 @@ const schoolInfoCategories=[
 function schoolFactEditor(fact={}){
  const category=fact.category||'fees';
  return '<div class="sf-school-fact panel" style="padding:12px;margin-bottom:10px">'+
+  (fact.needs_recheck?'<p role="alert" class="app-alert">The source page changed. This fact is excluded from chatbot answers until you explicitly verify it below.</p>':'')+
+  '<input type="hidden" class="sf-fact-source" value="'+esc(fact.source_id||'')+'">'+
+  (fact.needs_recheck?'<label><input type="checkbox" class="sf-fact-confirm"> I reviewed this fact against the updated website and approve its publication</label>':'')+
   '<div class="form-field"><label>Information category</label><select class="sf-fact-category">'+
   schoolInfoCategories.map(([code,label])=>option(code,label,category)).join('')+'</select></div>'+
   '<div class="form-field"><label>Campus / class / topic label</label><input class="sf-fact-label" maxlength="120" value="'+esc(fact.label||'')+'" placeholder="e.g. Nursery annual tuition 2026–27"></div>'+
@@ -431,9 +437,59 @@ function publicChatPage(){
  '<div class="form-field"><label>Parent question</label><input class="sf-chat-q" maxlength="180" value="'+esc(q)+'" placeholder="e.g. Which documents are required?"></div>'+
  '<div class="form-field"><label>Approved answer</label><textarea class="sf-chat-a" maxlength="800" rows="2" placeholder="Only verified school information">'+esc(a)+'</textarea></div>'+
  '<button class="btn small" type="button" data-action="chat-remove-faq">Remove</button></div>';
- return pageHead('Public Admissions AI','School-specific chatbot settings and approved answers. No AI provider is required for verified FAQ matches.')+
- '<div class="app-alert">Answers published here are visible to parents. Check fees, documents, dates and policies before publishing. Past questions enter a private review queue and never publish automatically.</div>'+
- '<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
+
+
+ const tab=ext.chatTab||'Overview';
+ const tabs=['Overview','School Knowledge','Questions & Answers','Leads & Conversations','Settings'];
+ const heading=pageHead('AI Admission Counsellor','Answer-first counselling, verified campus knowledge, lead qualification and question reviews.');
+ const tabbar='<nav class="button-row" aria-label="AI Admission Counsellor sections" style="margin-bottom:20px;display:flex;gap:8px;flex-wrap:wrap">'+
+  tabs.map(t=>'<button type="button" class="btn small '+(tab===t?'primary':'')+'" data-action="chat-select-tab" data-tab="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</nav>';
+ const report=ext.counsellorReport||{topics:[],anonymous_conversations:0};
+ const sourceData=ext.chatSources||{sources:[],candidates:[]};
+ const chatbotCount=state.leads.filter(x=>!!x.chatbot_lead).length;
+ const overview='<div class="panel" style="padding:20px;margin-bottom:18px"><h3>Admissions counsellor overview</h3>'+
+  '<div style="display:flex;gap:28px;flex-wrap:wrap;margin:14px 0">'+
+  '<div><strong>'+Number(report.anonymous_conversations||0)+'</strong><p class="muted-note">Anonymous conversations</p></div>'+
+  '<div><strong>'+Number(chatbotCount)+'</strong><p class="muted-note">Chatbot leads</p></div>'+
+  '<div><strong>'+Number((report.topics||[]).length)+'</strong><p class="muted-note">Question topics</p></div>'+
+  '<div><strong>'+Number((ext.chatQueue||[]).length+(sourceData.candidates||[]).length)+'</strong><p class="muted-note">Pending knowledge reviews</p></div></div>'+
+  '<p><b>Publishing:</b> '+(settings.enabled?'Enabled':'Disabled')+
+  ' · <b>External AI:</b> '+(settings.ai_enabled?'Enabled':'Disabled')+
+  ' · <b>OpenRouter key:</b> '+(settings.openrouter_connected?'Connected':'Not saved')+'</p>'+
+  '<p class="muted-note">Parents can ask questions before providing contact information. Contact data is collected only after they request follow-up and explicitly agree. Unverified web and AI statements are never published automatically.</p></div>';
+ const sourcesPanel='<section class="panel" style="padding:20px;margin-bottom:18px">'+
+  '<h3>Registered school website sources</h3><p class="muted-note">Add public HTTPS pages from a domain registered to this school. Scan stages proposed information for review; no page content is published automatically. HTML and plain-text pages supported.</p>'+
+  '<form id="chatSourceAddForm" class="button-row" style="margin:10px 0"><input type="url" name="url" required maxlength="600" placeholder="https://school-domain.example/admissions/" style="min-width:240px;flex:1"><button class="btn small primary" type="submit">Add source URL</button></form>'+
+  ((sourceData.sources||[]).length?sourceData.sources.map(src=>
+   '<div style="padding:12px 0;border-top:1px solid #e3e5ef">'+
+   '<p><strong>'+esc(src.url)+'</strong> · '+esc(src.status||'not_scanned')+'</p>'+
+   '<p class="muted-note">Last checked: '+esc(src.last_checked_at||'Not scanned')+'</p>'+
+   '<div class="button-row"><button class="btn small" type="button" data-action="chat-source-scan" data-id="'+esc(src.id)+'">Scan / Rescan</button>'+
+   '<button class="btn small" type="button" data-action="chat-source-remove" data-id="'+esc(src.id)+'">Remove URL</button></div></div>').join(''):'<p class="muted-note">No source URLs added yet.</p>')+
+  '<h4>Extracted information awaiting your approval</h4>'+
+  ((sourceData.candidates||[]).length?sourceData.candidates.map(item=>
+   '<form class="sfSourceReview" data-id="'+esc(item.id)+'" style="border-top:1px solid #e3e5ef;padding:12px 0">'+
+   '<p class="muted-note">'+esc(item.category)+' · Proposed from school website</p>'+
+   '<label>Approved label<input type="text" name="label" maxlength="120" required value="'+esc(item.label||'')+'"></label>'+
+   '<label>Verified details<textarea name="details" maxlength="900" required rows="3">'+esc(item.details||'')+'</textarea></label>'+
+   '<p class="muted-note">Evidence preview: '+esc(item.evidence||'')+'</p>'+
+   '<div class="button-row"><button class="btn primary small" type="submit">Approve & publish</button>'+
+   '<button class="btn small" type="button" data-action="chat-source-reject" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):
+   '<p class="muted-note">No extracted information awaiting review.</p>')+'</section>';
+ const analytics='<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Most asked admissions topics</h3>'+
+  '<p class="muted-note">Aggregated topics with the most recent answer actually shown to parents. Counts omit raw personal chat messages. AI responses require administrator verification before becoming reusable FAQs.</p>'+
+  ((report.topics||[]).length?(report.topics||[]).map(item=>
+    '<details style="padding:12px 0;border-bottom:1px solid #e3e5ef"><summary><b>'+esc(item.topic)+(item.grade?' · Class '+esc(item.grade):'')+(item.academic_year?' · '+esc(item.academic_year):'')+'</b> · '+Number(item.count||0)+' times · '+esc(item.last_source||'')+'</summary>'+
+    '<p class="muted-note">Last actual response:</p><p>'+esc(item.last_answer||'')+'</p>'+
+    '<p class="muted-note">AI replies are not verified school facts. Review and correct the draft against an official source before publishing.</p>'+
+    '<button type="button" class="btn small" data-action="chat-topic-draft" data-index="'+Number((report.topics||[]).indexOf(item))+'">Prepare FAQ draft for review</button></details>').join(''):
+    '<p class="muted-note">Questions will appear here once parents interact with the counsellor.</p>')+'</section>';
+ const leads='<section class="panel" style="padding:20px"><h3>Leads & Conversations</h3>'+
+  '<p><b>'+chatbotCount+' chatbot leads</b> · '+Number(report.anonymous_conversations||0)+' anonymous enquiries</p>'+
+  '<p class="muted-note">Anonymous questions remain anonymised topic statistics until a parent consents to follow-up. Converted enquiries stay in the regular admissions pipeline, with interest score, intent and recommended next action.</p>'+
+  '<button type="button" class="btn primary" data-action="chat-goto-leads">Open Chatbot Leads</button></section>';
+
+ const settingsForm='<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
  '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+'<label><input type="checkbox" name="ai_enabled" '+(settings.ai_enabled?'checked':'')+'> Allow external AI for general, nonpersonal questions (optional; local FAQs work without it)</label>'+
  '<div class="form-field"><label>Verified school overview</label><textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></div>'+
  '<h3>Returning visitor</h3><div class="form-field"><label>Remember enquiry on this browser after visitor opt-in</label><select name="remember_days">'+
@@ -445,16 +501,16 @@ function publicChatPage(){
  '<button type="button" class="btn small" data-action="chat-add-fact">＋ Add school information</button>'+
  '<h3>Published questions and answers</h3><p class="muted-note">Starter Q&As are safe handoff templates. Review each answer for your campus before saving.</p><div id="sfChatFaqs">'+(faqs.length?faqs.map(f=>row(f.question,f.answer)).join(''):row())+'</div>'+
  '<div class="button-row"><button type="button" class="btn small" data-action="chat-add-faq">＋ Add FAQ</button><button type="button" class="btn small" data-action="chat-starter-faq">Add 8 starter Q&As</button>'+
- '<button type="submit" class="btn primary">Save chatbot settings</button></div></form>'+
- '<form id="chatProviderForm" class="panel" style="padding:20px;margin-bottom:18px">'+
+ '<button type="submit" class="btn primary">Save chatbot settings</button></div></form>';
+ const providerForm='<form id="chatProviderForm" class="panel" style="padding:20px;margin-bottom:18px">'+
  '<h3>OpenRouter AI provider (optional)</h3>'+
  '<p class="muted-note">OpenRouter answers only general admissions questions using published campus knowledge. Parent names, phone numbers and lead records are never included in requests. Verified local FAQ answers work without a provider.</p>'+
  '<p><b>API key:</b> '+(ext.chatProvider?.connected?'Saved securely (connection not yet tested)':'Not configured')+'</p>'+'<p><b>Live AI for parents:</b> '+(ext.chatProvider?.enabled?'Enabled':'Disabled')+'</p>'+'<p class="muted-note">Saved key does not guarantee the model works. Test the actual OpenRouter request from this server. The test sends no parent details and may use a few billable tokens.</p>'+'<button type="button" class="btn small" data-action="chat-test-provider">Test OpenRouter connection</button>'+(ext.chatProviderTest?'<p class="muted-note" role="status"><b>Test result:</b> '+esc(ext.chatProviderTest.message||'No response')+'</p>':'')+
  '<div class="form-field"><label>OpenRouter model ID</label><input name="model" maxlength="100" required value="'+esc(ext.chatProvider?.model||'openai/gpt-4o-mini')+'" placeholder="openai/gpt-4o-mini"></div>'+
  '<div class="form-field"><label>API key (leave blank to keep existing key)</label><input name="api_key" type="password" maxlength="1024" autocomplete="new-password" placeholder="sk-or-…"></div>'+
  '<label><input type="checkbox" name="remove_key"> Disconnect and remove saved OpenRouter key</label>'+
- '<button type="submit" class="btn primary">Save AI connection</button></form>'+
-'<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Unanswered question review</h3>'+
+ '<button type="submit" class="btn primary">Save AI connection</button></form>';
+ const reviewQueue='<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Unanswered question review</h3>'+
  '<p class="muted-note">Topics are filtered for personal details; approve only after writing a verified answer. Reject unsuitable topics.</p>'+
  ((ext.chatQueue||[]).length?ext.chatQueue.map(item=>
   '<form class="sfChatReview" data-id="'+esc(item.id)+'" style="padding:12px 0;border-bottom:1px solid #e3e5ef">'+
@@ -462,11 +518,17 @@ function publicChatPage(){
   '<textarea name="answer" maxlength="800" rows="2" placeholder="Verified school response for approval"></textarea>'+
   '<div class="button-row"><button type="submit" class="btn small primary">Approve & publish</button>'+
   '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):'<p class="muted-note">No unanswered topics waiting for approval.</p>')+
- '</section>'+
- '<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">The GUID embed serves both the enquiry form and the chatbot with automatically updated script versions. Older lexicon-form.js installations remain compatible. Only approved group websites can display it.</p>'+
+ '</section>';
+ const websiteEmbed='<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">The GUID embed serves both the enquiry form and the chatbot with automatically updated script versions. Older lexicon-form.js installations remain compatible. Only approved group websites can display it.</p>'+
  (groups.length?groups.map(g=>{const snippet=sfGroupEmbed(g.guid);
  return '<p><strong>'+esc(g.name)+'</strong> · '+esc(g.domain)+'</p><pre style="overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(snippet)+'</pre>'+
  '<button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy embed</button>'}).join(''):'<p class="muted-note">Connect a group website under Schools & Routing to obtain its embed snippet.</p>')+'</section>';
+ const content=tab==='Overview'?overview:
+   tab==='School Knowledge'?sourcesPanel+settingsForm:
+   tab==='Questions & Answers'?analytics+reviewQueue:
+   tab==='Leads & Conversations'?leads:
+   providerForm+websiteEmbed;
+ return heading+tabbar+content;
 }
 
 function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Connecting to SchoolFlow…</h2><p>Checking your application setup.</p></div></div>';return;}if(state.setup.needs_setup||!state.token||!state.me){root.innerHTML=loginPage();return;}
@@ -531,6 +593,46 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(action==='chat-remove-fact'){
    el.closest('.sf-school-fact')?.remove();return;
+ }
+ if(action==='chat-topic-draft'){
+   const item=(ext.counsellorReport?.topics||[])[Number(el.dataset.index)];
+   if(!item)return;
+   ext.chatTab='School Knowledge';render();
+   const container=root.querySelector('#sfChatFaqs');
+   if(!container)return;
+   let editor=container.querySelector('.sf-chat-faq');
+   if(editor && editor.querySelector('.sf-chat-q')?.value.trim()){
+     const blank=root.querySelector('#sfChatFaqs .sf-chat-faq');
+     if(blank){editor=blank.cloneNode(true);container.appendChild(editor);}
+   }
+   if(!editor)return;
+   const label=item.topic==='fees'?'What is the admission fee structure?':
+     'What can you tell me about '+item.topic.replaceAll('_',' ')+'?';
+   const qualifier=(item.grade?' Class '+item.grade+'.':'')+
+     (item.academic_year?' Academic year '+item.academic_year+'.':'');
+   editor.querySelector('.sf-chat-q').value=(label+qualifier).slice(0,180);
+   editor.querySelector('.sf-chat-a').value=String(item.last_answer||'').slice(0,800);
+   toast('FAQ draft prepared. Verify all details against official school evidence, then Save settings to publish.');
+   return;
+ }
+ if(action==='chat-select-tab'){
+   ext.chatTab=el.dataset.tab||'Overview';render();return;
+ }
+ if(action==='chat-goto-leads'){
+   state.page='Chatbot Leads';render();return;
+ }
+ if(action==='chat-source-scan'||action==='chat-source-remove'||action==='chat-source-reject'){
+   if(!isAdmin())return;
+   const id=el.dataset.id||'';
+   if(action==='chat-source-remove'&&!confirm('Remove this source URL? Its previously imported facts will require re-verification.'))return;
+   perform(async()=>{
+     const actionName=action==='chat-source-scan'?'scan':action==='chat-source-remove'?'remove':'reject';
+     const data=actionName==='reject'?{action:'reject',candidate_id:id}:{action:actionName,source_id:id};
+     const result=await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',data);
+     await loadPublicChat();
+     toast(actionName==='scan'?'Source scanned: '+Number(result.candidates||0)+' fact candidates awaiting review.':
+       actionName==='remove'?'Source removed; linked facts need re-verification.':'Extracted fact rejected');
+   });return;
  }
  if(action==='chat-starter-faq'){
    const area=root.querySelector('#sfChatFaqs');if(!area)return;
@@ -803,13 +905,33 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      await loadPublicChat();toast('OpenRouter connection settings saved securely');
    });return;
  }
+ if(f.id==='chatSourceAddForm'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',
+       {action:'add',url:String(fd.url||'').trim()});
+     await loadPublicChat();toast('Source URL added. Select Scan / Rescan to stage facts for review.');
+   });return;
+ }
+ if(f.classList?.contains('sfSourceReview')){
+   if(!isAdmin())return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/public-chat/sources','POST',{
+       action:'approve',candidate_id:f.dataset.id,label:String(fd.label||'').trim(),
+       details:String(fd.details||'').trim()
+     });
+     await loadPublicChat();toast('Verified source information approved for this campus.');
+   });return;
+ }
  if(f.id==='chatSettingsForm'){
    if(!isAdmin())return;
    perform(async()=>{
      const school_facts=[...f.querySelectorAll('.sf-school-fact')].map(card=>({
        category:card.querySelector('.sf-fact-category')?.value||'other',
        label:card.querySelector('.sf-fact-label')?.value.trim()||'',
-       details:card.querySelector('.sf-fact-details')?.value.trim()||''
+       details:card.querySelector('.sf-fact-details')?.value.trim()||'',
+       source_id:card.querySelector('.sf-fact-source')?.value||'',
+       confirm_recheck:!!card.querySelector('.sf-fact-confirm')?.checked
      })).filter(x=>x.label||x.details);
      if(school_facts.some(x=>!x.label||!x.details))throw new Error('Complete both label and details for each school information entry');
      const faqs=[...f.querySelectorAll('.sf-chat-faq')].map(card=>({
