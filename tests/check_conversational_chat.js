@@ -39,6 +39,12 @@ const doc={
  createElement(tag){return tag==='section'?root:tag==='div'?host:el();}
 };
 const getUrl=url=>url.replace('https://crm.example.test/scrm/api/public/forms/'+guid,'');
+const storage=new Map();
+const localStorage={
+ getItem:k=>storage.has(k)?storage.get(k):null,
+ setItem:(k,v)=>storage.set(k,String(v)),
+ removeItem:k=>storage.delete(k)
+};
 const requests=[];
 async function fetch(url,config){
  const route=getUrl(url);
@@ -51,11 +57,12 @@ async function fetch(url,config){
    assert.equal(config.body.includes('consent'),true);
    result={session:'signed-chat-session',quick_questions:['Which documents are required?']};
  }else if(route==='/chat')result={answer:'School will confirm the document checklist.'};
+ else if(route==='/chat-remember')result={remember_token:'a'.repeat(43),remember_expires_at:Math.floor(Date.now()/1000)+2592000};
  else if(route==='/chat-followup')result={ok:true};
  else throw Error('Unexpected request '+route);
  return {ok:true,json:async()=>result};
 }
-const ctx={document:doc,window:{},URL,fetch,crypto:webcrypto,console};
+const ctx={document:doc,window:{},URL,fetch,crypto:webcrypto,localStorage,console};
 vm.runInNewContext(src,ctx,{filename:'admissions-chat.js'});
 const $=s=>cache[s],submit=v=>{
  if(v!==undefined)$('#sfac-reply').value=v;
@@ -99,6 +106,12 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(lead[0].body.captcha_answer,'11');
  assert.ok(lead[0].headers['Idempotency-Key'],'idempotency key');
  assert.equal($('.sfac-step').textContent,'Enquiry registered · Ask anything');
+ choice('Remember this browser');await tick();
+ assert.equal(requests.filter(x=>x.route==='/chat-remember').length,1,'only opt-in triggers persistent remember token');
+ const saved=[...storage.values()].join('');
+ assert.ok(saved.includes('a'.repeat(43)),'opaque token saved for return');
+ assert.ok(!saved.includes('9876543210') && !saved.includes('Demo Student'),
+  'no contact or student details in browser storage');
  assert.equal(requests.filter(x=>x.route==='/chat').length,0,'Q&A has not started automatically');
  choice('Which documents');
  await tick();
