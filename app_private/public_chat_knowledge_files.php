@@ -115,22 +115,36 @@ function sf_kfile_cut(string $text,int $limit):string {
     while($part!==''&&!preg_match('//u',$part))$part=substr($part,0,-1);
     return $part;
 }
-function sf_kfile_grade(string $question,array $profile):string {
-    $raw=(string)($profile['grade']??'');
-    if(preg_match('/\b(?:class|grade|std|standard)\s*(nursery|pre[- ]?nursery|lkg|ukg|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i|[1-9]|1[0-2])\b/iu',$question,$m))
-        $raw=$m[1];
-    $norm=strtolower(trim($raw));
-    if($norm===''){
-        if(preg_match('/\b(pre[- ]?nursery|nursery|lkg|ukg)\b/iu',$question,$m))$norm=strtolower($m[1]);
-        else return '';
-    }
+/** Grade explicitly supplied THIS turn takes priority over a remembered grade.
+ * Handles "fees for 5 th", "5th class", "Grade 5", "Class V" and KG names.
+ */
+function sf_kfile_explicit_grade(string $question):string {
+    $q=trim($question);
+    $token='';
+    if(preg_match('/\b(?:class|grade|std|standard)\s*(?:is\s+|for\s+)?(pre[- ]?nursery|nursery|lkg|ukg|(?:1[0-2]|[1-9])\s*(?:st|nd|rd|th)?|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/iu',$q,$m))
+        $token=trim($m[1]);
+    elseif(preg_match('/(?<![0-9])(?:1[0-2]|[1-9])\s*(?:st|nd|rd|th)\b/iu',$q,$m))
+        $token=$m[0];
+    elseif(preg_match('/\b(pre[- ]?nursery|nursery|lkg|ukg)\b/iu',$q,$m))
+        $token=$m[1];
+    if($token==='')return '';
+    $normal=strtolower(trim(preg_replace('/\s*(?:st|nd|rd|th)\s*$/iu','',$token)??$token));
+    $normal=preg_replace('/\s+/u',' ',$normal)??$normal;
     $roman=['1'=>'I','2'=>'II','3'=>'III','4'=>'IV','5'=>'V','6'=>'VI',
-      '7'=>'VII','8'=>'VIII','9'=>'IX','10'=>'X','11'=>'XI','12'=>'XII'];
-    if(isset($roman[$norm]))return 'Class '.$roman[$norm];
-    if(in_array(strtoupper($norm),$roman,true))return 'Class '.strtoupper($norm);
-    if($norm==='pre nursery'||$norm==='pre-nursery')return 'Pre-Nursery';
-    if(in_array($norm,['nursery','lkg','ukg'],true))return strtoupper($norm)==='NURSERY'?'Nursery':strtoupper($norm);
+       '7'=>'VII','8'=>'VIII','9'=>'IX','10'=>'X','11'=>'XI','12'=>'XII'];
+    if(isset($roman[$normal]))return 'Class '.$roman[$normal];
+    if(in_array(strtoupper($normal),$roman,true))return 'Class '.strtoupper($normal);
+    if(in_array($normal,['pre-nursery','pre nursery'],true))return 'Pre-Nursery';
+    if(in_array($normal,['nursery','lkg','ukg'],true))
+        return $normal==='nursery'?'Nursery':strtoupper($normal);
     return '';
+}
+function sf_kfile_grade(string $question,array $profile):string {
+    $direct=sf_kfile_explicit_grade($question);
+    if($direct!=='')return $direct;
+    $previous=trim((string)($profile['grade']??''));
+    if($previous==='')return '';
+    return sf_kfile_explicit_grade('Class '.$previous);
 }
 /** Return exact stated total, never recompute fee components or assume a year. */
 function sf_kfile_fee_answer(string $content,string $question,array $profile):?string {
