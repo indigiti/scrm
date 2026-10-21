@@ -72,7 +72,7 @@ function sf_chat_fact_answer(string $question,array $config):?string {
     if($topic===null)return null;
     $matched=[];
     foreach($config['school_facts']??[] as $fact)
-        if(($fact['category']??'')===$topic && !empty($fact['details']))$matched[]=$fact;
+        if(($fact['category']??'')===$topic && !empty($fact['details']) && empty($fact['needs_recheck']))$matched[]=$fact;
     if(!$matched)return null;
     // Return all relevant published grade-specific entries instead of merging
     // different grades into an incorrect single fee/age amount.
