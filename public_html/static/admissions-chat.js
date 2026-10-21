@@ -6,6 +6,7 @@ const guid=(loader?.getAttribute('data-schoolflow-group')||'').trim().toLowerCas
 if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(guid))return;
 if(window.__schoolflowAdmissionsChatMounted)return;
 window.__schoolflowAdmissionsChatMounted=guid;
+window.__schoolflowAdmissionsChatState={guid:guid,open:false};
 const base=new URL(loader.src).href.replace(/\/static\/admissions-chat\.js(?:\?.*)?$/,'');
 const api=base+'/api/public/forms/'+encodeURIComponent(guid);
 const host=document.createElement('div');host.className='schoolflow-admissions-host';
@@ -355,12 +356,21 @@ async function begin(){
   status(e.message);started=false;
  }
 }
+function announceChatState(){
+ window.__schoolflowAdmissionsChatState={guid:guid,open:!panel.hidden};
+ document.dispatchEvent(new CustomEvent('schoolflow:admissions-chat-state',{
+  detail:{guid:guid,open:!panel.hidden}
+ }));
+}
 $('.sfac-launch').addEventListener('click',()=>{
  panel.hidden=!panel.hidden;$('.sfac-launch').setAttribute('aria-expanded',String(!panel.hidden));
+ announceChatState();
  if(!panel.hidden){begin();input.focus();}
 });
 $('.sfac-close').addEventListener('click',()=>{
- panel.hidden=true;$('.sfac-launch').setAttribute('aria-expanded','false');$('.sfac-launch').focus();
+ panel.hidden=true;$('.sfac-launch').setAttribute('aria-expanded','false');
+ announceChatState();
+ $('.sfac-launch').focus();
 });
 entry.addEventListener('submit',e=>{
  e.preventDefault();if(busy)return;
