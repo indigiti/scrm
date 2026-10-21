@@ -94,10 +94,6 @@ try{
   [$status,$answer]=ai_req('POST',$base.'/chat',$question);
   ai_assert($status===200 && ($answer['source']??'')==='approved_knowledge','offline verified FAQ');
   ai_assert(str_contains($answer['answer'],'official admissions page'),'approved answer returned');
-  [$feeStatus,$feeReply]=ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','session'=>$session,'question'=>'fees']);
-  ai_assert($feeStatus===200 && str_contains($feeReply['answer'],'verified fee'),
-    'short fee enquiry gets useful callback guidance without inventing prices');
   [$status,$unknown]=ai_req('POST',$base.'/chat',[
     'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
   ai_assert($status===200 && ($unknown['source']??'')==='human_handoff','unknown question not invented');
@@ -117,6 +113,11 @@ try{
   [$status,$result]=ai_req('POST',$base.'/chat',[
       'school_code'=>'campus-1','session'=>$session,'question'=>'What is the bus pickup schedule?']);
   ai_assert(($result['source']??'')==='approved_knowledge','approved answer works offline');
+  [$feeStatus,$feeReply]=ai_req('POST',$base.'/chat',[
+    'school_code'=>'campus-1','session'=>$session,'question'=>'fees']);
+  ai_assert($feeStatus===200 && str_contains($feeReply['answer'],'verified fee'),
+    'short fee enquiry gets useful callback guidance without inventing prices');
+
   // Provider key is encrypted per school. No API response ever returns it.
   $rawKey='sk-or-v1-'.str_repeat('a',32);
   [$status,$provider]=ai_req('PATCH','/api/schools/1/public-chat/provider',[
