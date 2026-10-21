@@ -72,7 +72,7 @@ function sf_counsellor_fact_answer(string $question,array $profile,array $settin
     foreach($topics as $topic)if($topic!=='visit'){$category=$topic;break;}
     if($category===null)return null;
     $facts=array_values(array_filter($settings['school_facts']??[],
-        static fn($f)=>($f['category']??'')===$category&&!empty($f['details'])));
+        static fn($f)=>($f['category']??'')===$category&&!empty($f['details'])&&empty($f['needs_recheck'])));
     if(!$facts)return null;
     $grade=strtolower(trim((string)($profile['grade']??'')));
     if($grade!=='' && in_array($category,['fees','age_eligibility'],true)){
