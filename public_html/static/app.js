@@ -403,6 +403,24 @@ const sfStarterQuestions=[
  ['Is school transport available?','Transport routes and availability must be confirmed by the school admissions team.'],
  ['How can I request a callback?','After registering your enquiry, select Request admissions callback in this chat.']
 ];
+
+const schoolInfoCategories=[
+ ['fees','Fees & charges'],['documents','Admission documents'],
+ ['age_eligibility','Age eligibility'],['facilities','Facilities'],
+ ['transport','Bus & transport'],['curriculum','Curriculum & board'],
+ ['admissions','Admission process'],['timings','School timings'],
+ ['school_features','Special features'],['contact','Contact details'],['other','Other approved information']
+];
+function schoolFactEditor(fact={}){
+ const category=fact.category||'fees';
+ return '<div class="sf-school-fact panel" style="padding:12px;margin-bottom:10px">'+
+  '<div class="form-field"><label>Information category</label><select class="sf-fact-category">'+
+  schoolInfoCategories.map(([code,label])=>option(code,label,category)).join('')+'</select></div>'+
+  '<div class="form-field"><label>Campus / class / topic label</label><input class="sf-fact-label" maxlength="120" value="'+esc(fact.label||'')+'" placeholder="e.g. Nursery annual tuition 2026–27"></div>'+
+  '<div class="form-field"><label>Verified school information</label><textarea class="sf-fact-details" maxlength="900" rows="3" placeholder="Enter verified amount, age rule, document list, bus coverage, facilities or other approved details">'+esc(fact.details||'')+'</textarea></div>'+
+  '<button type="button" class="btn small" data-action="chat-remove-fact">Remove information entry</button></div>';
+}
+
 function publicChatPage(){
  if(!isAdmin())return '<div class="empty-state">School administrator access required.</div>';
  const settings=ext.chatSettings;
@@ -418,6 +436,13 @@ function publicChatPage(){
  '<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
  '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+'<label><input type="checkbox" name="ai_enabled" '+(settings.ai_enabled?'checked':'')+'> Allow external AI for general, nonpersonal questions (optional; local FAQs work without it)</label>'+
  '<div class="form-field"><label>Verified school overview</label><textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></div>'+
+ '<h3>Returning visitor</h3><div class="form-field"><label>Remember enquiry on this browser after visitor opt-in</label><select name="remember_days">'+
+ option(15,'15 days',String(settings.remember_days||30))+option(30,'30 days',String(settings.remember_days||30))+
+ '</select></div>'+
+ '<h3>Verified school information · multiple entries per campus</h3>'+
+ '<p class="muted-note">Select the current school above, then add as many approved entries as needed (up to 36 per campus). Add separate entries for each grade, school fee, age eligibility, document checklist, facility, bus route or other detail. Answers will not mix information from different schools.</p>'+
+ '<div id="sfSchoolFacts">'+(settings.school_facts||[]).map(schoolFactEditor).join('')+'</div>'+
+ '<button type="button" class="btn small" data-action="chat-add-fact">＋ Add school information</button>'+
  '<h3>Published questions and answers</h3><p class="muted-note">Starter Q&As are safe handoff templates. Review each answer for your campus before saving.</p><div id="sfChatFaqs">'+(faqs.length?faqs.map(f=>row(f.question,f.answer)).join(''):row())+'</div>'+
  '<div class="button-row"><button type="button" class="btn small" data-action="chat-add-faq">＋ Add FAQ</button><button type="button" class="btn small" data-action="chat-starter-faq">Add 8 starter Q&As</button>'+
  '<button type="submit" class="btn primary">Save chatbot settings</button></div></form>'+
@@ -497,6 +522,16 @@ async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POS
  const csv='\ufeff'+lines.map(r=>r.map(v=>'"'+( /^[\s]*[=+\-@]/.test(String(v??'')) ? "\'"+String(v??'') : String(v??'') ).replaceAll('"','""')+'"').join(',')).join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=`schoolflow-school-${state.schoolId}-enquiries.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported');}
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
 
+ if(action==='chat-add-fact'){
+   const container=root.querySelector('#sfSchoolFacts');
+   if(!container)return;
+   if(container.querySelectorAll('.sf-school-fact').length>=36)return toast('Maximum 36 school information entries',true);
+   container.insertAdjacentHTML('beforeend',schoolFactEditor());
+   return;
+ }
+ if(action==='chat-remove-fact'){
+   el.closest('.sf-school-fact')?.remove();return;
+ }
  if(action==='chat-starter-faq'){
    const area=root.querySelector('#sfChatFaqs');if(!area)return;
    const template=area.querySelector('.sf-chat-faq');if(!template)return;
@@ -771,13 +806,20 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='chatSettingsForm'){
    if(!isAdmin())return;
    perform(async()=>{
+     const school_facts=[...f.querySelectorAll('.sf-school-fact')].map(card=>({
+       category:card.querySelector('.sf-fact-category')?.value||'other',
+       label:card.querySelector('.sf-fact-label')?.value.trim()||'',
+       details:card.querySelector('.sf-fact-details')?.value.trim()||''
+     })).filter(x=>x.label||x.details);
+     if(school_facts.some(x=>!x.label||!x.details))throw new Error('Complete both label and details for each school information entry');
      const faqs=[...f.querySelectorAll('.sf-chat-faq')].map(card=>({
        question:card.querySelector('.sf-chat-q')?.value.trim()||'',
        answer:card.querySelector('.sf-chat-a')?.value.trim()||''
      })).filter(x=>x.question||x.answer);
      if(faqs.some(x=>!x.question||!x.answer))throw new Error('Complete both the question and answer for each FAQ');
      await api('/api/schools/'+state.schoolId+'/public-chat','PATCH',{
-       enabled:!!f.elements.enabled.checked,ai_enabled:!!f.elements.ai_enabled.checked,overview:fd.overview||'',faqs
+       enabled:!!f.elements.enabled.checked,ai_enabled:!!f.elements.ai_enabled.checked,
+       overview:fd.overview||'',faqs,school_facts,remember_days:Number(fd.remember_days||30)
      });
      await loadPublicChat();toast('Admissions chatbot settings saved');
    });return;
