@@ -343,6 +343,49 @@ function sf_kfile_example_answer(array $docs,string $question,array $profile):?s
     return null;
 }
 
+/** Answer board/CBSE and features only when the approved source is explicit. */
+function sf_kfile_school_brief_answer(array $docs,string $question):?string {
+    $board=preg_match('/\bcbse\b|\b(board|affiliation)\b/iu',$question)===1;
+    $features=preg_match('/\b(school features?|highlights?|facilities|what makes (?:the )?school special)\b/iu',$question)===1;
+    if(!$board && !$features)return null;
+    foreach($docs as $doc){
+        $content=(string)($doc['content']??'');
+        if($board){
+            $sections=preg_split('/(?=^#{1,3}\s+\S)/m',$content)?:[];
+            foreach($sections as $section){
+                $heading=trim(strtok($section,"\n")?:'');
+                if(!preg_match('/^#{1,3}\s+.*\b(?:board|curriculum|affiliation|school identity|school information|about (?:the )?school)\b/iu',$heading))
+                    continue;
+                if(preg_match('/\b(?:not|non)[ -]?CBSE\b|\bCBSE\s+not\s+affiliated\b/iu',$section))continue;
+                if(preg_match('/\b(?:affiliated\s+(?:to|with)|affiliation\s+(?:with|to))\s+(?:the\s+)?CBSE\b|\bCBSE[ -]affiliated\b/iu',$section))
+                    return 'Yes. The school’s approved information identifies it as CBSE-affiliated. The admissions office can confirm the current affiliation details if you need them.';
+                if(preg_match('/\b(?:follows?|offers?|uses?)\s+(?:the\s+)?CBSE\s+(?:curriculum|board|syllabus)\b|\bCBSE\s+(?:curriculum|syllabus|board)\s+(?:is|offered|followed)\b/iu',$section))
+                    return 'The school’s published information says it follows the CBSE curriculum. For confirmation of its current formal affiliation, the admissions team can help.';
+            }
+        }
+        if($features){
+            $sections=preg_split('/(?=^#{1,3}\s+\S)/m',$content)?:[];
+            foreach($sections as $section){
+                $heading=trim(strtok($section,"\n")?:'');
+                if(!preg_match('/^#{1,3}\s+.*\b(?:school features|school highlights|key highlights|campus facilities|facilities|infrastructure|campus amenities)\b/iu',$heading))
+                    continue;
+                $items=[];
+                foreach(explode("\n",$section) as $line){
+                    if(!preg_match('/^\s*[-*+]\s+(.+)$/u',$line,$m))continue;
+                    $item=trim(str_replace(['**','__'],'',$m[1]));
+                    if($item!=='' && strlen($item)<180 && !preg_match('/(?:please contact|for more information|example only)/i',$item))
+                        $items[]='• '.$item;
+                    if(count($items)>=5)break;
+                }
+                if($items)return "Here are some of the features listed in the school’s published information:\n\n".
+                    implode("\n",$items).
+                    "\n\nFacilities and availability can change. The admissions office can confirm the latest details.";
+            }
+        }
+    }
+    return null;
+}
+
 function sf_kfile_context(array $docs,string $question,array $profile):string {
     $topics=sf_counsellor_classify($question);
     $relevant=[];
