@@ -38,7 +38,7 @@ function sf_counsellor_classify(string $question):array {
 function sf_counsellor_extract(string $message,array $profile):array {
     $profile=array_merge(['grade'=>'','academic_year'=>'','residential_area'=>'',
         'interests'=>[],'visit_preference'=>'','lead_intent'=>'Browsing'], $profile);
-    if(preg_match('/\b(?:grade|class|std|standard)\s*(?:is\s*)?([0-9]{1,2}|nursery|jr\.?\s*kg|sr\.?\s*kg|lkg|ukg|kindergarten)\b/i',$message,$m))
+    if(preg_match('/\b(?:grade|class|std|standard)\s*(?:is\s*)?([0-9]{1,2}|nursery|jr\.?\s*kg|sr\.?\s*kg|lkg|ukg|kindergarten|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/i',$message,$m))
         $profile['grade']=substr(trim($m[1]),0,40);
     if(preg_match('/\b(20\d{2}\s*[-\/]\s*(?:20)?\d{2})\b/',$message,$m))
         $profile['academic_year']=preg_replace('/\s+/','',$m[1]);
@@ -208,6 +208,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         // year-specific fees. Never merge two academic years or campuses.
         foreach($knowledgeFiles as $doc)if($reply===null){
             $specific=sf_kfile_fee_answer((string)$doc['content'],$q,$profile);
+            if($specific===null)$specific=sf_kfile_age_answer((string)$doc['content'],$q,$profile);
             if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
         }
         if($reply===null){
