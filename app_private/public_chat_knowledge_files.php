@@ -202,36 +202,109 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
  * Academic-year and fees questions are handled separately.
  */
 /** Extract the published inclusive DOB window for a known class/session. */
+/** Read the published campus-specific table, including general all-class queries. */
 function sf_kfile_age_answer(string $content,string $question,array $profile):?string {
     if(!preg_match('/age|eligib|birth|dob|वय|आयु/iu',$question))return null;
     $year=sf_kfile_year($question,$profile);
     $grade=sf_kfile_grade($question,$profile);
-    if($year==='')return 'The school supplies different age criteria for 2026–27 and 2027–28. Which academic year are you considering?';
-    if($grade==='')return 'Which class are you considering? I can check that year’s published age requirement.';
     $blocks=preg_split('/(?=^##\s)/m',$content)?:[];
-    $target=null;
+    $available=[];
     foreach($blocks as $block){
-        $first=strtok($block,"\n")?:'';
-        if(!preg_match('/^##\s+\d+\.?\s*Age eligibility/i',$first))continue;
-        if(str_contains(str_replace(['-','—'],'–',$first),$year)){$target=$block;break;}
+        $heading=strtok($block,"\n")?:'';
+        if(!preg_match('/^##\s+\d+\.?\s*Age eligibility.*?(20\d\d[–—-]\d\d)/iu',$heading,$m))continue;
+        $y=str_replace(['-','—'],'–',$m[1]);$available[$y]=$block;
     }
-    if($target===null)return null;
-    $gradeLabel=$grade;
-    if(preg_match('/^Class (II|III|IV|V|VI|VII|VIII|IX)$/',$grade))
-        $gradeLabel='Classes II–IX';
-    foreach(explode("\n",$target) as $line){
+    if(!$available)return null;
+    if($year===''){
+        if(count($available)===1)$year=(string)array_key_first($available);
+        else return 'I can help with the school’s age requirements. Which academic year would you like to check — '.implode(' or ',array_keys($available)).'?';
+    }
+    if(!isset($available[$year]))
+        return 'I don’t have the school’s published age criteria for '.$year.'. The admissions team can confirm the correct requirements.';
+    $rows=[];
+    foreach(explode("\n",$available[$year]) as $line){
         if(!str_starts_with(trim($line),'|'))continue;
-        $cols=array_map('trim',explode('|',trim($line,' |')));
-        if(count($cols)<2)continue;
-        if(trim(str_replace('**','',$cols[0]))!==$gradeLabel)continue;
-        $rule=trim(str_replace('**','',$cols[1]));
-        return 'For '.$grade.' in '.$year.', the school lists this age/eligibility criterion: '.$rule.
-            '. Dates in the published range are inclusive. Admission is subject to the school’s process.';
+        $cells=array_map(static fn($cell)=>trim(str_replace(['**','__'],'',$cell)),
+            explode('|',trim($line,' |')));
+        if(count($cells)<2)continue;
+        $label=$cells[0];
+        if(!in_array($label,['Pre-Nursery','Nursery','LKG','UKG','Class I','Classes II–IX'],true))continue;
+        $dob=trim($cells[1]);
+        $age=(string)($cells[2]??'');
+        if($dob==='')continue;
+        $rows[$label]=['eligibility'=>$dob,'age'=>$age];
     }
-    return 'The approved document does not specify an age cutoff for '.$grade.' in '.$year.'. Please confirm with the admissions office.';
+    if(!$rows)return null;
+    $note="\n\nThese are the school’s published criteria for ".$year.
+        ". Dates shown are inclusive. Final eligibility is subject to verification by the school admissions team.";
+    if($grade===''){
+        $lines=['Here’s the school’s age eligibility guidance for '.$year.':'];
+        foreach($rows as $label=>$entry){
+            $eligibility=$entry['eligibility'];$age=$entry['age'];
+            $isDob=preg_match('/\d{4}/',$eligibility)===1;
+            $lines[]='• '.$label.': '.($isDob?'Born between ':'').$eligibility.
+                ($age!=='' && strtolower($age)!=='dob cutoff not supplied'?' ('.$age.')':'');
+        }
+        return implode("\n",$lines).$note.
+            "\n\nWhich class are you considering? I can help you check the relevant requirement.";
+    }
+    $key=$grade;
+    if(preg_match('/^Class (II|III|IV|V|VI|VII|VIII|IX)$/',$grade))$key='Classes II–IX';
+    if(!isset($rows[$key]))
+        return 'I don’t have a published age criterion for '.$grade.' in '.$year.'. The admissions team can help confirm it.';
+    $entry=$rows[$key];$isDob=preg_match('/\d{4}/',$entry['eligibility'])===1;
+    return 'For '.$grade.' in '.$year.', the school’s guidance is: '.
+        ($isDob?'date of birth from ':'').$entry['eligibility'].
+        ($entry['age']!=='' && strtolower($entry['age'])!=='dob cutoff not supplied'
+          ?' (approximately '.$entry['age'].')':'').'.'.$note;
+}
+/** Format verified school document lists as a parent-friendly checklist. */
+function sf_kfile_documents_answer(array $docs,string $question,array $profile):?string {
+    if(!in_array('documents',sf_counsellor_classify($question),true))return null;
+    $grade=sf_kfile_grade($question,$profile);
+    foreach($docs as $doc){
+        $content=(string)($doc['content']??'');
+        $sections=preg_split('/(?=^#{1,3}\s+\S)/m',$content)?:[];
+        foreach($sections as $section){
+            $heading=strtok($section,"\n")?:'';
+            if(!preg_match('/^#{1,3}\s+.*(?:documents|document checklist|application requirements)/iu',$heading))continue;
+            $lines=[];
+            foreach(explode("\n",$section) as $line){
+                $line=trim($line);
+                if(!preg_match('/^(?:[-*+]\s+|\d+[.)]\s+)(.+)$/u',$line,$m))continue;
+                $item=trim(preg_replace('/\*\*|__/u','',$m[1])??$m[1]);
+                if($item!=='' && !preg_match('/^[-|: ]+$/',$item))$lines[]='• '.sf_kfile_cut($item,270);
+                if(count($lines)>=12)break;
+            }
+            if($lines){
+                return 'For admission'.($grade!==''?' to '.$grade:'').', the school’s document checklist includes:'.
+                    "\n\n".implode("\n",$lines).
+                    "\n\nRequirements may vary by class and admission stage. The school admissions team can confirm the final checklist.";
+            }
+        }
+    }
+    return null;
+}
+
+/** Promote approved brief document replies into a real, readable list. */
+function sf_kfile_format_example(string $answer,string $question):string {
+    $answer=trim($answer);
+    if(!str_contains(strtolower($question),'document'))return $answer;
+    // List only items explicitly supplied in the school answer.
+    $content=preg_replace('/^(?:the )?(?:required )?documents?\s+(?:include|are)\s*:?\s*/iu','',$answer)??$answer;
+    $content=rtrim($content,'. ');
+    $items=preg_split('/\s*,\s*|\s+and\s+/iu',$content)?:[];
+    $items=array_values(array_filter(array_map('trim',$items),static fn($i)=>$i!==''));
+    if(count($items)<2||count($items)>12)return $answer.
+        "\n\nPlease confirm the final requirements for your class with the admissions office.";
+    return "Based on the school’s admission information, the documents include:\n\n".
+        implode("\n",array_map(static fn($i)=>'• '.ucfirst($i),$items)).
+        "\n\nThe exact checklist may depend on the class and admission stage. Our admissions team can confirm the latest requirements.";
 }
 
 function sf_kfile_example_answer(array $docs,string $question,array $profile):?string {
+    $documents=sf_kfile_documents_answer($docs,$question,$profile);
+    if($documents!==null)return $documents;
     $topics=sf_counsellor_classify($question);
     $q=strtolower($question);
     $example=null;
@@ -248,7 +321,7 @@ function sf_kfile_example_answer(array $docs,string $question,array $profile):?s
             $lines=preg_split('/\R/u',$content);
             for($j=$index+1;$j<min($index+5,count($lines));$j++){
                 if(preg_match('/^\s*A:\s*(.+)/u',trim($lines[$j]),$m))
-                    return trim(preg_replace('/\*\*/','',$m[1])??$m[1]);
+                    return sf_kfile_format_example((string)(preg_replace('/\*\*/','',$m[1])??$m[1]),$example);
                 if(preg_match('/^\*\*Q:/',$lines[$j]))break;
             }
         }
