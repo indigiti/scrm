@@ -109,6 +109,38 @@ MARKDOWN;
     'correct Grade 2 annual fee 2026-27');
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Grade 2 fees 2027-28',[]),'105,927'),
     'different annual fee next year, not merged');
+ kf_assert(sf_kfile_grade('fees for 5 th',['grade'=>'I'])==='Class V',
+    'fifth grade shorthand overrides previously remembered Class I');
+ kf_assert(sf_kfile_grade('5th standard fees',['grade'=>'I'])==='Class V',
+    'ordinal grade recognised in casual parent question');
+ kf_assert(sf_kfile_grade('Class V fees',['grade'=>'I'])==='Class V',
+    'Roman class notation takes precedence');
+ kf_assert(sf_kfile_grade('fees for class 5',['grade'=>'I'])==='Class V',
+    'plain numeric class is recognised');
+ $wrongGrade=sf_kfile_fee_answer($doc,'fees for 5 th 2027-28',['grade'=>'I']);
+ kf_assert(str_contains((string)$wrongGrade,'Class V') &&
+    !str_contains((string)$wrongGrade,'105,927'),
+    'a different grade fee must NEVER be substituted from prior class context');
+ $classFiveDocument=$doc."\n## 11. School fees — academic year 2028–29\n".
+   "### Annual fee table\n| Class | Component | Tuition | Total |\n".
+   "|---|---:|---:|---:|\n| Class V | 15,000 | 90,000 | **105,000** |\n";
+ kf_assert(str_contains((string)sf_kfile_fee_answer($classFiveDocument,
+    'fees for 5 th 2028-29',['grade'=>'I']),'Class V'),
+    'explicit fifth grade retrieves only its own year/row');
+ $boardDoc=['content'=>"# School information\n## 2. Board and curriculum\n".
+    "The school is affiliated to CBSE.\n"];
+ $featuresDoc=['content'=>"# School information\n## 4. Campus facilities\n".
+    "- Library\n- Science laboratory\n- Outdoor sports area\n"];
+ kf_assert(str_contains((string)sf_kfile_school_brief_answer([$boardDoc],'is cbse'),'CBSE-affiliated'),
+    'short CBSE question answered directly from approved campus affiliation');
+ kf_assert(sf_kfile_school_brief_answer(
+    [['content'=>"# General advice\nCBSE, ICSE, IB are different educational boards."]],'is cbse')===null,
+    'generic mentions of CBSE cannot be mistaken for campus affiliation');
+ $features=sf_kfile_school_brief_answer([$featuresDoc],'school features');
+ kf_assert($features!==null && str_contains($features,'• Library') &&
+    str_contains($features,'• Science laboratory'),
+    'school features use compact verified bullet list, not general AI essay');
+
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'What is Grade 2 first-term fee 2026-27?',[]),'58,362.50'),
     'published Term I total must not be replaced with annual fee');
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Class II one-time admission fee 2026-27',[]),'20,000'),
