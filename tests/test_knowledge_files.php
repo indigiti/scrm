@@ -59,13 +59,22 @@ Class XI has conflicting amounts of ₹20,000 and ₹30,000.
 ## 6. Age eligibility for the 2026–27 session
 | Class | Eligible date of birth | Approximate age |
 |---|---|---|
-| Nursery | **1 January 2023 – 31 December 2023** | 3–4 years |
+| Pre-Nursery | **1 January 2024 – 31 December 2024** | 2 years and above, below 3 |
+| Nursery | **1 January 2023 – 31 December 2023** | 3 years and above, below 4 |
+| LKG | **1 January 2022 – 31 December 2022** | 4 years and above, below 5 |
+| UKG | **1 January 2021 – 31 December 2021** | 5 years and above, below 6 |
+| Class I | **1 January 2020 – 31 December 2020** | 6 years and above, below 7 |
 | Classes II–IX | Must have passed the previous class at a recognized school | DOB cutoff not supplied |
 
 ## 7. Age eligibility for the 2027–28 session
 | Class | Eligible date of birth | Approximate age |
 |---|---|---|
-| Nursery | **1 January 2024 – 31 December 2024** | 3–4 years |
+| Pre-Nursery | **1 January 2025 – 31 December 2025** | 2 years and above, below 3 |
+| Nursery | **1 January 2024 – 31 December 2024** | 3 years and above, below 4 |
+| LKG | **1 January 2023 – 31 December 2023** | 4 years and above, below 5 |
+| UKG | **1 January 2022 – 31 December 2022** | 5 years and above, below 6 |
+| Class I | **1 January 2021 – 31 December 2021** | 6 years and above, below 7 |
+| Classes II–IX | Must have passed the previous class at a recognized school | DOB cutoff not supplied |
 
 ## 12. Ready-to-use example chatbot responses
 **Q: What are the admission documents?**
@@ -120,6 +129,25 @@ MARKDOWN;
     'Classes II–IX eligibility uses recognised prior school, not invented DOB cutoff');
  kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Nursery age limit',[]),'academic year'),
     'age requires academic year before any birth-date cutoff');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Age eligibility 2026-27',[]),'• Pre-Nursery'),
+    'general age question lists all confirmed classes rather than demanding grade');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Age eligibility 2026-27',[]),'Class I'),
+    'all class listing includes Grade 1');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Age eligibility 2026-27',[]),'Classes II–IX'),
+    'higher grade requirement clearly states previous class qualification');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Pre-Nursery age limit 2027-28',[]),'1 January 2025'),
+    'Pre-Nursery uses its own year-specific DOB');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'LKG age 2027-28',[]),'1 January 2023'),
+    'LKG date is not confused with Nursery');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Class I age eligibility 2027-28',[]),'1 January 2021'),
+    'Class I age uses school supplied DOB');
+ kf_assert(str_contains((string)sf_kfile_example_answer($known,'admission documents',[]),'• '),
+    'verified brief school documents should render as bullet checklist');
+ $docChecklist=$doc."\n## 15. Admission documents\n- Birth certificate\n- Previous report card where applicable\n- Recent passport photographs\n";
+ kf_assert(str_contains((string)sf_kfile_documents_answer(
+    [['content'=>$docChecklist]],'Which documents are required?',[]),'• Birth certificate'),
+    'knowledge document heading yields a readable verified checklist');
+
 
  $fileContext=sf_kfile_context($known,'Grade 2 fees 2026-27',['grade'=>'2']);
  kf_assert(str_contains($fileContext,'2026'),'approved knowledge excerpt usable for AI context');
