@@ -40,7 +40,7 @@ try{
     'faqs'=>[['question'=>'Which documents are required?',
               'answer'=>'Bring the documents listed on the official admissions page.']]]);
   ai_assert($status===200&&$settings['enabled'],'admin publishing');
-  ai_assert(ai_req('GET',$base.'/chat-config','',
+  ai_assert(ai_req('GET',$base.'/chat-config',[],
        'https://unrelated.test')[0]===403,'unapproved origin denied');
   [$status,$config]=ai_req('GET',$base.'/chat-config');
   ai_assert($status===200&&count($config['schools'])===1,'only enabled campus appears');
