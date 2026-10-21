@@ -38,8 +38,12 @@ function sf_counsellor_classify(string $question):array {
 function sf_counsellor_extract(string $message,array $profile):array {
     $profile=array_merge(['grade'=>'','academic_year'=>'','residential_area'=>'',
         'interests'=>[],'visit_preference'=>'','lead_intent'=>'Browsing'], $profile);
-    if(preg_match('/\b(?:grade|class|std|standard)\s*(?:is\s*)?([0-9]{1,2}|nursery|jr\.?\s*kg|sr\.?\s*kg|lkg|ukg|kindergarten|xii|xi|ix|viii|vii|vi|iv|iii|ii|x|v|i)\b/i',$message,$m))
-        $profile['grade']=substr(trim($m[1]),0,40);
+    // Explicit grade in this turn overrides remembered context. In particular
+    // "fees for 5 th" must replace a prior Class I and become Class V.
+    $explicitGrade=sf_kfile_explicit_grade($message);
+    if($explicitGrade!=='')
+        $profile['grade']=str_starts_with($explicitGrade,'Class ')
+            ?substr($explicitGrade,6):$explicitGrade;
     if(preg_match('/\b(20\d{2}\s*[-–—\/]\s*(?:20)?\d{2})(?!\d)/u',$message,$m))
         $profile['academic_year']=preg_replace('/\s+/','',$m[1]);
     if(preg_match('/\b(?:we live in|i live in|reside in|from|we are in)\s+([\p{L} \-]{3,50})/ui',$message,$m)){
@@ -75,17 +79,19 @@ function sf_counsellor_fact_answer(string $question,array $profile,array $settin
     $facts=array_values(array_filter($settings['school_facts']??[],
         static fn($f)=>($f['category']??'')===$category&&!empty($f['details'])&&empty($f['needs_recheck'])));
     if(!$facts)return null;
-    $grade=strtolower(trim((string)($profile['grade']??'')));
-    if($grade!=='' && in_array($category,['fees','age_eligibility'],true)){
-        $matched=array_values(array_filter($facts,static function($f)use($grade):bool {
-            $label=strtolower((string)($f['label']??''));
-            return preg_match('/(?<![a-z0-9])'.preg_quote($grade,'/').'(?![a-z0-9])/i',$label)===1;
+    if(in_array($category,['fees','age_eligibility'],true)){
+        $grade=sf_kfile_grade($question,$profile);
+        if($grade==='')return 'The school has class-wise '.($category==='fees'?'fee details':'eligibility requirements').
+            '. Which class are you looking at?';
+        $matched=array_values(array_filter($facts,static function($f)use($grade):bool{
+            // Never show another grade's price or age criterion, even if the
+            // school has only one saved fact.
+            return sf_kfile_explicit_grade((string)($f['label']??''))===$grade;
         }));
-        if($matched)$facts=$matched;
-        elseif(count($facts)>1)return 'I have verified information for other classes, but not yet for Grade '.$grade.'. The admissions team can confirm the applicable '.$category.' for your class.';
+        if(!$matched)return 'I don’t have a confirmed '.($category==='fees'?'fee amount':'eligibility rule').
+            ' for '.$grade.' in the school’s approved information. The admissions office can confirm it.';
+        $facts=$matched;
     }
-    if($grade==='' && in_array($category,['fees','age_eligibility'],true)&&count($facts)>1)
-        return 'The school has different '.($category==='fees'?'fee structures':'age requirements').' by class. Which grade are you considering? I can check the verified details.';
     $answers=[];
     foreach(array_slice($facts,0,5) as $f)
         $answers[]=(string)$f['label'].': '.(string)$f['details'];
