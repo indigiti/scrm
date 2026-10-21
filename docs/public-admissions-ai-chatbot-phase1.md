@@ -55,14 +55,22 @@ Implemented on the feature branch; do not treat a successful build as deployment
 3. Under **Unanswered question review**, approve a de-identified topic with a verified answer or reject it.
 4. Under **Website chatbot embed**, copy the snippet for an approved group website. Each group/campus route is validated on the CRM server.
 
-### Embed
-For each authorized group website, the UI displays the script including its published group GUID:
+### Single-script website integration
+**No new script is required on an existing Lexicon school website.** The currently installed \`lexicon-form.js\` automatically checks the approved group's public chatbot settings and loads \`admissions-chat.js\` if at least one associated campus has enabled the chatbot.
+
+The same existing embed continues to work for both the original admission enquiry form and the chatbot:
 
 ```html
-<script defer src="https://YOUR_CRM_DOMAIN/scrm/static/admissions-chat.js" data-schoolflow-group="GROUP_GUID"></script>
+<script defer src="https://YOUR_CRM_DOMAIN/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="GROUP_GUID"></script>
 ```
 
-The public GUID is **not** a privileged API key. Do not embed any secret website tokens.
+The CRM admin **Admissions AI** screen now copies this same one-tag embed, not a second chatbot-specific script. Previously installed tags do not need replacement. If a standalone chatbot tag also exists on a website, the runtime avoids duplicate chat panels.
+
+- The chatbot is **off by default**, per school. School administrators enable it and publish approved school information through **Admissions AI**.
+- It checks the allowlisted origin via \`GET /api/public/forms/{group_guid}/chat-config\`, without requiring secret website tokens in the browser.
+- If no school in that group has enabled the chatbot, or if the configuration API fails, the original enquiry form continues working without an extra chatbot UI.
+- Optional one-tag opt-out: add \`data-admissions-chat="off"\` to the existing script when a specific school website must show the enquiry form alone.
+- The public GUID is **not** a privileged API key.
 
 ### Public lead capture
 The chat widget supports campus selection, FAQ interaction and a lower-friction callback request with parent name, mobile, optional student/class details, explicit consent and server-signed CAPTCHA. A successful callback creates a campus-scoped CRM enquiry and first-contact task. A full enquiry uses the existing registered website lead form where present.
