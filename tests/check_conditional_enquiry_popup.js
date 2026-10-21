@@ -110,6 +110,13 @@ function fixture(opts={}){
  t.context.window.openLeadPopup();assert.equal(t.isOpen(),true,'dismissal does not disable manual open');
 }
 {
+ const t=fixture();
+ t.context.window.__schoolflowAdmissionsChatMounted=guid;
+ t.context.window.__schoolflowAdmissionsChatState={guid,open:false,leadCaptured:true};
+ t.advance(30000);t.exit(0);
+ assert.equal(t.isOpen(),false,'existing chatbot lead is never solicited again');
+}
+{
  const t=fixture({autoOff:true});
  t.advance(180000);t.exit(0);
  assert.equal(t.isOpen(),false,'site may disable automatic fallback');
