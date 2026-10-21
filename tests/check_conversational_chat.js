@@ -68,10 +68,16 @@ function choose(label){
  await submit('Grade 2 fees?');
  assert.equal(requests.filter(x=>x.route==='/counsel').length,1,'first question answered before details');
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no covert lead');
+ // First useful answer introduces the option to share a name, but does not
+ // prevent more questions or create a lead.
+ choose('Share my name');await tick();
+ await submit('Rahul');
+ assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'sharing a name is not CRM contact consent');
+ choose('Continue asking');await tick();
  await submit('Can we visit Saturday?');
  assert.equal(requests.filter(x=>x.route==='/counsel').length,2);
  choose('Request a visit');await tick();
- choose('Skip name');await tick();
+ // The parent already volunteered a name, so never ask for it twice.
  await submit('9876543210');
  assert.equal(requests.filter(x=>x.route==='/counsel-lead').length,0,'no lead without consent');
  choose('Yes, I agree');await tick();await tick();
@@ -79,7 +85,7 @@ function choose(label){
  const leads=requests.filter(x=>x.route==='/counsel-lead');
  assert.equal(leads.length,1);
  assert.equal(leads[0].body.phone,'9876543210');
- assert.equal(leads[0].body.parent_name,'');
+ assert.equal(leads[0].body.parent_name,'Rahul');
  assert.equal(leads[0].body.consent,true);
  assert.equal(leads[0].body.captcha_answer,'11');
  assert.ok(leads[0].headers['Idempotency-Key'],'idempotency on conversion');
