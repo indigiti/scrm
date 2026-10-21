@@ -36,10 +36,11 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
 }
 /** Expand short nonpersonal admissions topic labels without fabricating facts. */
 function sf_chat_expand_topic(string $question):string {
-    $q=trim(preg_replace('/\\s+/u',' ',mb_strtolower($question,'UTF-8'))??'');
+    $lower=function_exists('mb_strtolower')?mb_strtolower($question,'UTF-8'):strtolower($question);
+    $q=trim(preg_replace('/\\s+/u',' ',$lower)??'');
     return match($q){
         'fee','fees','school fees','admission fees','फीस','शुल्क' =>
-            'What is the verified admission fee structure for this campus?',
+            'What is the admission fee structure?',
         'documents','document','कागदपत्रे','दस्तावेज' =>
             'Which documents are required for school admission?',
         'transport','bus','school bus' =>
