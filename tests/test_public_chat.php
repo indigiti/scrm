@@ -50,7 +50,7 @@ try{
     'disabled campus cannot be asked');
   // Parent must register an enquiry before the assistant may answer.
   ai_assert(ai_req('POST',$base.'/chat',[
-    'school_code'=>'campus-1','question'=>'Which documents are required?'])[0]===422,
+    'school_code'=>'campus-1','question'=>'Which documents are required?'])[0]===401,
     'no access without a signed chat session');
   ai_assert(ai_req('POST',$base.'/chat-start',[
     'school_code'=>'campus-1','parent_name'=>'Demo Parent','phone'=>'9876543210',
