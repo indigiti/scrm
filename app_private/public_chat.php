@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /** School-scoped published knowledge for the public admissions assistant. */
 function sf_chat_settings(array $state,int $schoolId):array {
-    return array_merge(['enabled'=>false,'ai_enabled'=>false,'overview'=>'','faqs'=>[]],$state['public_chat_settings'][(string)$schoolId]??[]);
+    return array_merge(['enabled'=>false,'ai_enabled'=>false,'overview'=>'','faqs'=>[],'school_facts'=>[],'remember_days'=>30],$state['public_chat_settings'][(string)$schoolId]??[]);
 }
 function sf_chat_admin(string $method,string $ref,array $input,array $headers,SchoolFlowStore $store):array {
     if(!in_array($method,['GET','PATCH'],true))sf_fail(405,'Method not allowed');
@@ -18,22 +18,70 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         $overview=sf_text($input,'overview',1500);
         $items=$input['faqs']??null;
         if(!is_array($items)||!array_is_list($items)||count($items)>60)sf_fail(422,'Invalid FAQ entries');
+        $schoolFacts=$input['school_facts']??[];
+        if(!is_array($schoolFacts)||!array_is_list($schoolFacts)||count($schoolFacts)>36)sf_fail(422,'Invalid school information entries');
+        $approvedFacts=[];
+        $allowed=['fees','documents','age_eligibility','facilities','transport','curriculum','admissions','timings','school_features','contact','other'];
+        foreach($schoolFacts as $entry){
+            if(!is_array($entry))sf_fail(422,'Invalid school detail');
+            $category=sf_text($entry,'category',40,3);
+            if(!in_array($category,$allowed,true))sf_fail(422,'Unknown school detail category');
+            $approvedFacts[]=['category'=>$category,
+                'label'=>sf_text($entry,'label',120,3),
+                'details'=>sf_text($entry,'details',900,3)];
+        }
+        $rememberDays=$input['remember_days']??30;
+        if(!is_int($rememberDays)||!in_array($rememberDays,[15,30],true))sf_fail(422,'Invalid visitor memory period');
+
         $faqs=[];
         foreach($items as $item){
             if(!is_array($item))sf_fail(422,'Invalid FAQ');
             $faqs[]=['question'=>sf_text($item,'question',180,3),'answer'=>sf_text($item,'answer',800,3)];
         }
-        if($input['enabled'] && $overview==='' && !$faqs)sf_fail(422,'Publish school information first');
+        if($input['enabled'] && $overview==='' && !$faqs && !$approvedFacts)sf_fail(422,'Publish school information first');
         $config=sf_chat_settings($s,$sid);
         $config['enabled']=$input['enabled'];
         $config['ai_enabled']=$aiEnabled;
         $config['overview']=$overview;
         $config['faqs']=$faqs;
+        $config['school_facts']=$approvedFacts;
+        $config['remember_days']=$rememberDays;
         $s['public_chat_settings'][(string)$sid]=$config;
         sf_event($s,$sid,null,(int)$user['id'],'public_chat_updated','Public admissions assistant configuration changed');
         return [200,sf_chat_safe_settings($config)];
     },$method==='PATCH');
 }
+
+/** Approved campus-specific facts; multiple records per category/grade/campus. */
+function sf_chat_fact_answer(string $question,array $config):?string {
+    $lower=function_exists('mb_strtolower')?mb_strtolower($question,'UTF-8'):strtolower($question);
+    $topic=null;
+    foreach([
+      'fees'=>'/\b(fee|fees|cost|tuition|charges|payment)\b|फीस|शुल्क/iu',
+      'documents'=>'/\b(document|documents|paperwork|certificate|proof)\b|कागदपत्र|दस्तावेज/iu',
+      'age_eligibility'=>'/\b(age|eligible|eligibility|cut.?off|birthday|minimum age)\b|वय|आयु/iu',
+      'transport'=>'/\b(bus|transport|pickup|drop|route)\b|बस|वाहतूक/iu',
+      'facilities'=>'/\b(facilit|library|lab|sports|playground|canteen|infrastructure)\w*\b/iu',
+      'school_features'=>'/\b(features|unique|special|activities|clubs)\b/iu',
+      'curriculum'=>'/\b(curriculum|board|cbse|icse|ib|syllabus)\b/iu',
+      'admissions'=>'/\b(admission|application|apply|registration|enrol)\w*\b/iu',
+      'timings'=>'/\b(timing|timings|hours|schedule|time)\b/iu'
+    ] as $category=>$pattern) {
+       if(preg_match($pattern,$lower)){ $topic=$category;break;}
+    }
+    if($topic===null)return null;
+    $matched=[];
+    foreach($config['school_facts']??[] as $fact)
+        if(($fact['category']??'')===$topic && !empty($fact['details']))$matched[]=$fact;
+    if(!$matched)return null;
+    // Return all relevant published grade-specific entries instead of merging
+    // different grades into an incorrect single fee/age amount.
+    $lines=[];
+    foreach(array_slice($matched,0,12) as $fact)
+        $lines[]=(string)($fact['label']??'School information').': '.(string)$fact['details'];
+    return implode("\n",$lines);
+}
+
 /** Expand short nonpersonal admissions topic labels without fabricating facts. */
 function sf_chat_expand_topic(string $question):string {
     $lower=function_exists('mb_strtolower')?mb_strtolower($question,'UTF-8'):strtolower($question);
@@ -101,6 +149,9 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     $code=sf_text($input,'school_code',50,3);
     $target=$groupData['schools'][$code]??null;
     if(!$target)sf_fail(422,'Select an available campus');
+    if($action==='chat-remember')return sf_chat_remember_create($guid,$input,$headers,$store);
+    if($action==='chat-resume'||$action==='chat-forget')
+        return sf_chat_remember_response($guid,$action,$input,$headers,$store);
     if($action==='chat-start')return sf_chat_start($guid,$input,$headers,$ip,$store);
     if($action==='chat-followup'){
         $session=sf_text($input,'session',500);
@@ -125,6 +176,11 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     // Common one-word questions such as "fees" should not be discarded
     // by the short-topic privacy screen before reaching approved knowledge/AI.
     $topic=sf_chat_expand_topic($question);
+    // Specific school policies are confirmed only from administrator-approved
+    // structured facts; AI must never invent missing school-specific values.
+    $schoolFactAnswer=sf_chat_fact_answer($topic,$target['config']);
+    if($schoolFactAnswer!==null)
+        return [200,['answer'=>$schoolFactAnswer,'source'=>'approved_school_information']];
     // Prefer verified published answers: no provider call or additional cost.
     $match=sf_kb_match($topic,$target['config']);
     if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
