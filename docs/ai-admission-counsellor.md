@@ -46,3 +46,50 @@ The system tries a sufficiently precise approved FAQ match, then category/grade-
 
 ## QA
 CI runs PHP lint, existing public form and CRM regression tests, the new `tests/test_counsellor.php`, frontend answer-first simulation `tests/check_conversational_chat.js`, and checks the DigiOps payload for missing dependencies or private artifacts.
+
+## Admissions AI workspace redesign (October 2026)
+
+The admin page is now a responsive, clearly grouped five-section workspace with consistent spacing, cards, navigation, destructive-action confirmations, and a school-scoped publishing status.
+
+### 1. Overview
+Review counts of active school knowledge files, approved answers, unanswered questions, converted chatbot leads and readiness. Open Knowledge Library and Settings directly.
+
+### 2. School Knowledge
+- **Upload knowledge document:** Select a UTF-8 `.md` or `.txt` file (40–120,000 bytes). Maximum 8 files per campus. The browser reads the local file; nothing is automatically published.
+- **Review draft:** The server stores the file as `pending`, exposes filename, size, section outline and a limited preview **only to an authorized school administrator**.
+- **Publish:** Explicitly confirm that the document applies to the selected school, campus and academic year. Its content becomes eligible for the counsellor's answer retrieval.
+- **Unpublish/Delete:** Either action immediately removes the document from parent-facing retrieval. Delete is permanent and requires confirmation.
+- **Website sources:** Existing registered HTTPS URLs remain supported, with staged scan candidates and editorial approval.
+- **Manual structured facts:** Retained in a separate expandable advanced editor for precise individual records, and still require explicit review when original web sources change.
+
+Current file upload accepts Markdown and plain text. It does **not** claim to extract PDF/DOCX text. Do not upload documents containing students' personal identifiers, admissions applications or financial account details. Knowledge files should contain only school-approved information suitable for parents.
+
+### 3. Questions & Answers
+- Approved FAQ cards show the question and answer; **Save changes** and **Delete answer** operate immediately through separate authorized, tenant-scoped API actions.
+- A new approved answer can be published directly from the Add Answer editor.
+- Most-asked topics show frequency, grade/session grouping and the actual anonymized answer shown to parents. **Prepare FAQ draft** copies an answer for human verification. **Delete topic** removes that school's aggregate, not any other school's.
+- Unanswered requests support **Approve & publish**, **Dismiss**, and a distinct **Delete** operation.
+- Destructive actions require confirmation and record an administrative event. Removing a FAQ does not delete its associated admissions leads.
+
+### 4. Leads & Conversations
+Provides linked Chatbot Leads view, consented callback counts and anonymous enquiry counts. Lead conversion and school permissions are unchanged.
+
+### 5. Settings
+Publishes the counsellor, enables/disables external AI, selects the visitor-memory period, manages the campus overview, tests OpenRouter, and shows the GUID-based website embed.
+
+### School-specific knowledge retrieval
+The public counsellor retrieves documents with `status=published` and the exact selected school ID. It prefers trusted FAQs and deterministic published-source fee/age rows for specific parent enquiries, then uses selected approved excerpts in the optional AI provider prompt. It does **not** treat unapproved files as facts or silently add AI output to published answers.
+
+For the supplied **Lexicon Kalyani Nagar** example, the school-provided file distinguishes annual fees, term instalments and one-time admission fees, the 2026–27 and 2027–28 academic years, and a conflicting Class XI one-time admission fee. Year/grade or stream must be established before quoting an applicable figure; amounts are copied as provided, including stated totals with rounding discrepancies. These are school-supplied records, not live verification of current billing or seat availability.
+
+The uploaded example file is a *reference used for importer testing* and has not been published into any live school automatically. An authorized administrator must upload and approve it for **the correct Kalyani Nagar campus** after the new release is deployed.
+
+### Technical/API changes
+- `GET /api/schools/{school}/public-chat/knowledge-files` lists school-scoped file metadata (without full source contents).
+- `POST` to that route supports `upload`, `publish`, `unpublish` and `delete`, enforcing school Admin membership, MIME-by-extension validation, UTF-8 text validation and storage limits.
+- `POST /api/schools/{school}/public-chat/faqs` supports `add`, `update`, `delete`.
+- `POST /api/schools/{school}/public-chat/counsellor-report` deletes a specific school/topic/grade/year analytics record, not CRM leads.
+- Existing `/public-chat/review` also supports deleting a pending suggestion; rejection remains available separately.
+- School data remains in the existing JSON CRM store; this pilot-sized upload cap avoids unbounded per-file storage, but large multi-school scale should move uploaded source text and conversation analytics to specialized storage.
+
+The existing extensionless GUID website embed and the separate, click-only enquiry form are unchanged. Deploying the new DigiOps artifact is a separate step from GitHub merge/build.
