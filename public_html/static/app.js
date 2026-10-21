@@ -2,8 +2,8 @@
 'use strict';
 const root=document.getElementById('root');
 const APP_BASE=(window.SCHOOLFLOW_BASE_PATH||'/scrm').replace(/\/$/,'');
-const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','Websites & Forms','Schools & Routing','School Visits','Families','Email Templates','Communications','Automations','Team','Reports','Import Enquiries','Seat Planning'];
-const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Import Enquiries':'⇧','Seat Planning':'▤'};
+const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','Websites & Forms','Schools & Routing','School Visits','Families','Email Templates','Communications','Automations','Team','Reports','Import Enquiries','Seat Planning','Admissions AI'];
+const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦'};
 const STAGES=['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 
 const PHASES=['Enquiry','Engagement','Application','Admission','Exceptions'];
@@ -21,13 +21,13 @@ const NAV_SECTIONS=[
  ['ADMISSIONS',['Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families']],
  ['ENGAGEMENT',['Communications','Email Templates']],
  ['REPORTING',['Reports']],
- ['ADMINISTRATION',['Websites & Forms','Schools & Routing','Team','Import Enquiries','Seat Planning','Automations']]
+ ['ADMINISTRATION',['Websites & Forms','Schools & Routing','Team','Import Enquiries','Seat Planning','Automations','Admissions AI']]
 ];
 const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7)};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -99,7 +99,7 @@ function loginPage(){const isSetup=state.setup?.needs_setup;
  return `<div class="login-wrap"><div class="login-brand"><div class="logo" style="padding:0"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>Admissions CRM</small></div></div><div class="eyebrow" style="margin-top:48px">MULTI-SCHOOL ADMISSIONS PLATFORM</div><h1>Every school enquiry. One clear journey.</h1><p>Capture enquiries from WordPress and other websites, assign counsellors, schedule follow-ups and convert more families into admissions.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:23px"><span class="pill">Multiple schools</span><span class="pill">Private website APIs</span><span class="pill">Staff roles</span><span class="pill">Live shared records</span></div></div><div class="login-panel"><div class="hero-icon" style="height:55px;width:55px;margin-bottom:22px;color:#fff;background:linear-gradient(135deg,#787ae9,#5db2f5)">✦</div>${form}</div></div>`;
 }
 function nav(){const n=state.leads.filter(l=>l.followup_date&&l.followup_date<=day()&&!['Enrolled','Lost'].includes(l.status)).length;
- return `<aside class="sidebar" id="sidebar"><div class="logo"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>School Enquiry CRM</small></div></div><div class="school-select"><label>SCHOOL WORKSPACE</label><select id="schoolSelect" aria-label="Choose school">${state.me.schools.map(s=>option(s.id,s.name,state.schoolId)).join('')}</select></div><div class="nav" aria-label="SchoolFlow main navigation">${NAV_SECTIONS.map(([label,items])=>`<div class="nav-section">${label}</div>${items.filter(p=>(p!=='Schools & Routing'||canManageSchools())&&(p!=='Automations'||isAdmin())&&(p!=='Import Enquiries'||canImport())&&(p!=='Seat Planning'||isAdmin())).map(p=>`<button class="${state.page===p?'active':''}" data-action="nav" data-page="${esc(p)}" ${state.page===p?'aria-current="page"':''}><span class="nav-emoji" aria-hidden="true">${ICONS[p]}</span><span>${p}</span>${p==='Enquiries'?`<em>${state.leads.length}</em>`:p==='Follow-ups'&&n?`<em>${n}</em>`:''}</button>`).join('')}`).join('')}</div><div class="sidebar-bottom"><div class="sync-note"><b>● Shared workspace</b><br>${state.sites.filter(s=>s.enabled).length} connected sources<br>Secure server-side storage</div><div class="profile"><div class="avatar">${initials(state.me.user.name)}</div><div style="min-width:0"><strong>${esc(state.me.user.name)}</strong><span>${esc(role())}</span></div><button class="icon-btn" title="Sign out" data-action="logout" style="margin-left:auto">↪</button></div></div></aside>`;}
+ return `<aside class="sidebar" id="sidebar"><div class="logo"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>School Enquiry CRM</small></div></div><div class="school-select"><label>SCHOOL WORKSPACE</label><select id="schoolSelect" aria-label="Choose school">${state.me.schools.map(s=>option(s.id,s.name,state.schoolId)).join('')}</select></div><div class="nav" aria-label="SchoolFlow main navigation">${NAV_SECTIONS.map(([label,items])=>`<div class="nav-section">${label}</div>${items.filter(p=>(p!=='Schools & Routing'||canManageSchools())&&(p!=='Automations'||isAdmin())&&(p!=='Import Enquiries'||canImport())&&(p!=='Seat Planning'||isAdmin())&&(p!=='Admissions AI'||isAdmin())).map(p=>`<button class="${state.page===p?'active':''}" data-action="nav" data-page="${esc(p)}" ${state.page===p?'aria-current="page"':''}><span class="nav-emoji" aria-hidden="true">${ICONS[p]}</span><span>${p}</span>${p==='Enquiries'?`<em>${state.leads.length}</em>`:p==='Follow-ups'&&n?`<em>${n}</em>`:''}</button>`).join('')}`).join('')}</div><div class="sidebar-bottom"><div class="sync-note"><b>● Shared workspace</b><br>${state.sites.filter(s=>s.enabled).length} connected sources<br>Secure server-side storage</div><div class="profile"><div class="avatar">${initials(state.me.user.name)}</div><div style="min-width:0"><strong>${esc(state.me.user.name)}</strong><span>${esc(role())}</span></div><button class="icon-btn" title="Sign out" data-action="logout" style="margin-left:auto">↪</button></div></div></aside>`;}
 function topbar(){return `<header class="topbar"><div style="display:flex;align-items:center;gap:11px"><button class="icon-btn mobile-menu" data-action="menu" title="Menu">☰</button><div class="breadcrumbs">Schools &nbsp;/&nbsp; <b>${esc(state.page)}</b></div></div><div class="top-actions"><span class="demo-pill" style="background:#e5f8ef;color:#16835d">● Connected</span><span class="role-label">${esc(role())}</span><button class="icon-btn" data-action="nav" data-page="Follow-ups" title="Follow-ups">♧</button></div></header>`;}
 function pageHead(title,description,button=''){return `<div class="view-title"><div><div class="eyebrow">${esc(school()?.name||'Workspace')}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="new-controls">${button}</div></div>`;}
 function tableRows(rows){return rows.map(l=>`<tr data-action="view-lead" data-id="${l.id}"><td><div class="name-cell"><div class="small-avatar">${initials(l.name)}</div><div><b>${esc(l.name)}</b><small>${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)} · ${esc(l.grade||'Class not set')} · ${esc(l.temperature||'Unrated')}${l.duplicate_of?' · Possible duplicate':''}${l.is_demo?' · DEMO':''}${l.last_call_outcome?' · '+esc(l.last_call_outcome):''}</small></div></div></td><td><div class="strong">${esc(l.guardian)}</div><small class="muted">${esc(l.phone)}</small></td><td>${esc(l.source_name||'Manual entry')}</td><td>${stageBadge(l.status)}</td><td>${esc(l.assigned_name||'Unassigned')}</td><td>${esc(dateFmt(l.followup_date))}</td><td><button class="btn small" data-action="view-lead" data-id="${l.id}">View →</button></td></tr>`).join('')||`<tr><td colspan="7"><div class="empty-state"><b>No enquiries found</b><p>Connect a website or add an enquiry to get started.</p></div></td></tr>`;}
@@ -362,6 +362,49 @@ ${select('Status','status',['Pending','Received','Verified','Rejected'].filter(v
 ${input('Internal checklist note','note','text',doc.note||'')}
 <button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div><h3 class="section-title">Parent messaging consent</h3><form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form><h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}<section class="drawer-audit" aria-label="Enquiry audit log"><h3 class="section-title">Audit log</h3><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${auditEntries(d.audit?.events||[])}${d.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section></div></div></div>`;
 }
+
+async function loadPublicChat(){
+ if(!isAdmin())return;
+ const base='/api/schools/'+state.schoolId+'/public-chat';
+ const [settings,review,groups]=await Promise.all([
+   api(base),api(base+'/review'),api('/api/group-sites')
+ ]);
+ ext.chatSettings=settings;ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
+ render();
+}
+function publicChatPage(){
+ if(!isAdmin())return '<div class="empty-state">School administrator access required.</div>';
+ const settings=ext.chatSettings;
+ if(!settings)return pageHead('Public Admissions AI','Loading school knowledge and unanswered topics…');
+ const faqs=settings.faqs||[];
+ const groups=(ext.chatGroups||[]).filter(g=>(g.schools||[]).some(s=>Number(s.school_id)===Number(state.schoolId)));
+ const row=(q='',a='')=>'<div class="sf-chat-faq panel" style="padding:15px;margin-bottom:10px">'+
+ '<div class="form-field"><label>Parent question</label><input class="sf-chat-q" maxlength="180" value="'+esc(q)+'" placeholder="e.g. Which documents are required?"></div>'+
+ '<div class="form-field"><label>Approved answer</label><textarea class="sf-chat-a" maxlength="800" rows="2" placeholder="Only verified school information">'+esc(a)+'</textarea></div>'+
+ '<button class="btn small" type="button" data-action="chat-remove-faq">Remove</button></div>';
+ return pageHead('Public Admissions AI','School-specific chatbot settings and approved answers. No AI provider is required for verified FAQ matches.')+
+ '<div class="app-alert">Answers published here are visible to parents. Check fees, documents, dates and policies before publishing. Past questions enter a private review queue and never publish automatically.</div>'+
+ '<form id="chatSettingsForm" class="panel" style="padding:20px;margin-bottom:18px">'+
+ '<h3>Assistant publication</h3><label><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'> Enable admissions chatbot for this campus</label>'+
+ '<div class="form-field"><label>Verified school overview</label><textarea name="overview" maxlength="1500" rows="4">'+esc(settings.overview||'')+'</textarea></div>'+
+ '<h3>Published questions and answers</h3><div id="sfChatFaqs">'+(faqs.length?faqs.map(f=>row(f.question,f.answer)).join(''):row())+'</div>'+
+ '<div class="button-row"><button type="button" class="btn small" data-action="chat-add-faq">＋ Add FAQ</button>'+
+ '<button type="submit" class="btn primary">Save chatbot settings</button></div></form>'+
+ '<section class="panel" style="padding:20px;margin-bottom:18px"><h3>Unanswered question review</h3>'+
+ '<p class="muted-note">Topics are filtered for personal details; approve only after writing a verified answer. Reject unsuitable topics.</p>'+
+ ((ext.chatQueue||[]).length?ext.chatQueue.map(item=>
+  '<form class="sfChatReview" data-id="'+esc(item.id)+'" style="padding:12px 0;border-bottom:1px solid #e3e5ef">'+
+  '<p><b>'+esc(item.question)+'</b> · '+Number(item.count||1)+' requests</p>'+
+  '<textarea name="answer" maxlength="800" rows="2" placeholder="Verified school response for approval"></textarea>'+
+  '<div class="button-row"><button type="submit" class="btn small primary">Approve & publish</button>'+
+  '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):'<p class="muted-note">No unanswered topics waiting for approval.</p>')+
+ '</section>'+
+ '<section class="panel" style="padding:20px"><h3>Website chatbot embed</h3><p class="muted-note">Only approved group websites can display this school assistant.</p>'+
+ (groups.length?groups.map(g=>{const snippet='<script defer src="'+window.location.origin+'/scrm/static/admissions-chat.js" data-schoolflow-group="'+g.guid+'"></script>';
+ return '<p><strong>'+esc(g.name)+'</strong> · '+esc(g.domain)+'</p><pre style="overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(snippet)+'</pre>'+
+ '<button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy embed</button>'}).join(''):'<p class="muted-note">Connect a group website under Schools & Routing to obtain its embed snippet.</p>')+'</section>';
+}
+
 function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Connecting to SchoolFlow…</h2><p>Checking your application setup.</p></div></div>';return;}if(state.setup.needs_setup||!state.token||!state.me){root.innerHTML=loginPage();return;}
  if(state.me.user.must_change_password){
   root.innerHTML='<div class="login-wrap"><div class="login-panel"><h2>Change temporary password</h2><p>Your administrator reset your password. You must choose a new password before accessing school records.</p>'+
@@ -370,7 +413,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  const addSchool=canManageSchools() && state.page!=='Schools & Routing'?`<button class="btn small" data-action="new-school" style="margin-left:8px">＋ Add school</button>`:'';
  root.innerHTML=`<div class="app">${nav()}<div class="main">${topbar()}<main class="content"><div style="text-align:right;margin-bottom:12px">${addSchool}</div>${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
@@ -414,6 +457,16 @@ async function xlsxExport(){
 async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||''])];
  const csv='\ufeff'+lines.map(r=>r.map(v=>'"'+( /^[\s]*[=+\-@]/.test(String(v??'')) ? "\'"+String(v??'') : String(v??'') ).replaceAll('"','""')+'"').join(',')).join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=`schoolflow-school-${state.schoolId}-enquiries.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported');}
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
+
+ if(action==='chat-add-faq'){const area=root.querySelector('#sfChatFaqs');if(!area)return;const current=area.querySelectorAll('.sf-chat-faq').length;if(current>=60)return toast('Maximum 60 published FAQs',true);const template=area.querySelector('.sf-chat-faq');if(!template)return;const clone=template.cloneNode(true);clone.querySelectorAll('input,textarea').forEach(x=>x.value='');area.appendChild(clone);return;}
+ if(action==='chat-remove-faq'){el.closest('.sf-chat-faq')?.remove();return;}
+ if(action==='chat-reject-topic'){if(!isAdmin())return;perform(async()=>{await api('/api/schools/'+state.schoolId+'/public-chat/review','POST',{id:el.dataset.id,decision:'reject'});await loadPublicChat();toast('Topic rejected');});return;}
+ if(action==='chat-copy-embed'){
+   const group=(ext.chatGroups||[]).find(g=>g.id===Number(el.dataset.id));
+   if(!group?.guid)return;
+   const snippet='<script defer src="'+window.location.origin+'/scrm/static/admissions-chat.js" data-schoolflow-group="'+group.guid+'"></script>';
+   navigator.clipboard.writeText(snippet).then(()=>toast('Embed code copied')).catch(()=>toast('Clipboard unavailable; select the snippet above',true));return;
+ }
  if(action==='close-modal'&&e.target.closest('.modal')&&e.target!==el&&el.id==='modalWrap')return;
  if(action==='close-detail'&&e.target.closest('.drawer')&&e.target!==el&&el.id==='drawerOverlay')return;
  if(action==='close-modal'||action==='close-detail'){closeDialog();return;}
@@ -501,6 +554,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='nav'||action==='go-enquiries'){if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
    if(state.page==='Schools & Routing' && canManageSchools()){perform(loadRouting);}
+   if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
    render();return;}
  if(action==='route-open'||action==='route-connect'){
    const sid=Number(el.dataset.schoolId);
@@ -627,6 +681,32 @@ root.addEventListener('input',e=>{
  if(e.target.id==='q'){const p=e.target.selectionStart;state.search=e.target.value;render();const q=root.querySelector('#q');q?.focus();q?.setSelectionRange(p,p);}
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
+
+ if(f.id==='chatSettingsForm'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const faqs=[...f.querySelectorAll('.sf-chat-faq')].map(card=>({
+       question:card.querySelector('.sf-chat-q')?.value.trim()||'',
+       answer:card.querySelector('.sf-chat-a')?.value.trim()||''
+     })).filter(x=>x.question||x.answer);
+     if(faqs.some(x=>!x.question||!x.answer))throw new Error('Complete both the question and answer for each FAQ');
+     await api('/api/schools/'+state.schoolId+'/public-chat','PATCH',{
+       enabled:!!f.elements.enabled.checked,overview:fd.overview||'',faqs
+     });
+     await loadPublicChat();toast('Admissions chatbot settings saved');
+   });return;
+ }
+ if(f.classList?.contains('sfChatReview')){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const answer=String(fd.answer||'').trim();
+     if(answer.length<3)throw new Error('Enter a verified answer before approving');
+     await api('/api/schools/'+state.schoolId+'/public-chat/review','POST',{
+       id:f.dataset.id,decision:'approve',answer
+     });
+     await loadPublicChat();toast('Verified answer published');
+   });return;
+ }
  if(f.id==='setupForm'){perform(async()=>{
    if(fd.password!==fd.confirm_password){state.error='Passwords do not match';render();return;}
    if(String(fd.password||'').length<12){state.error='Use a password of at least 12 characters';render();return;}
