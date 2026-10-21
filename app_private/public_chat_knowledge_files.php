@@ -255,7 +255,7 @@ function sf_kfile_context(array $docs,string $question,array $profile):string {
             $selected=[];
             $grade=$grade?:'';
             foreach($lines as $line){
-                if(strlen($selected)>80)break;
+                if(count($selected)>80)break;
                 if($grade!==''&&str_contains($line,'|') && !str_contains($line,$grade) &&
                    !preg_match('/^\|\s*(Class|Nursery|LKG|UKG|Pre-)/',$line))continue;
                 $selected[]=$line;
