@@ -167,7 +167,7 @@ function groupSchoolChecks(chosen=[]){
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
 }
 function sfGroupEmbed(guid){
- return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'.js"></script>';
+ return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'"></script>';
 }
 function routingPage(){
  if(!canManageSchools())return '<div class="empty-state">School management requires administrator access.</div>';
