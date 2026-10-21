@@ -146,12 +146,14 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
         'name'=>$groupData['group']['name'],
         'schools'=>array_values(array_map(static fn($i)=>['code'=>$i['school']['code'],
                 'name'=>$i['school']['name']],$groupData['schools']))]];
+    // A returning visitor can rejoin using the opaque browser credential
+    // without selecting a campus or disclosing contact details again.
+    if($action==='chat-resume'||$action==='chat-forget')
+        return sf_chat_remember_response($guid,$action,$input,$headers,$store);
     $code=sf_text($input,'school_code',50,3);
     $target=$groupData['schools'][$code]??null;
     if(!$target)sf_fail(422,'Select an available campus');
     if($action==='chat-remember')return sf_chat_remember_create($guid,$input,$headers,$store);
-    if($action==='chat-resume'||$action==='chat-forget')
-        return sf_chat_remember_response($guid,$action,$input,$headers,$store);
     if($action==='chat-start')return sf_chat_start($guid,$input,$headers,$ip,$store);
     if($action==='chat-followup'){
         $session=sf_text($input,'session',500);
