@@ -34,6 +34,23 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         return [200,sf_chat_safe_settings($config)];
     },$method==='PATCH');
 }
+/** Expand short nonpersonal admissions topic labels without fabricating facts. */
+function sf_chat_expand_topic(string $question):string {
+    $q=trim(preg_replace('/\\s+/u',' ',mb_strtolower($question,'UTF-8'))??'');
+    return match($q){
+        'fee','fees','school fees','admission fees','फीस','शुल्क' =>
+            'What is the verified admission fee structure for this campus?',
+        'documents','document','कागदपत्रे','दस्तावेज' =>
+            'Which documents are required for school admission?',
+        'transport','bus','school bus' =>
+            'What school bus and transport options are available?',
+        'admission','admissions','प्रवेश' =>
+            'What is the current school admission process?',
+        'timing','timings','hours' =>
+            'What are the official school and admissions office timings?',
+        default => $question
+    };
+}
 function sf_chat_fallback(string $question,array $config):string {
     $match=sf_kb_match($question,$config);
     return $match!==null?$match['answer']:'I cannot confirm that from the school information available. Please request a callback or submit an admission enquiry.';
@@ -104,20 +121,27 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     },true);
     if(preg_match('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b[6-9]\d{9}\b/i',$question))
         return [200,['answer'=>'Please avoid sharing contact details in chat. Use the secure enquiry form instead.']];
+    // Common one-word questions such as "fees" should not be discarded
+    // by the short-topic privacy screen before reaching approved knowledge/AI.
+    $topic=sf_chat_expand_topic($question);
     // Prefer verified published answers: no provider call or additional cost.
-    $match=sf_kb_match($question,$target['config']);
+    $match=sf_kb_match($topic,$target['config']);
     if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
     // Unanswered nonpersonal topics are suggested for an administrator to verify.
-    sf_kb_suggest($store,(int)$target['school']['school_id'],$question);
+    sf_kb_suggest($store,(int)$target['school']['school_id'],$topic);
     // Only send nonpersonal general questions to a provider, and only with
     // the individual school's explicit administrator opt-in.
-    $safeQuestion=sf_kb_safe_topic($question);
+    $safeQuestion=sf_kb_safe_topic($topic);
     $answer=null;
     if($safeQuestion!==null && !empty($target['config']['ai_enabled'])){
         $answer=!empty($target['config']['openrouter_key'])
             ? sf_chat_openrouter($safeQuestion,$target['school']['name'],$target['config'],$store)
             : sf_chat_ai($safeQuestion,$target['school']['name'],$target['config']);
     }
-    return [200,['answer'=>$answer??sf_chat_fallback($question,$target['config']),
+    $fallback=sf_chat_fallback($topic,$target['config']);
+    if($answer===null && $topic!==$question &&
+        str_contains(strtolower($topic),'fee structure'))
+        $fallback='I do not have a verified fee amount to quote for this campus. Please use Request admissions callback for the latest class-wise fee details.';
+    return [200,['answer'=>$answer??$fallback,
       'source'=>$answer!==null?'ai':'human_handoff']];
 }
