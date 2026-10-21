@@ -8,8 +8,10 @@ const callback=read('app_private/public_chat_callback.php');
 const router=read('app_private/public_chat_provider.php');
 assert.ok(form.includes("trigger.addEventListener('click',open)"),'explicit Enquire Now click remains');
 assert.ok(form.includes('window.openLeadPopup=open'),'manual API remains');
-assert.ok(!form.includes('setTimeout(function(){if(!closed()'),'no delayed unsolicited popup');
-assert.ok(!form.includes('setTimeout('),'no timed popup should reopen form');
+assert.ok(form.includes("promptIfEligible('timer')"),'timer now prompts if chat is closed and visitor has not dismissed the form');
+assert.ok(form.includes("promptIfEligible('exit')"),'desktop exit-intent fallback is supported');
+assert.ok(form.includes("sessionStorage.getItem(autoShownKey)"),'automatic prompt is capped once per browser session');
+assert.ok(form.includes('function chatbotOpen()'),'chat-open suppression is available');
 assert.ok(ui.includes("'Chatbot Leads':chatbotLeads"),'chatbot leads has dedicated workspace');
 assert.ok(ui.includes("function chatbotLeads()"),'dedicated page available');
 assert.ok(ui.includes('state.leads.filter(l=>!!l.chatbot_lead'),'school-scoped chatbot lead filter');
@@ -19,4 +21,4 @@ assert.ok(session.includes("$saved['lead_channel']='chatbot'"),'guided chat tags
 assert.ok(callback.includes("$saved['lead_channel']='chatbot'"),'chat callback tags lead');
 assert.ok(router.includes('General education explanations are appropriate') && router.includes('what a concept means'),'general educational explanations remain available when requested');
 assert.ok(router.includes('Never invent'),'AI does not invent campus-specific facts');
-console.log('PASS: Chatbot Leads workspace, general AI grounding and click-only enquiry popup');
+console.log('PASS: Chatbot Leads workspace, general AI grounding and conditional enquiry fallback');
