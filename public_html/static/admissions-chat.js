@@ -144,7 +144,7 @@ function updateProfile(result){
 function introduce(){
  if(contactState||busy)return;
  contactState='intro-name';
- bubble('assistant','Of course. What name would you like me to use? It’s entirely optional.');
+ bubble('assistant','What name should I use?');
  field(true,{maxLength:100,placeholder:'Your name (optional)'});
  choices([{label:'Skip for now',onClick:()=>finishIntroduction('')}]);
 }
@@ -152,10 +152,10 @@ function finishIntroduction(name){
  const clean=textSafe(name).replace(/[<>]/g,'').trim();
  if(clean && clean.length>=2 && clean.length<=100 && !/[?!]/.test(clean)){
   contactDraft.parent_name=clean;
-  bubble('parent','You can call me '+clean+'.');
-  bubble('assistant','Lovely to meet you, '+clean+'. If you’d like one-to-one help from admissions, I can also arrange a callback. You’re welcome to keep asking questions here without sharing a number.');
+  bubble('parent',''+clean+'');
+  bubble('assistant','Nice to meet you, '+clean+'. What else would you like to know about admissions?');
  }else{
-  bubble('assistant','No problem at all. We can keep chatting without any personal details.');
+  bubble('assistant','Of course! What would you like to know next?');
  }
  contactState='';
  field(true,{placeholder:'Ask another admissions question…'});
@@ -194,9 +194,9 @@ async function chat(message,echo=true){
   answeredCount++;
   if(!introductionOffered && answeredCount===1 && !crmSession){
    introductionOffered=true;
-   bubble('assistant','By the way, may I know what to call you? Only if you’re comfortable sharing. If you’d prefer, we can simply continue with your school questions.');
-   choices([{label:'Share my name',onClick:introduce},
-      {label:'Keep chatting',onClick:suggested},
+   bubble('assistant','By the way, what should I call you?');
+   choices([{label:'Tell you my name',onClick:introduce},
+      {label:'Continue',onClick:suggested},
       {label:'Ask for a callback',onClick:beginContact}]);
   }else suggested();
  }catch(e){
