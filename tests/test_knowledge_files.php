@@ -103,7 +103,7 @@ MARKDOWN;
  kf_assert(count(sf_kfile_published($data,1))===1,'approved school source available');
  kf_assert(count(sf_kfile_published($data,2))===0,'campus files segregated');
  $known=sf_kfile_published($data,1);
- kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'What are the fees?',['grade'=>'2']),'academic years'),
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'What are the fees?',['grade'=>'2']),'Which academic year'),
     'fee answer requests missing academic year');
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Grade 2 fees 2026-27',[]),'116,725'),
     'correct Grade 2 annual fee 2026-27');
