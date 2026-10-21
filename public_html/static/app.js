@@ -1008,6 +1008,52 @@ root.addEventListener('input',e=>{
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
 
+ if(f.id==='chatKnowledgeUpload'){
+   if(!isAdmin())return;
+   const file=f.elements.knowledge_file?.files?.[0];
+   if(!file)return toast('Select a school knowledge file first.',true);
+   if(!/\.(md|txt)$/i.test(file.name))return toast('Choose a .md or .txt knowledge file.',true);
+   if(file.size<40||file.size>120000)return toast('File size must be between 40 bytes and 120 KB.',true);
+   perform(async()=>{
+     const content=await file.text();
+     if(!content.trim())throw new Error('Knowledge file is empty');
+     await api('/api/schools/'+state.schoolId+'/public-chat/knowledge-files','POST',
+       {action:'upload',filename:file.name,content});
+     await loadPublicChat();toast('File uploaded for review. Inspect the content and publish explicitly.');
+   });return;
+ }
+ if(f.id==='chatAddFaqForm'||f.classList?.contains('sfFaqEditor')){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const payload={
+       action:f.id==='chatAddFaqForm'?'add':'update',
+       original_question:f.dataset.originalQuestion||'',
+       question:String(fd.question||'').trim(),answer:String(fd.answer||'').trim()
+     };
+     await api('/api/schools/'+state.schoolId+'/public-chat/faqs','POST',payload);
+     await loadPublicChat();toast(payload.action==='add'?'Verified FAQ published.':'FAQ saved.');
+   });return;
+ }
+ if(f.id==='chatFactsForm'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     const school_facts=[...f.querySelectorAll('.sf-school-fact')].map(card=>({
+       category:card.querySelector('.sf-fact-category')?.value||'other',
+       label:card.querySelector('.sf-fact-label')?.value.trim()||'',
+       details:card.querySelector('.sf-fact-details')?.value.trim()||'',
+       source_id:card.querySelector('.sf-fact-source')?.value||'',
+       confirm_recheck:!!card.querySelector('.sf-fact-confirm')?.checked
+     })).filter(x=>x.label||x.details);
+     if(school_facts.some(x=>!x.label||!x.details))throw new Error('Complete each fact label and detail');
+     const prev=ext.chatSettings;
+     await api('/api/schools/'+state.schoolId+'/public-chat','PATCH',{
+       enabled:!!prev.enabled,ai_enabled:!!prev.ai_enabled,
+       overview:prev.overview||'',faqs:prev.faqs||[],
+       school_facts,remember_days:Number(prev.remember_days||30)
+     });
+     await loadPublicChat();toast('Campus facts saved and published.');
+   });return;
+ }
  if(f.id==='chatProviderForm'){
    if(!isAdmin())return;
    perform(async()=>{
@@ -1039,24 +1085,16 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='chatSettingsForm'){
    if(!isAdmin())return;
    perform(async()=>{
-     const school_facts=[...f.querySelectorAll('.sf-school-fact')].map(card=>({
-       category:card.querySelector('.sf-fact-category')?.value||'other',
-       label:card.querySelector('.sf-fact-label')?.value.trim()||'',
-       details:card.querySelector('.sf-fact-details')?.value.trim()||'',
-       source_id:card.querySelector('.sf-fact-source')?.value||'',
-       confirm_recheck:!!card.querySelector('.sf-fact-confirm')?.checked
-     })).filter(x=>x.label||x.details);
-     if(school_facts.some(x=>!x.label||!x.details))throw new Error('Complete both label and details for each school information entry');
-     const faqs=[...f.querySelectorAll('.sf-chat-faq')].map(card=>({
-       question:card.querySelector('.sf-chat-q')?.value.trim()||'',
-       answer:card.querySelector('.sf-chat-a')?.value.trim()||''
-     })).filter(x=>x.question||x.answer);
-     if(faqs.some(x=>!x.question||!x.answer))throw new Error('Complete both the question and answer for each FAQ');
+     const prev=ext.chatSettings;
      await api('/api/schools/'+state.schoolId+'/public-chat','PATCH',{
-       enabled:!!f.elements.enabled.checked,ai_enabled:!!f.elements.ai_enabled.checked,
-       overview:fd.overview||'',faqs,school_facts,remember_days:Number(fd.remember_days||30)
+       enabled:!!f.elements.enabled.checked,
+       ai_enabled:!!f.elements.ai_enabled.checked,
+       overview:String(fd.overview||'').trim(),
+       faqs:prev.faqs||[],
+       school_facts:prev.school_facts||[],
+       remember_days:Number(fd.remember_days||30)
      });
-     await loadPublicChat();toast('Admissions chatbot settings saved');
+     await loadPublicChat();toast('School counsellor settings saved.');
    });return;
  }
  if(f.classList?.contains('sfChatReview')){
