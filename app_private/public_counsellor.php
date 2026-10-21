@@ -118,6 +118,21 @@ function sf_counsellor_ai_topic(array $topics,array $profile):?string {
     return $question.'. If specific campus facts are unavailable, state what needs confirmation.';
 }
 
+/** Turn a short approved documents fact into a readable list without adding items. */
+function sf_counsellor_documents_list(string $answer):string {
+    if(str_contains($answer,"\n•") || str_contains($answer,"\n- "))return $answer;
+    $text=trim($answer);
+    $items=preg_split('/\s*;\s*|\s*,\s*|\s+and\s+/iu',$text)?:[];
+    if(count($items)<2 || count($items)>12)return $text;
+    $clean=[];
+    foreach($items as $item){
+        $item=trim($item," \t\n\r\0\x0B.");
+        if($item!=='')$clean[]='• '.ucfirst($item);
+    }
+    return "The school’s listed admission documents include:\n\n".implode("\n",$clean).
+        "\n\nThe exact requirements may depend on the class and admission stage. Please confirm the final checklist with the school admissions team.";
+}
+
 function sf_counsellor_anonymous_token():string {
     return rtrim(strtr(base64_encode(random_bytes(32)),'+/','-_'),'=');
 }
@@ -259,7 +274,10 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         $match=$reply===null?sf_kb_match($q,$config):null;
         if($match!==null){$reply=$match['answer'];$source='approved_faq';}
         if($reply===null){$reply=sf_counsellor_fact_answer($q,$profile,$config);
-            if($reply!==null)$source='approved_school_information';}
+            if($reply!==null){
+                $source='approved_school_information';
+                if(in_array('documents',$topics,true))$reply=sf_counsellor_documents_list($reply);
+            }}
         if($reply===null){
             // The provider receives a de-identified topic, never contact data.
             // For personal questions build a topic-only synopsis.
@@ -274,16 +292,40 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         }
     }
     if($reply===null){
-        if(in_array('visit',$topics,true))$reply='I can help you request a campus visit. The admissions team will confirm whether the requested day is available.';
-        elseif(in_array('fees',$topics,true))$reply='Fees vary by class and campus. I can check published fees once we know the campus and class, or ask admissions to confirm.';
-        elseif(in_array('documents',$topics,true))$reply='Schools commonly request a birth certificate, photographs and previous school records, depending on the class. I can check this campus’s official checklist if it is available.';
-        elseif(in_array('age_eligibility',$topics,true))$reply='Admission age limits depend on the grade and the school’s cut-off date. The admissions team can confirm the rule for your child’s class.';
-        elseif($route===null)$reply='I can help with school admissions, fee questions, documents, transport, facilities and campus visits.';
-        else $reply='I can help explain general admission steps. For this campus’s specific policies, I can check published information or help you request confirmation.';
+        if(in_array('visit',$topics,true))
+            $reply='Of course, I can help you request a campus visit. Which day would suit you? Our admissions team will confirm an available appointment.';
+        elseif(in_array('fees',$topics,true))
+            $reply=$route===null
+              ?'I can help with the fee structure. Which campus are you considering?'
+              :'Fees depend on the class and academic year. Which class and admission year are you looking at? The school team can confirm the final payable amount.';
+        elseif(in_array('documents',$topics,true))
+            $reply="The documents commonly requested during school admissions include:
+
+".
+                "• Student’s birth certificate
+• Parent or guardian’s address proof
+".
+                "• Recent photographs
+• Previous school records, if joining a higher class
+
+".
+                "This is general guidance, not a confirmed checklist for this campus. The admissions team can clarify the exact documents required.";
+        elseif(in_array('age_eligibility',$topics,true))
+            $reply='I can help you check the age requirement. Which class and academic year are you considering? The school can confirm the final eligibility.';
+        elseif($route===null)
+            $reply='Happy to help. Which campus are you interested in? I can then share relevant information about fees, age eligibility, documents, facilities and transport.';
+        else
+            $reply='I can help you with that. Could you tell me a little more about which class or aspect of the school you’d like to know about? I can also help connect you with the admissions team for confirmation.';
     }
-    // Published file answers already contain the necessary year/grade
-    // clarification. Do not append a second unrelated scripted question.
-    $next=$source==='approved_knowledge_file'
+    if(in_array($source,['approved_knowledge_file','approved_school_information','approved_faq'],true)
+        && (array_intersect(['fees','age_eligibility','documents'],$topics))
+        && !preg_match('/confirm|verification|subject to|requirements may vary|final checklist|school admissions team|school admissions office/iu',$reply)) {
+        $reply.="
+
+These are the school’s published details and may change. For the most up-to-date and precise information, the admissions team can confirm what applies to your enquiry.";
+    }
+    // One clarification per turn; don't repeat a question already in the answer.
+    $next=($source==='approved_knowledge_file' || str_contains($reply,'?'))
         ?'' : sf_counsellor_next($effectiveMessage,$profile,$route!==null);
     if($next!=='')$reply.=" \n\n".$next;
     $topicsOut=array_values(array_unique($topics));
