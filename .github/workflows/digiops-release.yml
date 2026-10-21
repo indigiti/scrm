@@ -55,6 +55,7 @@ jobs:
           node --check public_html/static/admissions-chat.js
           node tests/check_frontend_v2.js
           node tests/check_group_routing.js
+          node tests/check_lexicon_chat_autoload.js
       - name: Build DigiOps public payload
         run: php tools/build-digiops.php
       - name: HTTP JSON object regression test
