@@ -281,7 +281,10 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         elseif($route===null)$reply='I can help with school admissions, fee questions, documents, transport, facilities and campus visits.';
         else $reply='I can help explain general admission steps. For this campus’s specific policies, I can check published information or help you request confirmation.';
     }
-    $next=sf_counsellor_next($effectiveMessage,$profile,$route!==null);
+    // Published file answers already contain the necessary year/grade
+    // clarification. Do not append a second unrelated scripted question.
+    $next=$source==='approved_knowledge_file'
+        ?'' : sf_counsellor_next($effectiveMessage,$profile,$route!==null);
     if($next!=='')$reply.=" \n\n".$next;
     $topicsOut=array_values(array_unique($topics));
     // Save anonymised topic and EXACT parent-facing response for review and
