@@ -13,6 +13,37 @@ var api=base+'/api/public/forms/'+encodeURIComponent(guid);
 var thankYou=loader.dataset.thankYou||'https://lexiconedu.in/thank-you/';
 var logo=loader.dataset.logo||'https://lexiconedu.in/wp-content/uploads/2025/10/The-Lexicon-Schools-Logo.png';
 var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/lexicon-form.css?v=1';document.head.appendChild(css);
+
+/**
+ * Reuse the existing one-tag installation: load Admissions AI automatically
+ * only if a campus in this approved group has enabled the public assistant.
+ * A chatbot/API failure never prevents the original enquiry form from working.
+ */
+function loadAdmissionsChat(){
+ if(loader.getAttribute('data-admissions-chat')==='off' || typeof fetch!=='function')return;
+ fetch(api+'/chat-config',{method:'GET',cache:'no-store',credentials:'omit',headers:{Accept:'application/json'}})
+ .then(function(response){return response.ok?response.json():null;})
+ .then(function(config){
+  if(!config || !Array.isArray(config.schools) || config.schools.length===0)return;
+  // Also support legacy websites which explicitly embed admissions-chat.js.
+  if(window.__schoolflowAdmissionsChatMounted)return;
+  var scripts=document.querySelectorAll('script[data-schoolflow-group]');
+  for(var i=0;i<scripts.length;i++){
+   var existing=scripts[i];
+   if(existing!==loader && existing.getAttribute('data-schoolflow-group')===guid &&
+      /\/static\/admissions-chat\.js(?:\?|$)/.test(existing.src||''))return;
+  }
+  var script=document.createElement('script');
+  script.async=true;
+  script.src=base+'/static/admissions-chat.js?v=single-loader-1';
+  script.setAttribute('data-schoolflow-group',guid);
+  script.setAttribute('data-schoolflow-chat-autoload','');
+  document.head.appendChild(script);
+ })
+ .catch(function(){/* Degrade gracefully: the existing admission form still works. */});
+}
+loadAdmissionsChat();
+
 function init(){
  if(document.getElementById('leadPopup'))return;
  var tabs=document.createElement('div');tabs.className='side-tabs';

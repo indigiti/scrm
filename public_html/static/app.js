@@ -399,8 +399,8 @@ function publicChatPage(){
   '<div class="button-row"><button type="submit" class="btn small primary">Approve & publish</button>'+
   '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):'<p class="muted-note">No unanswered topics waiting for approval.</p>')+
  '</section>'+
- '<section class="panel" style="padding:20px"><h3>Website chatbot embed</h3><p class="muted-note">Only approved group websites can display this school assistant.</p>'+
- (groups.length?groups.map(g=>{const snippet='<script defer src="'+window.location.origin+'/scrm/static/admissions-chat.js" data-schoolflow-group="'+g.guid+'"></script>';
+ '<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">Your existing Lexicon admission form script automatically loads the chatbot for enabled campuses. No second website script is needed. Only approved group websites can display it.</p>'+
+ (groups.length?groups.map(g=>{const snippet='<script defer src="'+window.location.origin+'/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="'+g.guid+'"></script>';
  return '<p><strong>'+esc(g.name)+'</strong> · '+esc(g.domain)+'</p><pre style="overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(snippet)+'</pre>'+
  '<button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy embed</button>'}).join(''):'<p class="muted-note">Connect a group website under Schools & Routing to obtain its embed snippet.</p>')+'</section>';
 }
@@ -464,7 +464,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='chat-copy-embed'){
    const group=(ext.chatGroups||[]).find(g=>g.id===Number(el.dataset.id));
    if(!group?.guid)return;
-   const snippet='<script defer src="'+window.location.origin+'/scrm/static/admissions-chat.js" data-schoolflow-group="'+group.guid+'"></script>';
+   const snippet='<script defer src="'+window.location.origin+'/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="'+group.guid+'"></script>';
    navigator.clipboard.writeText(snippet).then(()=>toast('Embed code copied')).catch(()=>toast('Clipboard unavailable; select the snippet above',true));return;
  }
  if(action==='close-modal'&&e.target.closest('.modal')&&e.target!==el&&el.id==='modalWrap')return;

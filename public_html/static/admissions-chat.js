@@ -4,6 +4,9 @@
 const loader=document.currentScript;
 const guid=(loader?.dataset.schoolflowGroup||'').toLowerCase();
 if(!/^[a-f0-9]{8}-[a-f0-9-]{27}$/.test(guid))return;
+// Avoid duplicated chat panels if both old and new embed snippets are present.
+if(window.__schoolflowAdmissionsChatMounted)return;
+window.__schoolflowAdmissionsChatMounted=guid;
 const base=new URL(loader.src).href.replace(/\/static\/admissions-chat\.js(?:\?.*)?$/,'');
 const api=base+'/api/public/forms/'+encodeURIComponent(guid);
 const css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/admissions-chat.css';document.head.append(css);
