@@ -225,7 +225,13 @@ function sf_audit_cursor(string $uri): ?int {
 function sf_lead_view(array $s, array $lead): array {
     $source = $lead['site_id'] ? sf_source($s, $lead['site_id']) : null;
     $owner = $lead['assigned_to'] ? sf_user($s, $lead['assigned_to']) : null;
-    $lead['source_name'] = $source['name'] ?? null;
+    // Preserve original campus/site routing while identifying chatbot leads
+    // separately, including enquiries created before the channel field existed.
+    $lead['chatbot_lead'] = ($lead['lead_channel']??'')==='chatbot'
+        || in_array((string)($lead['utm_source']??''),['admissions_guided_chat','public_admissions_chat'],true);
+    $lead['source_name'] = $lead['chatbot_lead']
+        ? 'Chatbot · '.($source['name']??'Admissions')
+        : ($source['name']??null);
     $lead['source_domain'] = $source['domain'] ?? null;
     $lead['assigned_name'] = $owner['name'] ?? null;
     $lead['last_contact_at'] = $lead['last_contact_at'] ?? '';

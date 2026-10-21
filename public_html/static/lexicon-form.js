@@ -137,7 +137,7 @@ function init(){
   }
  });
  document.addEventListener('click',function(event){var el=event.target.closest('[data-lexicon-form]');if(!el)return;event.preventDefault();open();});
- setTimeout(function(){if(!closed()&&!popup.classList.contains('lf-visible'))open();},10000);
+ // No timed popups: only explicit Enquire Now / data-lexicon-form clicks open this dialog.
  phone.addEventListener('input',function(){phone.value=phone.value.replace(/\D/g,'').slice(0,10);});
  function manualPin(){state.readOnly=false;city.readOnly=false;state.classList.remove('lf-readonly');city.classList.remove('lf-readonly');}
  function readonlyPin(){state.readOnly=true;city.readOnly=true;state.classList.add('lf-readonly');city.classList.add('lf-readonly');}

@@ -143,6 +143,13 @@ try{
   ai_assert(count($state['leads'])===1 && $state['leads'][0]['school_id']===1,'single school-scoped chat lead');
   ai_assert($state['leads'][0]['contact_state']==='Callback Requested','followup on same lead');
   ai_assert(!empty($state['leads'][0]['consent']),'lead consent stored');
+  ai_assert(($state['leads'][0]['lead_channel']??'')==='chatbot','new lead has permanent chatbot tracking channel');
+  $leadView=sf_lead_view($state,$state['leads'][0]);
+  ai_assert(($leadView['chatbot_lead']??false)===true,'chatbot flag visible to CRM workspace');
+  ai_assert(str_starts_with((string)$leadView['source_name'],'Chatbot · '),'chatbot source displayed distinct from ordinary website form');
+  $old=$state['leads'][0];unset($old['lead_channel']);
+  ai_assert(sf_lead_view($state,$old)['chatbot_lead']===true,'historical chat lead grouped by UTM source');
+
   [$status,$disconnected]=ai_req('PATCH','/api/schools/1/public-chat/provider',[
     'model'=>'openai/gpt-4o-mini','remove_key'=>true
   ]);

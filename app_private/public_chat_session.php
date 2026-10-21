@@ -75,6 +75,15 @@ function sf_chat_start(string $guid,array $p,array $headers,string $ip,SchoolFlo
             'consent'=>true,'message'=>'Parent started a guided admission chat; follow up from CRM.',
             'utm_source'=>'admissions_guided_chat'
         ],(int)$route['site_id'],null,null,'public_chat_enquiry_created');
+        // Channel tagging changes neither the existing school assignment nor
+        // the first-contact follow-up task created by sf_create_lead().
+        foreach($s['leads'] as &$saved){
+            if($saved['id']===$lead['id'] && $saved['school_id']===$route['school_id']){
+                $saved['lead_channel']='chatbot';
+                break;
+            }
+        }
+        unset($saved);
         $expires=time()+3600;
         $s['receipts'][]=['chat_group_id'=>$group['id'],'school_id'=>$route['school_id'],
             'chat_start_idempotency'=>$id,'public_challenge'=>$proof,

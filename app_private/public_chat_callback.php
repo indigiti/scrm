@@ -39,7 +39,11 @@ function sf_chat_callback(string $guid,array $p,array $headers,string $ip,School
              'message'=>'Requested callback through admissions chatbot'.($preferred!==''?'; preferred time: '.$preferred:''),
              'utm_source'=>'public_admissions_chat'];
         $lead=sf_create_lead($s,(int)$route['school_id'],$details,(int)$route['site_id'],null,null,'public_chat_callback_requested');
-        foreach($s['leads'] as &$saved)if($saved['id']===$lead['id']){$saved['contact_state']='Callback Requested';break;}
+        foreach($s['leads'] as &$saved)if($saved['id']===$lead['id']){
+            $saved['contact_state']='Callback Requested';
+            $saved['lead_channel']='chatbot';
+            break;
+        }
         unset($saved);
         $s['receipts'][]=['chat_group_id'=>$group['id'],'school_id'=>$route['school_id'],
              'idempotency_key'=>$id,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
