@@ -203,14 +203,17 @@ function sf_kfile_fee_answer(string $content,string $question,array $profile):?s
             $row=$cols;break;
         }
     }
-    if($row===null)return 'I don’t have the current '.$grade.' '.($term?:'annual').' fee for '.$year.' for this class. The admissions team can confirm it.';
+    if($row===null)return 'I don’t have the '.($term?:'annual').' fee for '.$grade.' in '.$year.'. The admissions team can help with the amount.';
     $value=trim(str_replace('*','',end($row)));
     if(!preg_match('/^[₹]?\s*[\d,]+(?:\.\d+)?$/u',$value))return null;
     $answer='For '.$grade.' in '.$year.', the '.($term?:'annual').' fee is ₹'.ltrim($value,'₹ ').'.';
     if(preg_match('/(Nursery|LKG|UKG)/',$grade) && $value==='96,296')
         $answer.=' There is a ₹1 difference between the fee components and the total. Admissions can confirm the final payable amount.';
-    if($grade==='Class XI')$answer.=' The one-time admission fee also needs confirmation from admissions.';
-    return $answer.' The admissions team can confirm the final payable amount.';
+    elseif($grade==='Class XI')
+        $answer.=' The one-time admission fee also needs confirmation from admissions.';
+    else
+        $answer.=' Admissions can confirm the final payable amount.';
+    return $answer;
 }
 /** Reuse school-supplied example replies, but only when unambiguous.
  * Academic-year and fees questions are handled separately.
@@ -291,7 +294,7 @@ function sf_kfile_documents_answer(array $docs,string $question,array $profile):
                 if(count($lines)>=12)break;
             }
             if($lines){
-                return 'For admission'.($grade!==''?' to '.$grade:'').', you’ll generally need:'.
+                return 'For admission'.($grade!==''?' to '.$grade:'').', the required documents include:'.
                     "\n\n".implode("\n",$lines).
                     "\n\nRequirements may vary by class and admission stage. The school admissions team can confirm the final checklist.";
             }
