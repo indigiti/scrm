@@ -32,4 +32,17 @@ for(const [name,url] of [
  report(name,r,name.startsWith('chat_')?['sfac-register','chat-start','sfac-followup']:
  name.startsWith('lexicon_')?['loadAdmissionsChat()']:['meta.versions']);
 }
+const bootstrap=await load(base+'/embed/3b8a718d-4521-4c31-8c48-5898524be892.js');
+const versionsMatch=bootstrap.text.match(/"versions":\s*\[([^\]]+)\]/);
+if(versionsMatch){
+  const versions=JSON.parse('['+versionsMatch[1]+']');
+  console.log(JSON.stringify({name:'guid_bootstrap_versions',versions}));
+  for(const [asset,idx,markers] of [
+    ['lexicon-form.js',0,['loadAdmissionsChat()']],
+    ['admissions-chat.js',2,['sfac-register','chat-start','sfac-followup']]
+  ]){
+    const q=await load(base+'/static/'+asset+'?v='+versions[idx]);
+    report('guid_target_'+asset,q,markers);
+  }
+}
 console.log('READ_ONLY_CHECK_COMPLETE');
