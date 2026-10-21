@@ -20,6 +20,9 @@ function el(){
 const cache={};
 for(const selector of ['.sfac-panel','.sfac-history','.sfac-quick','.sfac-entry',
  '#sfac-reply','.sfac-send','.sfac-step','.sfac-status','.sfac-launch','.sfac-close'])cache[selector]=el();
+// HTML hidden attributes are not parsed by the mock DOM.
+cache['.sfac-panel'].hidden=true;
+cache['.sfac-entry'].hidden=true;
 const root=el();root.querySelector=s=>{if(!cache[s])throw Error('missing UI node '+s);return cache[s];};
 const loader={src:'https://crm.example.test/scrm/static/admissions-chat.js?v=hash',
  getAttribute(key){return {'data-schoolflow-group':guid,'data-schoolflow-chat-css-version':'1234'}[key]||null;}};
@@ -64,7 +67,6 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  assert.ok(!root.innerHTML.includes('sfac-register'), 'no visible bulk lead form');
  assert.ok(root.innerHTML.includes('sfac-history'),'conversation is main interface');
  $('.sfac-launch').click();await tick();
- console.log('DEBUG_INTAKE',JSON.stringify({calls:requests.map(x=>x.route),options:$('.sfac-quick').children.map(x=>x.textContent),bubbles:$('.sfac-history').children.map(x=>x.textContent),stage:$('.sfac-step').textContent}));
  assert.equal(requests.filter(x=>x.route==='/chat').length,0,'AI must not start at open');
  choice('Kalyani Nagar');
  assert.equal($('.sfac-step').textContent,'Enquiry details · Step 2 of 9');
