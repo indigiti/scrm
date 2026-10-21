@@ -206,6 +206,26 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             if($existing && empty($rec['profile']['grade']) && !empty($existing['grade']))
                 $rec['profile']['grade']=(string)$existing['grade'];
         }
+        // Topic continuity is useful for short replies such as "2026–27" or
+        // "Class II", but a NEW general fee question is not permission to
+        // recycle a previous student's class/year.
+        $currentTopics=sf_counsellor_classify($message);
+        $isNewFeeQuestion=in_array('fees',$currentTopics,true);
+        $isNewAgeQuestion=in_array('age_eligibility',$currentTopics,true);
+        if($isNewFeeQuestion || $isNewAgeQuestion){
+            $specifiedGrade=sf_kfile_explicit_grade($message)!=='';
+            $specifiedYear=sf_kfile_year($message,[])!=='';
+            $earlierTopic=(string)($rec['pending_topic']??'');
+            $recentSameFee=$isNewFeeQuestion && $earlierTopic==='fees'
+                && isset($rec['pending_since'])
+                && time()-(int)$rec['pending_since']<=600;
+            // Changing just the grade in an active fee exchange may retain
+            // the year. A general question or a new topic never silently
+            // inherits old grade/year details.
+            if(!$specifiedGrade)unset($rec['profile']['grade']);
+            if(!$specifiedYear && !($specifiedGrade && $recentSameFee))
+                unset($rec['profile']['academic_year']);
+        }
         $rec['origin_hash']=hash('sha256',$origin);
         $rec['school_id']=$school?(int)$school['school_id']:0;
         $rec['profile']=sf_counsellor_extract($message,$rec['profile']??[]);
@@ -267,7 +287,20 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         $topics=[$pendingTopic];
     }
     $reply=null;$source='general_guidance';
-    if($route!==null){
+    $needsDetail='';
+    if(in_array('fees',$topics,true) && $route!==null){
+        // Never choose a fee for a grade that has not been established. This
+        // gate applies BEFORE document, FAQ, structured-fact or AI lookup.
+        $feeGrade=sf_kfile_grade($effectiveMessage,$profile);
+        if($feeGrade===''){
+            $needsDetail='grade';
+            $reply='Of course! Which class are you looking at?';
+        }elseif(sf_kfile_year($effectiveMessage,$profile)==='' && $knowledgeFiles){
+            $needsDetail='academic_year';
+            $reply='Which academic year are you interested in — 2026–27 or 2027–28?';
+        }
+    }
+    if($route!==null && $reply===null){
         $q=sf_chat_expand_topic($continuation?$effectiveMessage:$safe);
         // Approved school-provided documents are the preferred source for
         // year-specific fees. Never merge two academic years or campuses.
@@ -399,9 +432,13 @@ The admissions team can confirm the latest details.";
       'campus_name'=>$route['name']??null,'school_code'=>$route['code']??null,
       'profile'=>$profile,'qualified'=>$profile['lead_intent']??'Browsing',
       'pending_topic'=>$pendingTopic,
-      'needs_detail'=>$pendingTopic==='fees' || $pendingTopic==='age_eligibility'
-         ? (sf_kfile_year($message,$profile)===''?'academic_year':
-            (sf_kfile_grade($message,$profile)===''?'grade':'')) : '',
+      'needs_detail'=>$needsDetail!==''?$needsDetail:(
+         ($pendingTopic==='fees' || $pendingTopic==='age_eligibility')
+         ? (sf_kfile_grade($message,$profile)===''?'grade':
+            (sf_kfile_year($message,$profile)===''?'academic_year':'')) : ''),
+      'can_introduce'=>$needsDetail==='' && $route!==null
+         && in_array($source,['approved_knowledge_file','approved_school_information','approved_faq','ai'],true)
+         && !str_contains($reply,'?'),
       'suggest_contact'=>in_array('visit',$topics,true),'campuses'=>$campuses,
       'existing_lead'=>!empty($stored['lead_id'])]];
 }
