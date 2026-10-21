@@ -206,9 +206,13 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
         $q=sf_chat_expand_topic($safe);
         // Approved school-provided documents are the preferred source for
         // year-specific fees. Never merge two academic years or campuses.
-        foreach($knowledgeFiles as $doc)if($reply===null){
-            $specific=sf_kfile_fee_answer((string)$doc['content'],$q,$profile);
-            if($specific===null)$specific=sf_kfile_age_answer((string)$doc['content'],$q,$profile);
+        // Read every published file for this campus together, so separate
+        // 2026–27 and 2027–28 uploads cannot silently select the wrong year.
+        if($knowledgeFiles){
+            $combined=implode("\n",array_map(
+                static fn($doc)=>(string)($doc['content']??''),$knowledgeFiles));
+            $specific=sf_kfile_fee_answer($combined,$q,$profile);
+            if($specific===null)$specific=sf_kfile_age_answer($combined,$q,$profile);
             if($specific!==null){$reply=$specific;$source='approved_knowledge_file';}
         }
         if($reply===null){
