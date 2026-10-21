@@ -417,7 +417,9 @@ const schoolInfoCategories=[
 function schoolFactEditor(fact={}){
  const category=fact.category||'fees';
  return '<div class="sf-school-fact panel" style="padding:12px;margin-bottom:10px">'+
-  (fact.needs_recheck?'<p role="alert" class="app-alert">The source page changed. This fact is excluded from chatbot answers until you verify it and save the updated information.</p>':'')+
+  (fact.needs_recheck?'<p role="alert" class="app-alert">The source page changed. This fact is excluded from chatbot answers until you explicitly verify it below.</p>':'')+
+  '<input type="hidden" class="sf-fact-source" value="'+esc(fact.source_id||'')+'">'+
+  (fact.needs_recheck?'<label><input type="checkbox" class="sf-fact-confirm"> I reviewed this fact against the updated website and approve its publication</label>':'')+
   '<div class="form-field"><label>Information category</label><select class="sf-fact-category">'+
   schoolInfoCategories.map(([code,label])=>option(code,label,category)).join('')+'</select></div>'+
   '<div class="form-field"><label>Campus / class / topic label</label><input class="sf-fact-label" maxlength="120" value="'+esc(fact.label||'')+'" placeholder="e.g. Nursery annual tuition 2026–27"></div>'+
@@ -927,7 +929,9 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      const school_facts=[...f.querySelectorAll('.sf-school-fact')].map(card=>({
        category:card.querySelector('.sf-fact-category')?.value||'other',
        label:card.querySelector('.sf-fact-label')?.value.trim()||'',
-       details:card.querySelector('.sf-fact-details')?.value.trim()||''
+       details:card.querySelector('.sf-fact-details')?.value.trim()||'',
+       source_id:card.querySelector('.sf-fact-source')?.value||'',
+       confirm_recheck:!!card.querySelector('.sf-fact-confirm')?.checked
      })).filter(x=>x.label||x.details);
      if(school_facts.some(x=>!x.label||!x.details))throw new Error('Complete both label and details for each school information entry');
      const faqs=[...f.querySelectorAll('.sf-chat-faq')].map(card=>({
