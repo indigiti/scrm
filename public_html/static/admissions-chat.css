@@ -1,17 +1,33 @@
-.sfac{position:fixed;right:20px;bottom:20px;z-index:2147483000;font:14px/1.5 system-ui,Arial,sans-serif;color:#18243d}.sfac *{box-sizing:border-box}.sfac-launch{border:0;border-radius:30px;background:#333f79;color:#fff;box-shadow:0 8px 30px #17224844;padding:13px 19px;font-weight:700;cursor:pointer}.sfac-panel{position:absolute;right:0;bottom:65px;width:min(390px,calc(100vw - 30px));max-height:min(690px,calc(100dvh - 105px));overflow:auto;background:#fff;border:1px solid #d8ddeb;border-radius:18px;box-shadow:0 20px 65px #12213f50;padding:18px}.sfac [hidden]{display:none!important}.sfac-panel header{display:flex;align-items:center;justify-content:space-between;font-size:17px}.sfac-panel header button{border:0;background:transparent;font-size:27px;cursor:pointer}.sfac-hint{color:#697389;font-size:12px}.sfac label{display:block;font-size:12px;font-weight:600;margin:8px 0}.sfac input:not([type=checkbox]),.sfac select{display:block;width:100%;padding:10px;margin:5px 0;border:1px solid #cbd2e0;border-radius:9px;background:#fff;color:#243452;font:inherit}.sfac button{cursor:pointer}.sfac-history{min-height:115px;max-height:220px;overflow-y:auto;background:#f6f7fb;border:1px solid #edf0f6;border-radius:12px;padding:11px;margin:12px 0}.sfac-history p{padding:8px 11px;margin:5px 0;border-radius:10px;overflow-wrap:anywhere}.sfac-history .parent{background:#e4e8fa;margin-left:15%}.sfac-history .assistant{background:#fff;margin-right:10%;border:1px solid #e6e8f1}.sfac-ask{display:flex;gap:6px;align-items:center}.sfac-ask input{min-width:0}.sfac-ask button,.sfac-callback button,.sfac-enquiry-form button{border:0;border-radius:9px;background:#384787;color:#fff;padding:11px 12px;font-weight:650}.sfac-actions{display:flex;gap:8px;margin-top:12px}.sfac-actions button{border:1px solid #b9c4e2;background:#f4f6ff;color:#243978;border-radius:9px;padding:9px;flex:1;font:inherit}.sfac-callback,.sfac-enquiry-form{border-top:1px solid #e4e7ed;margin-top:14px;padding-top:14px}.sfac-check{display:flex!important;gap:9px;align-items:start;font-weight:400!important}.sfac-captcha{font-weight:700!important}.sfac-status{font-size:12px;color:#465372;min-height:14px}.sfac-sr{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}@media(max-width:480px){.sfac{right:12px;bottom:12px}.sfac-panel{bottom:58px;max-height:calc(100dvh - 85px)}}.sfac-enquiry-form input,.sfac-callback input{width:100%}.sfac-enquiry-form .sfac-check input,.sfac-callback .sfac-check input{width:auto}.sfac-enquiry-captcha{font-weight:700!important}
-.sfac-register{display:grid;gap:6px;border-top:1px solid #e2e6f1;margin-top:14px;padding-top:12px}
-.sfac-register strong{font-size:14px;margin-bottom:3px}
-.sfac-register .sfac-check{display:flex!important;gap:8px;align-items:start;font-weight:400!important;font-size:12px;line-height:1.5}
-.sfac-register .sfac-check input{width:auto!important;flex-shrink:0;margin-top:4px}
-.sfac .sfac-trap{display:none!important;position:absolute;left:-9999px}
-.sfac .sfac-primary{border:0;border-radius:9px;background:#354782;color:#fff;padding:11px 13px;font-weight:650}
-.sfac .sfac-primary:disabled{opacity:.65;cursor:wait}
-.sfac-notice{color:#324f70;background:#edf3fb;border-radius:10px;padding:10px;font-size:12px;margin:9px 0}
-.sfac-quick{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
-.sfac-chip{font-size:12px;line-height:1.3;border:1px solid #ced9ec;background:#f2f6ff;color:#254574;padding:7px 9px;border-radius:12px}
-.sfac-chip:hover,.sfac-chip:focus-visible{border-color:#334f91;background:#e6efff}
-.sfac-followup{margin-top:12px;width:100%;border:1px solid #aab8d6;background:#fff;color:#243c75;border-radius:9px;padding:10px}
-.sfac-followup:disabled{opacity:.7}
-.sfac-verify{font-size:12px;font-weight:700}
-.sfac-conversation[hidden],.sfac-register[hidden]{display:none!important}
-@media(max-width:480px){.sfac-quick{gap:5px}.sfac-chip{font-size:11px}}
+/* SchoolFlow: responsive conversation-led admissions, no upfront form. */
+.sfac{position:fixed;right:20px;bottom:20px;z-index:2147483000;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1d2c49}
+.sfac *{box-sizing:border-box}
+.sfac button{font:inherit;cursor:pointer}
+.sfac button:focus-visible,.sfac input:focus-visible{outline:3px solid #93b4ff;outline-offset:2px}
+.sfac [hidden]{display:none!important}
+.sfac-launch{border:1px solid #5363a2;border-radius:28px;background:#344480;color:#fff;box-shadow:0 12px 30px #16244335;padding:12px 18px;font-weight:700!important}
+.sfac-launch:hover{background:#283971}
+.sfac-panel{position:absolute;right:0;bottom:64px;width:min(420px,calc(100vw - 24px));height:min(670px,calc(100dvh - 94px));min-height:370px;display:flex;flex-direction:column;overflow:hidden;background:#fff;border:1px solid #d7e0ee;border-radius:20px;box-shadow:0 22px 70px #101e3e44}
+.sfac-head{display:flex;gap:10px;align-items:center;padding:16px 16px 14px;border-bottom:1px solid #e6eaf1;background:#fff;flex-shrink:0}
+.sfac-avatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:#eaf0ff;color:#344e92;font-size:20px}
+.sfac-headings{display:flex;flex-direction:column;min-width:0;flex:1;gap:0}
+.sfac-headings strong{font-size:16px;color:#142746}
+.sfac-step{font-size:11px;color:#6f7890}
+.sfac-close{align-self:flex-start;border:0;background:transparent;color:#42516b;font-size:25px;line-height:1;padding:2px 6px}
+.sfac-history{flex:1;min-height:130px;overflow:auto;overscroll-behavior:contain;padding:15px 14px 8px;background:linear-gradient(#f8faff,#fff);scrollbar-color:#d2dbeb transparent}
+.sfac-bubble{max-width:90%;width:fit-content;overflow-wrap:anywhere;white-space:pre-wrap;padding:11px 13px;border-radius:15px;margin:0 0 12px;font-size:13px;line-height:1.55}
+.sfac-bubble.assistant{background:#f0f4fb;color:#253750;border-top-left-radius:4px;border:1px solid #e3eaf5;margin-right:auto}
+.sfac-bubble.parent{background:#394b8c;color:#fff;border-top-right-radius:4px;margin-left:auto}
+.sfac-quick{display:flex;align-content:start;flex-wrap:wrap;gap:7px;flex-shrink:0;max-height:166px;overflow-y:auto;padding:8px 13px;border-top:1px solid #edf0f7;background:#fff}
+.sfac-quick:empty{display:none}
+.sfac-chip{max-width:100%;overflow-wrap:anywhere;text-align:left;padding:8px 11px;border:1px solid #b9cbea;border-radius:18px;background:#f5f8fe;color:#284575;font-size:12px!important;line-height:1.35}
+.sfac-chip:hover{border-color:#718fcf;background:#eaf1ff}
+.sfac-entry{display:flex;align-items:center;gap:7px;padding:12px 13px 5px;background:#fff;border-top:1px solid #ebeff6;flex-shrink:0}
+.sfac-entry input{font:inherit;flex:1;min-width:0;border:1px solid #cbd7e8;border-radius:13px;padding:12px;background:#fff;color:#1d2c49;font-size:13px}
+.sfac-entry input::placeholder{color:#748096}
+.sfac-send{height:43px;width:43px;flex-shrink:0;display:grid;place-items:center;border-radius:12px;border:0;background:#36488d;color:white;font-size:19px!important}
+.sfac-send:disabled{opacity:.5;cursor:wait}
+.sfac-footer{padding:3px 14px 10px;min-height:23px;background:#fff;flex-shrink:0}
+.sfac-status{font-size:11px;color:#576986;line-height:1.45;display:block}
+.sfac-sr{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}
+@media(max-width:480px){.sfac{right:10px;bottom:10px}.sfac-panel{bottom:58px;width:min(420px,calc(100vw - 20px));height:min(700px,calc(100dvh - 80px))}.sfac-head{padding:12px 13px}.sfac-history{padding:12px 10px}.sfac-bubble{font-size:13px}.sfac-quick{max-height:140px}.sfac-launch{padding:10px 15px}}
+@media(prefers-reduced-motion:reduce){.sfac *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
