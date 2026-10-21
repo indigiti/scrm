@@ -129,7 +129,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
     $selected=sf_text($p,'school_code',50);
     $safe=sf_counsellor_redact($message);
     $token=$given!==''?$given:sf_counsellor_anonymous_token();
-    $stored=$store->transaction(static function(array &$s)use($guid,$origin,$ip,$selected,$message,$token,$given):array {
+    $stored=$store->transaction(static function(array &$s)use($guid,$origin,$ip,$selected,$message,$token,$given,$p,$store):array {
         [$group,$routes]=sf_counsellor_routes($s,$guid,$origin);
         $gid=(int)$group['id'];$now=time();
         sf_limit($s,'counsel-ip:'.$gid.':'.substr(hash('sha256',$ip),0,16),45,3600);
