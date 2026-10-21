@@ -15,7 +15,7 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
         if(!is_bool($input['enabled']??null))sf_fail(422,'Invalid enabled flag');
         $overview=sf_text($input,'overview',1500);
         $items=$input['faqs']??null;
-        if(!is_array($items)||!array_is_list($items)||count($items)>15)sf_fail(422,'Invalid FAQ entries');
+        if(!is_array($items)||!array_is_list($items)||count($items)>60)sf_fail(422,'Invalid FAQ entries');
         $faqs=[];
         foreach($items as $item){
             if(!is_array($item))sf_fail(422,'Invalid FAQ');
@@ -29,15 +29,8 @@ function sf_chat_admin(string $method,string $ref,array $input,array $headers,Sc
     },$method==='PATCH');
 }
 function sf_chat_fallback(string $question,array $config):string {
-    $terms=preg_split('/[^a-z0-9]+/i',strtolower($question))?:[];
-    $words=array_values(array_filter($terms,static fn($v)=>strlen($v)>3));
-    $best=0;$result='';
-    foreach($config['faqs'] as $faq){
-        $score=0;
-        foreach($words as $word)if(str_contains(strtolower($faq['question']),$word))$score++;
-        if($score>$best){$best=$score;$result=$faq['answer'];}
-    }
-    return $best>0?$result:'I cannot confirm that from the published school information. Please submit an enquiry or request a callback from admissions.';
+    $match=sf_kb_match($question,$config);
+    return $match!==null?$match['answer']:'I cannot confirm that from the school information available. Please request a callback or submit an admission enquiry.';
 }
 function sf_chat_ai(string $question,string $school,array $config):?string {
     $key=getenv('SCHOOLFLOW_OPENAI_API_KEY');
@@ -84,6 +77,8 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     $code=sf_text($input,'school_code',50,3);
     $target=$groupData['schools'][$code]??null;
     if(!$target)sf_fail(422,'Select an available campus');
+    if($action==='callback')return sf_chat_callback($guid,$input,$headers,$ip,$store);
+    if($action!=='chat')sf_fail(404,'Unknown public chat action');
     $question=sf_text($input,'question',400,3);
     $ipHash=substr(hash('sha256',$ip),0,20);
     $gid=(int)$groupData['group']['id'];
@@ -93,6 +88,12 @@ function sf_chat_public(string $method,string $guid,string $action,array $input,
     },true);
     if(preg_match('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b[6-9]\d{9}\b/i',$question))
         return [200,['answer'=>'Please avoid sharing contact details in chat. Use the secure enquiry form instead.']];
+    // Prefer verified published answers: no provider call or additional cost.
+    $match=sf_kb_match($question,$target['config']);
+    if($match!==null)return [200,['answer'=>$match['answer'],'source'=>'approved_knowledge']];
+    // Unanswered nonpersonal topics are suggested for an administrator to verify.
+    sf_kb_suggest($store,(int)$target['school']['school_id'],$question);
     $answer=sf_chat_ai($question,$target['school']['name'],$target['config']);
-    return [200,['answer'=>$answer??sf_chat_fallback($question,$target['config'])]];
+    return [200,['answer'=>$answer??sf_chat_fallback($question,$target['config']),
+      'source'=>$answer!==null?'ai':'human_handoff']];
 }
