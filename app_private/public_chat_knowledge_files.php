@@ -29,10 +29,30 @@ function sf_kfile_admin(string $method,string $ref,array $p,array $headers,Schoo
                   'sha256'=>$doc['sha256']
                 ];
             }
-            return [200,['files'=>$out,'limits'=>['max_bytes'=>120000,'max_files'=>8],
+            return [200,['files'=>$out,'readiness'=>[
+                'published'=>count(array_filter($docs,static fn($d)=>($d['status']??'')==='published')),
+                'pending'=>count(array_filter($docs,static fn($d)=>($d['status']??'')==='pending')),
+                'school_id'=>$sid],
+                'limits'=>['max_bytes'=>120000,'max_files'=>8],
                 'allowed_types'=>['md','txt']]];
         }
         $action=sf_text($p,'action',18,3);
+        if($action==='test'){
+            // School-admin-only, side-effect-free knowledge diagnostic.
+            // It checks exactly the same published files used by /counsel.
+            $question=sf_text($p,'question',200,3);
+            $docs=sf_kfile_published($s,$sid);
+            if(!$docs)return [200,['status'=>'no_published_files',
+                'answer'=>'No published knowledge files are available for this campus. Uploading a document does not publish it. Review and publish the correct campus file.',
+                'published_files'=>0]];
+            $combined=implode("\n",array_column($docs,'content'));
+            $profile=['grade'=>'','academic_year'=>''];
+            $answer=sf_kfile_fee_answer($combined,$question,$profile);
+            if($answer===null)$answer=sf_kfile_age_answer($combined,$question,$profile);
+            if($answer===null)$answer=sf_kfile_example_answer($docs,$question,$profile);
+            return [200,['status'=>$answer===null?'no_matching_knowledge':'matched',
+                'published_files'=>count($docs),'answer'=>$answer??'Published files exist, but no verified direct answer matched this question. Check the document heading, class and academic year, or enable AI for broader questions.']];
+        }
         if($action==='upload'){
             $filename=sf_text($p,'filename',150,5);
             if(!preg_match('/^[\p{L}\p{N} _().-]+\.(md|txt)$/ui',$filename)
