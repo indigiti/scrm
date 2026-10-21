@@ -56,6 +56,17 @@ Class XI has conflicting amounts of ₹20,000 and ₹30,000.
 | Class XI — Commerce/Humanities | 14,934 | 91,060 | **105,994** |
 | Class XI — Science | 17,174 | 104,719 | **121,893** |
 
+## 6. Age eligibility for the 2026–27 session
+| Class | Eligible date of birth | Approximate age |
+|---|---|---|
+| Nursery | **1 January 2023 – 31 December 2023** | 3–4 years |
+| Classes II–IX | Must have passed the previous class at a recognized school | DOB cutoff not supplied |
+
+## 7. Age eligibility for the 2027–28 session
+| Class | Eligible date of birth | Approximate age |
+|---|---|---|
+| Nursery | **1 January 2024 – 31 December 2024** | 3–4 years |
+
 ## 12. Ready-to-use example chatbot responses
 **Q: What are the admission documents?**
 A: The required documents include a birth certificate and school leaving certificate.
@@ -101,6 +112,15 @@ MARKDOWN;
     'do not invent missing 2027-28 instalment fee');
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Nursery fee 2026-27',[]),'96,296'),
     'preserve school stated total with known component discrepancy');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Nursery age criteria 2026-27',[]),'1 January 2023'),
+    'approved nursery DOB range is year specific');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Nursery age criteria 2027-28',[]),'1 January 2024'),
+    'age table does not confuse two years');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Class II age eligibility 2026-27',[]),'passed the previous class'),
+    'Classes II–IX eligibility uses recognised prior school, not invented DOB cutoff');
+ kf_assert(str_contains((string)sf_kfile_age_answer($doc,'Nursery age limit',[]),'academic year'),
+    'age requires academic year before any birth-date cutoff');
+
  $fileContext=sf_kfile_context($known,'Grade 2 fees 2026-27',['grade'=>'2']);
  kf_assert(str_contains($fileContext,'2026'),'approved knowledge excerpt usable for AI context');
 
