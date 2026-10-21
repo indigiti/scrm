@@ -10,6 +10,7 @@ require_once __DIR__ . '/public_chat_returning.php';
 require_once __DIR__ . '/public_chat_provider.php';
 require_once __DIR__ . '/public_chat.php';
 require_once __DIR__ . '/public_counsellor.php';
+require_once __DIR__ . '/public_chat_sources.php';
 require_once __DIR__ . '/admission_workflow.php';
 require_once __DIR__ . '/admissions_tasks.php';
 require_once __DIR__ . '/admissions_analytics.php';
@@ -528,6 +529,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         return sf_counsellor_message(strtolower($cm[1]),$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('~^/api/public/forms/([a-f0-9-]{36})/counsel-lead$~iD',$path,$cl))
         return sf_counsellor_convert(strtolower($cl[1]),$payload,$headers,$ip,$store);
+    if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/sources$~iD',$path,$srcChat))
+        return sf_counsellor_sources($method,$srcChat[1],$payload,$headers,$store);
     if($method==='GET' && preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/counsellor-report$~iD',$path,$cr))
         return sf_counsellor_report($cr[1],$headers,$store);
     if(preg_match('~^/api/public/forms/([a-f0-9-]{36})/(chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback)$~iD',$path,$chatMatch))
