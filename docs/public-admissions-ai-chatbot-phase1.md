@@ -134,3 +134,13 @@ A read-only check of `https://lexiconedu.in/demo/` confirmed that the site alrea
 SchoolFlow admin's **Copy head script** now provides the extensionless form URL. Existing sites already using the previous GUID `.js` URL should replace that one tag with the new extensionless URL, keeping the exact same GUID. **Do not rotate the Form ID** to fix cache; ID rotation intentionally invalidates the old embed and requires website edits.
 
 **Infrastructure caveat:** The application can request no-store, but Cloudways or Cloudflare rules may override origin headers. After deploying, verify the extensionless URL has no long-lived public cache header and that it retrieves current JS hashes. Where CDN rules override the origin, bypass caching for `/scrm/embed/*` and `/scrm/api/public/forms/*`. Purge the cached legacy `/scrm/embed/<GUID>.js` URL as needed.
+
+## Conversational admissions intake UI
+
+The widget now collects enquiry information **entirely within chat bubbles**, not as a visible multi-input registration form. On opening, the assistant selects an approved campus through quick-reply chips, then asks the parent/guardian name, mobile, student name, intended grade, optional email and city (both with Skip buttons), consent, and finally the signed math verification. A progress label shows the active step.
+
+A parent must explicitly accept consent and complete CAPTCHA before the `/chat-start` call creates the CRM lead. Until the backend returns the signed session token, regular FAQ/AI requests cannot be made. Parent contact details are kept only in the browser's temporary in-memory draft until submission and are cleared on successful lead registration. Phone and email are masked in the visible chat transcript. The chatbot does not store full chat transcripts or send parent personal details to OpenRouter.
+
+After registration, the same chat pane offers eight school-approved quick questions, free-form questions, and an optional callback action linked to the existing lead. School admins continue to manage approved Q&As, OpenRouter and consent settings in **Admissions AI**. No new API route, WordPress code or form GUID is required.
+
+Regression: `node tests/check_conversational_chat.js` simulates the chat flow, checks that consent refusal never submits a lead, verifies the signed session is created after CAPTCHA, and validates Q&A/callback wiring. The public PHP origin, consent, school isolation and lead creation tests remain in CI.
