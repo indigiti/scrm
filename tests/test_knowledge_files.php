@@ -89,6 +89,21 @@ MARKDOWN;
     'correct Grade 2 annual fee 2026-27');
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Grade 2 fees 2027-28',[]),'105,927'),
     'different annual fee next year, not merged');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'What is Grade 2 first-term fee 2026-27?',[]),'58,362.50'),
+    'published Term I total must not be replaced with annual fee');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Class II one-time admission fee 2026-27',[]),'20,000'),
+    'one-time admission fee separate from tuition');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Class XI Science fees 2027-28',[]),'121,893'),
+    'Class XI Science selected from correct year and stream');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Class XI fees 2027-28',[]),'Which stream'),
+    'stream required before choosing between Class XI fee rows');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Grade 2 Term I fee 2027-28',[]),'annual totals only'),
+    'do not invent missing 2027-28 instalment fee');
+ kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'Nursery fee 2026-27',[]),'96,296'),
+    'preserve school stated total with known component discrepancy');
+ $fileContext=sf_kfile_context($known,'Grade 2 fees 2026-27',['grade'=>'2']);
+ kf_assert(str_contains($fileContext,'2026'),'approved knowledge excerpt usable for AI context');
+
  kf_assert(str_contains((string)sf_kfile_fee_answer($doc,'What is Class XI one-time admission fee 2027-28?',[]),'conflict'),
     'contradictory one-time admission fee never guessed');
  kf_assert(str_contains((string)sf_kfile_example_answer($known,'admission documents',[]),'birth certificate'),
