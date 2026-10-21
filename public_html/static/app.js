@@ -166,6 +166,9 @@ function groupSchoolChecks(chosen=[]){
  const admins=state.me?.schools.filter(x=>x.role==='Admin')||[];
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
 }
+function sfGroupEmbed(guid){
+ return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'.js"></script>';
+}
 function routingPage(){
  if(!canManageSchools())return '<div class="empty-state">School management requires administrator access.</div>';
  const rows=ext.schoolsOverview||[],groups=ext.groupSites||[];
@@ -173,7 +176,7 @@ function routingPage(){
  <div class="app-alert">For a school group website, connect the permitted campuses below. Copy the public one-tag script into the website head; no Google Script, WordPress plugin or HFCM required. The older Contact Form 7 connector remains optional. A parent's choice can route only to an approved campus.</div>
  <section class="page-card" style="margin-bottom:20px"><div class="section-head" style="margin-top:0"><div><h2>Group websites</h2><p>One form, one private group key, multiple school destinations</p></div>${btn('＋ Connect group website','new-group','primary small')}</div>
  ${ext.groupKey?`<div class="key-panel"><strong>New group website key — copy and save now</strong><p class="muted-note">This secret is shown once. Set SCHOOLFLOW_CRM_GROUP_SITE_KEY on the WordPress server, never in HTML.</p><div class="key-box">${esc(ext.groupKey)}</div><div class="button-row" style="margin-top:10px">${btn('Copy key','copy-group-key','primary small')}${btn('I saved the key','dismiss-group-key','small')}</div></div>`:''}
- <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div><div class="muted-note" style="margin:8px 0 4px"><b>Public head-script embed</b> — this GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(`<script defer src="${window.location.origin}/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="${g.guid||""}"></script>`) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div><div class="muted-note" style="margin:8px 0 4px"><b>GUID form embed</b> — script assets refresh automatically. This GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupEmbed(g.guid||'')) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -399,8 +402,8 @@ function publicChatPage(){
   '<div class="button-row"><button type="submit" class="btn small primary">Approve & publish</button>'+
   '<button type="button" class="btn small" data-action="chat-reject-topic" data-id="'+esc(item.id)+'">Reject</button></div></form>').join(''):'<p class="muted-note">No unanswered topics waiting for approval.</p>')+
  '</section>'+
- '<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">Your existing Lexicon admission form script automatically loads the chatbot for enabled campuses. No second website script is needed. Only approved group websites can display it.</p>'+
- (groups.length?groups.map(g=>{const snippet='<script defer src="'+window.location.origin+'/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="'+g.guid+'"></script>';
+ '<section class="panel" style="padding:20px"><h3>One-script website integration</h3><p class="muted-note">The GUID embed serves both the enquiry form and the chatbot with automatically updated script versions. Older lexicon-form.js installations remain compatible. Only approved group websites can display it.</p>'+
+ (groups.length?groups.map(g=>{const snippet=sfGroupEmbed(g.guid);
  return '<p><strong>'+esc(g.name)+'</strong> · '+esc(g.domain)+'</p><pre style="overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+esc(snippet)+'</pre>'+
  '<button type="button" class="btn small" data-action="chat-copy-embed" data-id="'+Number(g.id)+'">Copy embed</button>'}).join(''):'<p class="muted-note">Connect a group website under Schools & Routing to obtain its embed snippet.</p>')+'</section>';
 }
@@ -464,7 +467,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='chat-copy-embed'){
    const group=(ext.chatGroups||[]).find(g=>g.id===Number(el.dataset.id));
    if(!group?.guid)return;
-   const snippet='<script defer src="'+window.location.origin+'/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="'+group.guid+'"></script>';
+   const snippet=sfGroupEmbed(group.guid);
    navigator.clipboard.writeText(snippet).then(()=>toast('Embed code copied')).catch(()=>toast('Clipboard unavailable; select the snippet above',true));return;
  }
  if(action==='close-modal'&&e.target.closest('.modal')&&e.target!==el&&el.id==='modalWrap')return;
@@ -569,9 +572,24 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    ext.editGroupId=action==='edit-group'?Number(el.dataset.id):null;
    state.modal=action;render();return;
  }
+ if(action==='refresh-group-form-id'){
+   if(!isAdmin())return;
+   const id=Number(el.dataset.id),group=ext.groupSites.find(x=>x.id===id);
+   if(!group)return;
+   if(!confirm('Generate a new public Form ID for '+group.name+'? The previous embed and public form GUID will stop working immediately. You MUST copy the new script into the website after refreshing. Existing enquiries and internal CRM keys will be preserved.'))return;
+   perform(async()=>{
+     const updated=await api('/api/group-sites/'+id+'/refresh-form-id','POST',{});
+     const index=ext.groupSites.findIndex(x=>x.id===id);
+     if(index>=0)ext.groupSites[index]=updated;
+     ext.chatGroups=ext.chatGroups.map(x=>x.id===id?updated:x);
+     render();
+     toast('New Form ID generated. Copy the new GUID embed into the website. Old code is invalid.');
+   });
+   return;
+ }
  if(action==='copy-group-embed'){
    const group=ext.groupSites.find(x=>x.id===Number(el.dataset.id));if(!group?.guid){toast('Group GUID not available yet',true);return;}
-   const code='<script defer src="'+window.location.origin+'/scrm/static/lexicon-form.js?v=1" data-schoolflow-group="'+group.guid+'"></script>';
+   const code=sfGroupEmbed(group.guid);
    navigator.clipboard.writeText(code).then(()=>toast('Head script copied')).catch(()=>toast('Copy blocked by the browser; select the code on the card',true));return;
  }
  if(action==='copy-group-key'){navigator.clipboard.writeText(ext.groupKey).then(()=>toast('Group website key copied'));return;}
