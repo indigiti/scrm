@@ -121,5 +121,5 @@ $exposedFiles = [];
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($output, FilesystemIterator::SKIP_DOTS));
 foreach($iterator as $file) $exposedFiles[] = str_replace($output.'/','',$file->getPathname());
 sort($exposedFiles);
-if ($exposedFiles !== ['.htaccess','index.php','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
+if ($exposedFiles !== ['.htaccess','index.php','static/admissions-chat.css','static/admissions-chat.js','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
 echo "DigiOps public-only payload: ".implode(', ',$exposedFiles)."\n";
