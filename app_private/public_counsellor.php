@@ -41,9 +41,16 @@ function sf_counsellor_extract(string $message,array $profile):array {
     // Explicit grade in this turn overrides remembered context. In particular
     // "fees for 5 th" must replace a prior Class I and become Class V.
     $explicitGrade=sf_kfile_explicit_grade($message);
-    if($explicitGrade!=='')
-        $profile['grade']=str_starts_with($explicitGrade,'Class ')
+    if($explicitGrade!==''){
+        $short=str_starts_with($explicitGrade,'Class ')
             ?substr($explicitGrade,6):$explicitGrade;
+        // CRM records historically store grade 2 as "2", not Roman "II".
+        // Keep that contract and only normalise at knowledge lookup time.
+        $roman=['I'=>'1','II'=>'2','III'=>'3','IV'=>'4','V'=>'5',
+            'VI'=>'6','VII'=>'7','VIII'=>'8','IX'=>'9','X'=>'10',
+            'XI'=>'11','XII'=>'12'];
+        $profile['grade']=$roman[$short]??$short;
+    }
     if(preg_match('/\b(20\d{2}\s*[-–—\/]\s*(?:20)?\d{2})(?!\d)/u',$message,$m))
         $profile['academic_year']=preg_replace('/\s+/','',$m[1]);
     if(preg_match('/\b(?:we live in|i live in|reside in|from|we are in)\s+([\p{L} \-]{3,50})/ui',$message,$m)){
