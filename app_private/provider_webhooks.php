@@ -104,3 +104,17 @@ function sf_webhook_receive(string $method,string $path,string $raw,array $heade
         return [200,['ok'=>true,'processed'=>count($updates),'matched'=>$matched,'changed'=>$changed]];
     },true);
 }
+
+/** Meta GET subscription handshake: verification token stays in per-school environment. */
+function sf_webhook_meta_challenge(string $path,array $query,SchoolFlowStore $store):string{
+    if(!preg_match('~^/api/webhooks/meta/([0-9]+|[a-f0-9-]{36})$~iD',$path,$m))sf_fail(404,'Meta webhook unavailable');
+    $sid=$store->transaction(static fn(array $s)=>sf_record_id($s,'schools',$m[1]));
+    $token=getenv('SCHOOLFLOW_META_VERIFY_TOKEN_'.$sid);
+    if(!is_string($token)||strlen($token)<16)sf_fail(503,'Meta verification is not configured');
+    if(($query['hub_mode']??'')!=='subscribe' ||
+       !is_string($query['hub_verify_token']??null)||
+       !hash_equals($token,$query['hub_verify_token']))sf_fail(403,'Meta verification rejected');
+    $challenge=(string)($query['hub_challenge']??'');
+    if(!preg_match('/^[0-9]{1,120}$/D',$challenge))sf_fail(422,'Meta challenge invalid');
+    return $challenge;
+}
