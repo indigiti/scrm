@@ -51,15 +51,42 @@ if ($path === '/' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     readfile(__DIR__ . '/static/index.html');
     exit;
 }
-if (!str_starts_with($path,'/api/') && $path !== '/health') sf_json(['detail'=>'Not found'],404);
+if (!str_starts_with($path,'/api/') && !in_array($path,['/health','/health/ready'],true)) sf_json(['detail'=>'Not found'],404);
 // Ordinary API requests remain small. Only the authenticated historical importer
 // accepts bounded base64 workbooks (2.5 MB binary + JSON/base64 overhead).
 $importRequest=($_SERVER['REQUEST_METHOD']??'')==='POST' &&
     preg_match('#^/api/schools/(?:[0-9]+|[a-f0-9-]{36})/imports/(?:preview|commit)$#iD',$path)===1;
-$maxBody=$importRequest?3600000:32768;
+$webhookRequest=preg_match('~^/api/webhooks/(?:resend|meta)/[0-9a-f-]+$~iD',$path)===1;
+$maxBody=$importRequest?3600000:($webhookRequest?65536:32768);
 if ((int)($_SERVER['CONTENT_LENGTH']??0)>$maxBody) sf_json(['detail'=>'Request too large'],413);
 $raw=file_get_contents('php://input',false,null,0,$maxBody+1);
 if (!is_string($raw)||strlen($raw)>$maxBody) sf_json(['detail'=>'Request too large'],413);
+// Provider signatures cover the original raw body. Do not decode and
+// re-encode the payload before verification.
+if($webhookRequest && ($_SERVER['REQUEST_METHOD']??'GET')==='GET'
+   && str_starts_with($path,'/api/webhooks/meta/')){
+    $query=[];parse_str((string)($_SERVER['QUERY_STRING']??''),$query);
+    try{
+        $challenge=sf_webhook_meta_challenge($path,$query,new SchoolFlowStore());
+        header('Content-Type: text/plain; charset=utf-8');
+        http_response_code(200);echo $challenge;exit;
+    }catch(SFError $e){sf_json(['detail'=>$e->getMessage()],$e->httpStatus);}
+    catch(Throwable $e){error_log('SchoolFlow Meta handshake failed');sf_json(['detail'=>'Webhook unavailable'],503);}
+}
+if($webhookRequest){
+    $deliveryHeaders=[
+        'svix-id'=>$_SERVER['HTTP_SVIX_ID']??'',
+        'svix-timestamp'=>$_SERVER['HTTP_SVIX_TIMESTAMP']??'',
+        'svix-signature'=>$_SERVER['HTTP_SVIX_SIGNATURE']??'',
+        'x-hub-signature-256'=>$_SERVER['HTTP_X_HUB_SIGNATURE_256']??''
+    ];
+    try{
+        [$status,$data]=sf_webhook_receive($_SERVER['REQUEST_METHOD']??'GET',$path,$raw,$deliveryHeaders,new SchoolFlowStore());
+        sf_json($data,$status);
+    }catch(SFError $e){sf_json(['detail'=>$e->getMessage()],$e->httpStatus);}
+    catch(JsonException $e){sf_json(['detail'=>'Malformed webhook JSON'],422);}
+    catch(Throwable $e){error_log('SchoolFlow provider webhook error (redacted)');sf_json(['detail'=>'Webhook unavailable'],503);}
+}
 $payload=[];
 if (($raw??'')!=='') {
     try {

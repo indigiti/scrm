@@ -20,6 +20,9 @@ require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
 require_once __DIR__ . '/staff_management.php';
+require_once __DIR__ . '/work_queue.php';
+require_once __DIR__ . '/ai_quality.php';
+require_once __DIR__ . '/provider_webhooks.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];
@@ -439,15 +442,20 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
     return array_merge(sf_demo_status($s,$schoolId),['created'=>true]);
 }
 function sf_demo_clear(array &$s, int $schoolId): array {
-    $removedLeadIds=[];
-    foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) $removedLeadIds[$l['id']]=true;
+    $removedLeadIds=[];$demoFamilyGuids=[];
+    foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) {
+        $removedLeadIds[$l['id']]=true;
+        if(!empty($l['family_guid']))$demoFamilyGuids[$l['family_guid']]=true;
+    }
     $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($removedLeadIds[$l['id']])));
     $s['activities']=array_values(array_filter($s['activities'],fn($a)=>!isset($removedLeadIds[$a['lead_id'] ?? -1])));
-    // Only remove parent profiles no longer referenced by any real or remaining lead.
-    $familyRefs=[];
-    foreach($s['leads'] as $lead)if(!empty($lead['family_guid']))$familyRefs[$lead['family_guid']]=true;
+    // Delete only demo-associated profiles with no surviving enquiry.
+    $survivingFamilyGuids=[];
+    foreach($s['leads'] as $lead)if(!empty($lead['family_guid']))$survivingFamilyGuids[$lead['family_guid']]=true;
     if(isset($s['parent_profiles']))$s['parent_profiles']=array_values(array_filter(
-        $s['parent_profiles'],fn($p)=>isset($familyRefs[$p['guid']])
+        $s['parent_profiles'],static fn($p)=>!((int)($p['school_id']??0)===$schoolId &&
+            isset($demoFamilyGuids[$p['guid']??'']) &&
+            !isset($survivingFamilyGuids[$p['guid']??'']))
     ));
 
     foreach(['calls','visits','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
@@ -465,7 +473,10 @@ function sf_demo_clear(array &$s, int $schoolId): array {
     foreach ($s['sites'] as &$site) if ($site['school_id']===$schoolId && !empty($site['is_demo']) && !isset($removedSiteIds[$site['id']])) { $site['is_demo']=false; $site['enabled']=0; }
     unset($site);
     $s['sites']=array_values(array_filter($s['sites'],fn($site)=>!isset($removedSiteIds[$site['id']])));
-    $s['receipts']=array_values(array_filter($s['receipts'],fn($r)=>!isset($removedLeadIds[$r['lead_id']]) && !isset($removedSiteIds[$r['site_id']])));
+    $s['receipts']=array_values(array_filter($s['receipts'],static fn($r)=>
+        !isset($removedLeadIds[$r['lead_id']??-1]) &&
+        !isset($removedLeadIds[$r['chat_session_lead_id']??-1]) &&
+        !isset($removedSiteIds[$r['site_id']??-1])));
     if(isset($s['email_templates']))$s['email_templates']=array_values(array_filter($s['email_templates'],
         fn($t)=>!($t['school_id']===$schoolId&&!empty($t['is_demo']))));
     return ['removed_leads'=>count($removedLeadIds),'removed_sites'=>count($removedSiteIds),'kept_demo_sites_with_real_leads'=>$keptSites];
@@ -519,6 +530,16 @@ function sf_github_owner_verified(string $token): bool {
 /** Route return form: [HTTP status, data]. All mutations run inside exclusive file lock. */
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+    if ($path === '/health/ready' && $method === 'GET')return $store->transaction(static function(array $s):array {
+        $ready=false;
+        foreach($s['memberships']??[] as $membership){
+            if(($membership['role']??'')!=='Admin'||!sf_staff_enabled($membership))continue;
+            $user=sf_user($s,(int)($membership['user_id']??0));
+            $school=sf_find($s['schools']??[],(int)($membership['school_id']??0));
+            if($school!==null&&!empty($user['active'])){$ready=true;break;}
+        }
+        return [$ready?200:503,['ok'=>$ready,'service'=>'schoolflow']];
+    });
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
@@ -546,12 +567,16 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         return sf_chat_provider_admin($method,$providerChat[1],$payload,$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat$~iD',$path,$adminChat))
         return sf_chat_admin($method,$adminChat[1],$payload,$headers,$store);
+    if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/quality$~iD',$path,$quality))
+        return sf_ai_quality_admin($method,$quality[1],$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/review$~iD',$path,$review))
         return sf_kb_review($method,$review[1],$payload,$headers,$store);
     if (str_starts_with($path,'/api/public/forms/'))
         return sf_public_handle($method,$path,$payload,$headers,$ip,$store);
     if($method==='POST' && preg_match('#^/api/schools/\d+/communications/(email|whatsapp)/send$#D',$path))
         return sf_provider_send($uri,$payload,$headers,$store,$messageTransport);
+    if(preg_match('~^/api/schools/([0-9]+|[a-f0-9-]{36})/work-queue$~iD',$path,$wq))
+        return sf_work_queue_endpoint($method,$wq[1],$headers,$uri,$store);
     // Public first-run discovery contains no secrets. Setup is available only for a truly empty store.
     if ($path === '/api/setup/status' && $method === 'GET') {
         return $store->transaction(static function (array $s): array {

@@ -310,7 +310,7 @@ function sf_counsellor_message(string $guid,array $p,array $headers,string $ip,S
             $schoolFeatureQuestion=preg_match('/\b(?:school\s+features?|school\s+facilities|campus\s+features?|facilities)\b/iu',$message)
                 && !preg_match('/^(?:what\s+are\s+the\s+typical|how\s+to\s+compare)\b/iu',trim($message));
             if(($schoolBoardQuestion||$schoolFeatureQuestion)
-               || in_array('fees',$topics,true))$aiTopic=null;
+               || in_array('fees',$topics,true) || !sf_ai_quality_can_use_ai($topics,$message))$aiTopic=null;
             if($aiTopic!==null&&!empty($config['ai_enabled'])){
                 $config['file_context']=sf_kfile_context($knowledgeFiles,$q,$profile);
                 $reply=!empty($config['openrouter_key'])

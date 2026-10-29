@@ -22,7 +22,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -76,8 +76,8 @@ async function reload(){
    isAdmin()?api(path+'/demo-data'):Promise.resolve(null),
    isAdmin() && state.page==='Reports'?api(path+'/audit'):Promise.resolve(null)
  ]);
- [ext.visits,ext.families,ext.templates,ext.analytics,ext.assignment,ext.messaging,ext.tasks,ext.applications]=await Promise.all([
-   api(path+'/visits'),api(path+'/families'),api(path+'/templates'),api(path+'/analytics'),api(path+'/assignment'),api(path+'/communications'),api(path+'/tasks'),api(path+'/applications')]);
+ [ext.visits,ext.families,ext.templates,ext.analytics,ext.assignment,ext.messaging,ext.tasks,ext.applications,ext.workQueue]=await Promise.all([
+   api(path+'/visits'),api(path+'/families'),api(path+'/templates'),api(path+'/analytics'),api(path+'/assignment'),api(path+'/communications'),api(path+'/tasks'),api(path+'/applications'),api(path+'/work-queue?limit=100')]);
  if(isAdmin()){
   [ext.autoPolicy,ext.autoQueue,ext.followupPolicy,ext.seatPlans,ext.responseSla]=await Promise.all([api(path+'/automation'),api(path+'/automation/queue'),api(path+'/followup-policy'),api(path+'/seat-plans'),api(path+'/response-sla')]);
  }else{ext.autoPolicy={enabled:false};ext.autoQueue=[];}
@@ -205,6 +205,19 @@ function pipeline(){
   <div class="pipeline-scroll"><div class="pipeline-columns phase-pipeline">${columns}</div></div>
   <p class="muted-note">Keyboard users can open a card with Enter or Space and change its detailed stage.</p>`;
 }
+function smartQueuePanel(queue){
+ const items=queue.items||[];
+ const rows=items.map(item=>'<tr><td><b>'+Number(item.priority)+'</b></td>'+
+ '<td>'+esc(item.student_name||'Student')+' <small class="muted">'+esc(item.grade||'')+'</small></td>'+
+ '<td>'+((item.reasons||[]).map(x=>esc(String(x).replaceAll('_',' '))).join(', '))+'</td>'+
+ '<td>'+esc(item.due_date||'Not scheduled')+'</td><td>'+esc(item.stage||'')+'</td>'+
+ '<td><button class="btn small" data-action="view-lead" data-id="'+Number(item.lead_id)+'">Open enquiry</button></td></tr>').join('')||
+ '<tr><td colspan="6">No actionable enquiries need attention.</td></tr>';
+ return '<div class="panel"><div class="worklist-head"><h2>Smart priority queue</h2>'+
+ '<span class="muted-note">'+Number(queue.total||0)+' enquiries needing action</span></div>'+
+ '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Priority</th><th>Student</th><th>Reason</th><th>Due</th><th>Stage</th><th>Action</th></tr></thead>'+
+ '<tbody>'+rows+'</tbody></table></div></div>';
+}
 function myWork(){
  const open=(ext.tasks||[]).filter(t=>t.status==='Open');
  const due=open.filter(t=>['Overdue','Due Today'].includes(t.due_status));
@@ -217,6 +230,7 @@ function myWork(){
   ${stat('First contact',pending.length,'Parents not yet reached','☎')}${stat("SLA breached",ext.analytics.sla_breached||0,"Requires priority outreach","!","orange")}
   ${stat('Scheduled visits',(ext.visits||[]).filter(v=>v.status==='Scheduled').length,'Upcoming campus visits','▣')}
  </div>
+ ${smartQueuePanel(ext.workQueue||{})}
  <div class="panel"><div class="worklist-head"><h2>Priority actions</h2><span class="muted-note">School time · ${esc(day())}</span></div>
  <div class="table-scroll"><table class="lead-table"><thead><tr><th>Due</th><th>Action</th><th>Student</th><th>Assigned</th><th>Status</th><th>Next step</th></tr></thead>
  <tbody>${items.map(t=>`<tr>
@@ -440,13 +454,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 async function loadPublicChat(){
  if(!isAdmin())return;
  const base='/api/schools/'+state.schoolId+'/public-chat';
- const [settings,provider,review,groups,report,sources,files]=await Promise.all([
+ const [settings,provider,review,groups,report,sources,files,quality]=await Promise.all([
    api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites'),
-   api(base+'/counsellor-report'),api(base+'/sources'),api(base+'/knowledge-files')
+   api(base+'/counsellor-report'),api(base+'/sources'),api(base+'/knowledge-files'),api(base+'/quality')
  ]);
  ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;
  ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
- ext.counsellorReport=report;ext.chatSources=sources;ext.chatFiles=files;
+ ext.counsellorReport=report;ext.chatSources=sources;ext.chatFiles=files;ext.chatQuality=quality;
  render();
 }
 
@@ -498,7 +512,8 @@ function publicChatPage(){
   ['Knowledge files',activeFiles.length,files.length-activeFiles.length+' awaiting publication'],
   ['Approved answers',faqs.length,'Reusable without AI generation'],
   ['Questions to review',review.length+candidates.length,'Unanswered or unverified facts'],
-  ['Chatbot leads',leads.length,'Converted parent enquiries']
+  ['Chatbot leads',leads.length,'Converted parent enquiries'],
+  ['AI topics to review',Number(ext.chatQuality?.groups_needing_review||0),'Review latest AI or general-guidance answers']
  ].map(x=>'<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong><small>'+esc(x[2])+'</small></div>').join('')+'</div>';
  const fileList=files.length?'<div class="ai-file-list">'+files.map(file=>
   '<article class="ai-file-card">'+
@@ -638,7 +653,15 @@ function publicChatPage(){
    ['Callbacks requested',leads.filter(l=>l.contact_state==='Callback Requested').length]].map(x=>
     '<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong></div>').join('')+'</div>'+
    '<div class="ai-item-actions"><button type="button" class="btn primary" data-action="chat-goto-leads">Open Chatbot Leads</button></div></section>';
- const overview='<div class="ai-overview">'+metrics+
+ const quality=ext.chatQuality||{topics:[],data_limit:'Latest source only'};
+ const reviewTopics=(quality.topics||[]).filter(x=>x.needs_review).slice(0,8);
+ const qualityPanel='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">ANSWER QUALITY</span><h3>Topics needing school verification</h3>'+
+  '<p>Check where the most recent response relied on AI or general guidance. This is not an accuracy score.</p></div><span class="ai-status pending">'+Number(quality.groups_needing_review||0)+' groups</span></div>'+
+  (reviewTopics.length?'<div class="ai-qa-list">'+reviewTopics.map(x=>'<div class="ai-record"><div class="ai-record-body"><strong>'+
+  esc(String(x.topic||'').replaceAll('_',' '))+'</strong><small>'+esc(x.grade||'Class not specified')+
+  ' · '+esc(x.academic_year||'Year not specified')+' · '+Number(x.questions||0)+' questions · Last source: '+esc(x.latest_source||'unknown')+
+  '</small></div></div>').join('')+'</div>':'<p class="ai-muted">No latest-response groups have been flagged for review.</p>')+'</section>';
+ const overview='<div class="ai-overview">'+metrics+qualityPanel+
   '<div class="ai-grid-two"><section class="ai-surface ai-feature"><span class="ai-eyebrow">RECOMMENDED WORKFLOW</span>'+
   '<h3>Teach the counsellor once. Answer consistently.</h3>'+
   '<div class="ai-steps"><div><b>1</b><span><strong>Upload</strong><small>Add the school’s approved knowledge file</small></span></div>'+
