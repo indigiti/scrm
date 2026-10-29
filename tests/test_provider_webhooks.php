@@ -46,6 +46,15 @@ try{
     $badHeaders=$headers;$badHeaders['svix-signature']='v1,invalid';
     try{sf_webhook_receive('POST','/api/webhooks/resend/1',$raw,$badHeaders,$store);throw new RuntimeException('Unsigned webhook accepted');}
     catch(SFError $e){wh_assert($e->httpStatus===401,'bad signature blocked');}
+    putenv('SCHOOLFLOW_META_VERIFY_TOKEN_1=meta-test-verify-token-long');
+    $challenge=sf_webhook_meta_challenge('/api/webhooks/meta/1',
+        ['hub_mode'=>'subscribe','hub_verify_token'=>'meta-test-verify-token-long','hub_challenge'=>'123456789'],$store);
+    wh_assert($challenge==='123456789','Meta subscription handshake');
+    try{sf_webhook_meta_challenge('/api/webhooks/meta/1',
+        ['hub_mode'=>'subscribe','hub_verify_token'=>'wrong','hub_challenge'=>'123'],$store);
+        throw new RuntimeException('Invalid verify token accepted');}
+    catch(SFError $e){wh_assert($e->httpStatus===403,'Meta handshake token rejected');}
+    putenv('SCHOOLFLOW_META_VERIFY_TOKEN_1');
     putenv('SCHOOLFLOW_RESEND_WEBHOOK_SECRET_1');putenv('SCHOOLFLOW_META_WEBHOOK_APP_SECRET_1');
 }finally{
     foreach(glob($dir.'/*')?:[] as $path)@unlink($path);
