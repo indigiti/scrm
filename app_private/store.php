@@ -11,6 +11,8 @@ final class SchoolFlowStore {
         }
         if (!is_writable($this->dir)) throw new RuntimeException('Private data directory is not writable');
     }
+    /** Private storage path for operator-controlled, locked backup operations. */
+    public function dataDirectory(): string { return $this->dir; }
     public function transaction(callable $callback, bool $write = false): mixed {
         $lock = fopen($this->dir . '/store.lock', 'c');
         if (!$lock) throw new RuntimeException('Cannot open store lock');
