@@ -21,6 +21,8 @@ require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
 require_once __DIR__ . '/staff_management.php';
 require_once __DIR__ . '/work_queue.php';
+require_once __DIR__ . '/ai_quality.php';
+require_once __DIR__ . '/provider_webhooks.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 const SF_ROLES = ['Admin','Admissions','Counsellor'];

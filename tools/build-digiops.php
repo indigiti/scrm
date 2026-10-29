@@ -26,6 +26,8 @@ $import = phpBody($root . '/app_private/import_enquiries.php');
 $operations = phpBody($root . '/app_private/admissions_operations.php');
 $staff = phpBody($root . '/app_private/staff_management.php');
 $workQueue = phpBody($root . '/app_private/work_queue.php');
+$aiQuality = phpBody($root . '/app_private/ai_quality.php');
+$providerWebhooks = phpBody($root . '/app_private/provider_webhooks.php');
 $publicForms = phpBody($root . '/app_private/public_forms.php');
 $publicChat = phpBody($root . '/app_private/public_chat.php');
 $publicSession = phpBody($root . '/app_private/public_chat_session.php');
@@ -48,6 +50,8 @@ $api = preg_replace('~^require_once __DIR__ \. \'/import_enquiries\.php\';\s*~m'
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_operations\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/staff_management\.php\';\s*~m', '', $api, 1);
 $api = str_replace("require_once __DIR__ . '/work_queue.php';", '', $api);
+$api = str_replace("require_once __DIR__ . '/ai_quality.php';", '', $api);
+$api = str_replace("require_once __DIR__ . '/provider_webhooks.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_session.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/public_chat_returning.php';", '', $api);
@@ -112,7 +116,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $workQueue . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
