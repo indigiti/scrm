@@ -51,7 +51,7 @@ if ($path === '/' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     readfile(__DIR__ . '/static/index.html');
     exit;
 }
-if (!str_starts_with($path,'/api/') && $path !== '/health') sf_json(['detail'=>'Not found'],404);
+if (!str_starts_with($path,'/api/') && !in_array($path,['/health','/health/ready'],true)) sf_json(['detail'=>'Not found'],404);
 // Ordinary API requests remain small. Only the authenticated historical importer
 // accepts bounded base64 workbooks (2.5 MB binary + JSON/base64 overhead).
 $importRequest=($_SERVER['REQUEST_METHOD']??'')==='POST' &&

@@ -530,6 +530,16 @@ function sf_github_owner_verified(string $token): bool {
 /** Route return form: [HTTP status, data]. All mutations run inside exclusive file lock. */
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+    if ($path === '/health/ready' && $method === 'GET')return $store->transaction(static function(array $s):array {
+        $ready=false;
+        foreach($s['memberships']??[] as $membership){
+            if(($membership['role']??'')!=='Admin'||!sf_staff_enabled($membership))continue;
+            $user=sf_user($s,(int)($membership['user_id']??0));
+            $school=sf_find($s['schools']??[],(int)($membership['school_id']??0));
+            if($school!==null&&!empty($user['active'])){$ready=true;break;}
+        }
+        return [$ready?200:503,['ok'=>$ready,'service'=>'schoolflow']];
+    });
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
