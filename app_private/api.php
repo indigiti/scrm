@@ -20,6 +20,7 @@ require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
 require_once __DIR__ . '/staff_management.php';
+require_once __DIR__ . '/staging_web_reset.php';
 require_once __DIR__ . '/work_queue.php';
 require_once __DIR__ . '/ai_quality.php';
 require_once __DIR__ . '/provider_webhooks.php';
@@ -707,6 +708,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         if(!empty($user['must_change_password']) && !in_array($path,['/api/me','/api/me/password','/api/auth/logout'],true))
             sf_fail(403,'Change your temporary password before using the CRM');
         if($path==='/api/me/password' && $method==='POST')return [200,sf_staff_change_own_password($s,$uid,$payload)];
+        if($path==='/api/admin/staging-reset')return sf_web_stage_handle($s,$user,$method,$payload,$store);
         // School URLs accept GUIDs without changing legacy numeric IDs or internal relations.
         if(preg_match('#^/api/schools/([0-9a-f-]{36})(/.*)?$#iD',$path,$sr)){
             $canonical=sf_record_id($s,'schools',$sr[1]);

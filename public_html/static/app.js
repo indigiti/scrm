@@ -21,7 +21,7 @@ const NAV_SECTIONS=[['WORKSPACE',['Dashboard','My Work']],['ADMISSIONS',['Enquir
 const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
-const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
+const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
 const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
@@ -116,6 +116,26 @@ function topbar(){
 function pageHead(title,description,button=''){return `<div class="view-title"><div><div class="eyebrow">${esc(school()?.name||'Workspace')}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="new-controls">${button}</div></div>`;}
 function tableRows(rows){return rows.map(l=>`<tr data-action="view-lead" data-id="${l.id}"><td><div class="name-cell"><div class="small-avatar">${initials(l.name)}</div><div><b>${esc(l.name)}</b><small>${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)} · ${esc(l.grade||'Class not set')} · ${esc(l.temperature||'Unrated')}${l.duplicate_of?' · Possible duplicate':''}${l.is_demo?' · DEMO':''}${l.last_call_outcome?' · '+esc(l.last_call_outcome):''}</small></div></div></td><td><div class="strong">${esc(l.guardian)}</div><small class="muted">${esc(l.phone)}</small></td><td>${esc(l.source_name||'Manual entry')}</td><td>${stageBadge(l.status)}</td><td>${esc(l.assigned_name||'Unassigned')}</td><td>${esc(dateFmt(l.followup_date))}</td><td><button class="btn small" data-action="view-lead" data-id="${l.id}">View →</button></td></tr>`).join('')||`<tr><td colspan="7"><div class="empty-state"><b>No enquiries found</b><p>Connect a website or add an enquiry to get started.</p></div></td></tr>`;}
 function leadTable(rows){return `<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Student</th><th>Parent / phone</th><th>Source</th><th>Stage</th><th>Assigned</th><th>Follow-up</th><th>Action</th></tr></thead><tbody>${tableRows(rows)}</tbody></table></div></div>`;}
+const canWebStageReset=()=>window.location.hostname==='stage.digiti.in'&&isAdmin()&&
+  String(state.me?.user?.email||'').toLowerCase().split('@')[0]==='in.stg.adm';
+function stagingResetPanel(){
+ if(!canWebStageReset())return '';
+ const p=state.stagingResetPreview;
+ const row=p?Object.entries(p.counts||{}).filter(([k,v])=>Number(v)>0).map(([k,v])=>
+   '<span style="display:inline-block;margin:3px 12px 3px 0">'+esc(k.replaceAll('_',' '))+': <b>'+Number(v)+'</b></span>').join(''):'';
+ return '<section class="page-card" style="border:1px solid #d9a8a8;margin-top:14px">'+
+   '<h3 style="margin:0 0 8px">Full staging reset — administrator only</h3>'+
+   '<p>This deletes all existing schools, staff, enquiries, connected websites and settings. It preserves your admin account, creates one empty school, and signs out everyone. A verified private server backup is created before deletion.</p>'+
+   '<p class="muted-note">This is different from Clear demo data. WordPress and external provider records are not deleted.</p>'+
+   (p?'<div role="status"><strong>Preview for: '+esc(p.keep_email||'')+'</strong><p>'+row+'</p></div>'+
+     '<form id="webStageResetForm">'+
+       '<label class="form-field">Current admin password<input type="password" name="password" autocomplete="current-password" required></label>'+
+       '<label class="form-field">Type RESET STAGING KEEP IN.STG.ADM<input name="confirmation" type="text" autocomplete="off" required></label>'+
+       '<p class="muted-note">No undo in the browser. A server-side backup is kept privately for recovery.</p>'+
+       '<button type="submit" class="btn primary">Delete staging data and preserve admin</button>'+
+     '</form>':'<button type="button" class="btn small" data-action="preview-web-stage-reset">Preview full staging reset</button>')+
+   '</section>';
+}
 function demoControls(){
  if(!isAdmin())return '';
  const d=state.demo||{leads:0,sites:0,has_demo_data:false};
@@ -164,7 +184,7 @@ function dashboard(){
  </section>
  <section class="sf-mini-operations"><div><span>${navIcon('School Visits')}</span><strong>${visits}</strong><small>Upcoming school visits</small></div><div><span>${navIcon('Families')}</span><strong>${ext.families.length}</strong><small>Families in CRM</small></div></section>
  </div></div>
- ${isAdmin()?`<details class="sf-demo-options"><summary>Demo data and testing tools</summary>${demoControls()}</details>`:''}
+ ${isAdmin()?`<details class="sf-demo-options"><summary>Demo data and testing tools</summary>${demoControls()}${stagingResetPanel()}</details>`:''}
  </div>`;
 }
 function enquiries(){let leads=state.leads.filter(l=>(state.status==='All'||l.status===state.status)&&(state.siteFilter==='All'||String(l.site_id)===state.siteFilter)&&(ext.temperatureFilter==='All'||(l.temperature||'Unrated')===ext.temperatureFilter)&&(!state.search||[l.name,l.guardian,l.phone,l.grade,l.email].join(' ').toLowerCase().includes(state.search.toLowerCase()))&&(ext.assignedFilter==='All'||(ext.assignedFilter==='Unassigned'?!l.assigned_to:String(l.assigned_to)===ext.assignedFilter))&&(ext.contactFilter==='All'||(ext.contactFilter==='Pending'?!l.last_successful_contact_at:!!l.last_successful_contact_at))&&(ext.dueFilter==='All'||(ext.dueFilter==='Overdue'?!!l.followup_date&&l.followup_date<day():ext.dueFilter==='Today'?l.followup_date===day():ext.dueFilter==='Upcoming'?l.followup_date>day():!l.followup_date)));
@@ -1007,6 +1027,11 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='view-lead'){perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
    await api(url+'/view','POST',{});state.detail=await api(url);render();});return;}
  if(action==='done-followup'){perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`,'PATCH',{followup_date:''});await reload();toast('Follow-up marked complete');});return;}
+ if(action==='preview-web-stage-reset'){
+   if(!canWebStageReset())return;
+   perform(async()=>{state.stagingResetPreview=await api('/api/admin/staging-reset');render();});
+   return;
+ }
  if(action==='add-demo'){
    if(!isAdmin() || state.demo?.has_demo_data)return;
    if(!confirm('Add 18 fictional enquiries and 3 disabled example websites to this school?'))return;
@@ -1098,6 +1123,22 @@ root.addEventListener('input',e=>{
  if(e.target.id==='q'){const p=e.target.selectionStart;state.search=e.target.value;render();const q=root.querySelector('#q');q?.focus();q?.setSelectionRange(p,p);}
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
+ if(f.id==='webStageResetForm'){
+   if(!canWebStageReset()||!state.stagingResetPreview)return;
+   if(fd.confirmation!=='RESET STAGING KEEP IN.STG.ADM')return toast('Type the complete confirmation phrase',true);
+   if(!confirm('FINAL CONFIRMATION: Delete ALL staging schools, staff, enquiries and integrations? Keep only your administrator account and one new empty workspace?'))return;
+   perform(async()=>{
+     const result=await api('/api/admin/staging-reset','POST',{
+       fingerprint:state.stagingResetPreview.fingerprint,password:fd.password,confirmation:fd.confirmation
+     });
+     if(!result.reset_complete)throw new Error('Staging reset did not complete');
+     state.stagingResetPreview=null;state.token='';state.me=null;
+     sessionStorage.removeItem('schoolflow_session');sessionStorage.removeItem('schoolflow_school');
+     render();toast('Staging reset completed. Sign in with your existing administrator password.');
+   });
+   return;
+ }
+
 
  if(f.id==='chatKnowledgeTest'){
    if(!isAdmin())return;
