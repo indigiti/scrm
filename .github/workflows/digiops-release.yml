@@ -33,6 +33,7 @@ jobs:
           php tests/test_staging_reset.php
           php tests/test_ai_quality.php
           php tests/test_provider_webhooks.php
+          php tests/test_health_readiness.php
           php tests/test_audit.php
           php tests/test_schoolflow_v2.php
           php tests/test_multischool_routing.php
