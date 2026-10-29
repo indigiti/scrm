@@ -52,14 +52,17 @@ function sf_web_stage_preview(array $s,array $user):array{
         'notice'=>'Existing schools and every other account will be deleted. One new empty Admin workspace is created. All sessions are revoked.'];
 }
 function sf_web_stage_backup(string $dir):string{
-    $source=$dir.'/store.json';
+    $actual=realpath($dir);
+    if($actual===false||!preg_match('~(?:^|/)private_html/scrm/data$~',$actual))
+        sf_fail(503,'Reset requires the protected private_html/scrm/data directory');
+    $source=$actual.'/store.json';
     if(!is_file($source)||!is_readable($source))sf_fail(503,'Private data store is unavailable; reset cancelled');
     if(!is_dir($dir)||!is_writable($dir))sf_fail(503,'Private data directory is unavailable');
     $base='backup-before-web-reset-'.gmdate('Ymd-His').'-'.bin2hex(random_bytes(5));
-    $folder=$dir.'/'.$base;
+    $folder=$actual.'/'.$base;
     if(!@mkdir($folder,0700))sf_fail(503,'Private backup directory could not be created');
     foreach(['store.json','messaging.key','public-form.key'] as $file){
-        $origin=$dir.'/'.$file;
+        $origin=$actual.'/'.$file;
         if(!is_file($origin)){
             if($file==='store.json')sf_fail(503,'Data store is missing; reset cancelled');
             continue;
