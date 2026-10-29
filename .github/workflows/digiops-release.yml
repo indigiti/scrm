@@ -28,6 +28,7 @@ jobs:
           php tests/test_setup.php
           php tests/test_web_setup.php
           php tests/test_demo.php
+          php tests/test_work_queue.php
           php tests/test_audit.php
           php tests/test_schoolflow_v2.php
           php tests/test_multischool_routing.php
@@ -79,6 +80,7 @@ jobs:
           php -l dist/digiops-release/index.php
           test -f dist/digiops-release/.htaccess
           test -f dist/digiops-release/static/app.js
+          ! test -e dist/digiops-release/bin/reset-staging.php
           test -f dist/digiops-release/static/lexicon-form.js
           test -f dist/digiops-release/static/admissions-chat.js
           test -f dist/digiops-release/static/admissions-chat.css

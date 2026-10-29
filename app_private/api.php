@@ -440,15 +440,20 @@ function sf_demo_seed(array &$s, int $schoolId, int $adminId): array {
     return array_merge(sf_demo_status($s,$schoolId),['created'=>true]);
 }
 function sf_demo_clear(array &$s, int $schoolId): array {
-    $removedLeadIds=[];
-    foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) $removedLeadIds[$l['id']]=true;
+    $removedLeadIds=[];$demoFamilyGuids=[];
+    foreach ($s['leads'] as $l) if ($l['school_id']===$schoolId && !empty($l['is_demo'])) {
+        $removedLeadIds[$l['id']]=true;
+        if(!empty($l['family_guid']))$demoFamilyGuids[$l['family_guid']]=true;
+    }
     $s['leads']=array_values(array_filter($s['leads'],fn($l)=>!isset($removedLeadIds[$l['id']])));
     $s['activities']=array_values(array_filter($s['activities'],fn($a)=>!isset($removedLeadIds[$a['lead_id'] ?? -1])));
-    // Only remove parent profiles no longer referenced by any real or remaining lead.
-    $familyRefs=[];
-    foreach($s['leads'] as $lead)if(!empty($lead['family_guid']))$familyRefs[$lead['family_guid']]=true;
+    // Delete only demo-associated profiles with no surviving enquiry.
+    $survivingFamilyGuids=[];
+    foreach($s['leads'] as $lead)if(!empty($lead['family_guid']))$survivingFamilyGuids[$lead['family_guid']]=true;
     if(isset($s['parent_profiles']))$s['parent_profiles']=array_values(array_filter(
-        $s['parent_profiles'],fn($p)=>isset($familyRefs[$p['guid']])
+        $s['parent_profiles'],static fn($p)=>!((int)($p['school_id']??0)===$schoolId &&
+            isset($demoFamilyGuids[$p['guid']??'']) &&
+            !isset($survivingFamilyGuids[$p['guid']??'']))
     ));
 
     foreach(['calls','visits','tasks','applications','admission_documents','notification_queue','stage_history','message_attempts'] as $related)if(isset($s[$related]))
@@ -466,7 +471,10 @@ function sf_demo_clear(array &$s, int $schoolId): array {
     foreach ($s['sites'] as &$site) if ($site['school_id']===$schoolId && !empty($site['is_demo']) && !isset($removedSiteIds[$site['id']])) { $site['is_demo']=false; $site['enabled']=0; }
     unset($site);
     $s['sites']=array_values(array_filter($s['sites'],fn($site)=>!isset($removedSiteIds[$site['id']])));
-    $s['receipts']=array_values(array_filter($s['receipts'],fn($r)=>!isset($removedLeadIds[$r['lead_id']]) && !isset($removedSiteIds[$r['site_id']])));
+    $s['receipts']=array_values(array_filter($s['receipts'],static fn($r)=>
+        !isset($removedLeadIds[$r['lead_id']??-1]) &&
+        !isset($removedLeadIds[$r['chat_session_lead_id']??-1]) &&
+        !isset($removedSiteIds[$r['site_id']??-1])));
     if(isset($s['email_templates']))$s['email_templates']=array_values(array_filter($s['email_templates'],
         fn($t)=>!($t['school_id']===$schoolId&&!empty($t['is_demo']))));
     return ['removed_leads'=>count($removedLeadIds),'removed_sites'=>count($removedSiteIds),'kept_demo_sites_with_real_leads'=>$keptSites];
