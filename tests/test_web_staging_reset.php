@@ -4,7 +4,8 @@ require_once dirname(__DIR__).'/app_private/api.php';
 function wr_assert(bool $ok,string $message):void{
     if(!$ok)throw new RuntimeException('Web staging reset: '.$message);
 }
-$tmp=sys_get_temp_dir().'/scrm-web-reset-test-'.bin2hex(random_bytes(7));
+$rootTmp=sys_get_temp_dir().'/scrm-web-reset-test-'.bin2hex(random_bytes(7));
+$tmp=$rootTmp.'/private_html/scrm/data';
 mkdir($tmp,0700,true);
 $store=new SchoolFlowStore($tmp);
 $originalHost=$_SERVER['HTTP_HOST']??null;
@@ -69,4 +70,7 @@ try{
     foreach(glob($tmp.'/backup-before-web-reset-*')?:[] as $dir)@rmdir($dir);
     foreach(glob($tmp.'/*')?:[] as $f)if(is_file($f))@unlink($f);
     @rmdir($tmp);
+    @rmdir(dirname($tmp));
+    @rmdir(dirname(dirname($tmp)));
+    @rmdir($rootTmp);
 }
