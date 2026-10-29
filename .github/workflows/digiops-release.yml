@@ -31,6 +31,7 @@ jobs:
           php tests/test_work_queue.php
           php tests/test_demo_cleanup_integrity.php
           php tests/test_staging_reset.php
+          php tests/test_web_staging_reset.php
           php tests/test_ai_quality.php
           php tests/test_provider_webhooks.php
           php tests/test_health_readiness.php
