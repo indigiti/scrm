@@ -3,7 +3,7 @@ declare(strict_types=1);
 /** v2.3: deterministic guardrails and offline acceptance for school-specific AI answers. */
 /** External generative AI may explain concepts but must not invent campus facts. */
 function sf_ai_quality_can_use_ai(array $topics,string $question):bool{
-    $q=mb_strtolower(trim($question),'UTF-8');
+    $q=strtolower(trim($question));
     // Fees and admission ages must come from school-verified, year/grade-bound data.
     if(array_intersect(['fees','age_eligibility'],$topics))return false;
     // Board affiliations and school-specific facilities need explicitly approved facts.
@@ -22,7 +22,7 @@ function sf_ai_quality_check_case(array $case,array $actual):array{
     $answer=(string)($actual['answer']??'');
     if(trim($answer)==='')$reasons[]='empty_answer';
     foreach($case['required_phrases']??[] as $phrase)
-        if(!str_contains(mb_strtolower($answer,'UTF-8'),mb_strtolower((string)$phrase,'UTF-8')))
+        if(!str_contains(strtolower($answer),strtolower((string)$phrase)))
             $reasons[]='missing_required_phrase';
     foreach($case['forbidden_phrases']??[] as $phrase)
         if(str_contains(mb_strtolower($answer,'UTF-8'),mb_strtolower((string)$phrase,'UTF-8')))
