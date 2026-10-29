@@ -10,7 +10,7 @@ function sf_ai_quality_can_use_ai(array $topics,string $question):bool{
     if(preg_match('/\b(cbse|icse|affiliat(?:ion|ed)?|board|facilities|amenities|school\s+features?)\b/iu',$q)
         && !preg_match('/^(?:what\s+(?:is|does)|explain|meaning\s+of|difference\s+between|compare)\s+(?:the\s+)?(?:cbse|icse|a\s+board|school\s+facilities)\b/iu',$q))return false;
     // Bus stops, prices, schedules and seat counts change and must be verified.
-    if(preg_match('/\b(?:bus\s+(?:route|stop|fee)|pickup\s+point|transport\s+(?:route|fee)|school\s+timings?|office\s+hours?|available\s+seats?|vacancies|admission\s+deadline)\b/iu',$q))return false;
+    if(preg_match('/\b(?:school\s+bus|bus\s+(?:route|stop|fee|pickup|come)|pickup\s+point|transport\s+(?:route|fee)|school\s+timings?|office\s+hours?|available\s+seats?|vacancies|admission\s+deadline)\b/iu',$q))return false;
     return true;
 }
 /** Offline, explicit assertions only. Does not invent an LLM quality score. */
