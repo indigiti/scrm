@@ -31,7 +31,8 @@ function sf_webhook_update_status(array &$s,int $sid,string $channel,string $pro
     $matched=false;$changed=false;$leadId=null;
     $rank=['pending'=>0,'accepted'=>1,'needs_review'=>1,'failed'=>2,'delivered'=>3,'read'=>4];
     foreach(['message_attempts','notification_queue'] as $collection){
-        foreach($s[$collection]??[] as &$row){
+        if(!isset($s[$collection])||!is_array($s[$collection]))continue;
+        foreach($s[$collection] as &$row){
             if(($row['school_id']??null)!==$sid||($row['channel']??'')!==$channel||
                 (string)($row['provider_id']??'')!==$providerId||$providerId==='')continue;
             $matched=true;$leadId=(int)($row['lead_id']??0);
