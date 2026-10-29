@@ -22,7 +22,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -76,8 +76,8 @@ async function reload(){
    isAdmin()?api(path+'/demo-data'):Promise.resolve(null),
    isAdmin() && state.page==='Reports'?api(path+'/audit'):Promise.resolve(null)
  ]);
- [ext.visits,ext.families,ext.templates,ext.analytics,ext.assignment,ext.messaging,ext.tasks,ext.applications]=await Promise.all([
-   api(path+'/visits'),api(path+'/families'),api(path+'/templates'),api(path+'/analytics'),api(path+'/assignment'),api(path+'/communications'),api(path+'/tasks'),api(path+'/applications')]);
+ [ext.visits,ext.families,ext.templates,ext.analytics,ext.assignment,ext.messaging,ext.tasks,ext.applications,ext.workQueue]=await Promise.all([
+   api(path+'/visits'),api(path+'/families'),api(path+'/templates'),api(path+'/analytics'),api(path+'/assignment'),api(path+'/communications'),api(path+'/tasks'),api(path+'/applications'),api(path+'/work-queue?limit=100')]);
  if(isAdmin()){
   [ext.autoPolicy,ext.autoQueue,ext.followupPolicy,ext.seatPlans,ext.responseSla]=await Promise.all([api(path+'/automation'),api(path+'/automation/queue'),api(path+'/followup-policy'),api(path+'/seat-plans'),api(path+'/response-sla')]);
  }else{ext.autoPolicy={enabled:false};ext.autoQueue=[];}
@@ -205,6 +205,19 @@ function pipeline(){
   <div class="pipeline-scroll"><div class="pipeline-columns phase-pipeline">${columns}</div></div>
   <p class="muted-note">Keyboard users can open a card with Enter or Space and change its detailed stage.</p>`;
 }
+function smartQueuePanel(queue){
+ const items=queue.items||[];
+ const rows=items.map(item=>'<tr><td><b>'+Number(item.priority)+'</b></td>'+
+ '<td>'+esc(item.student_name||'Student')+' <small class="muted">'+esc(item.grade||'')+'</small></td>'+
+ '<td>'+((item.reasons||[]).map(x=>esc(String(x).replaceAll('_',' '))).join(', '))+'</td>'+
+ '<td>'+esc(item.due_date||'Not scheduled')+'</td><td>'+esc(item.stage||'')+'</td>'+
+ '<td><button class="btn small" data-action="view-lead" data-id="'+Number(item.lead_id)+'">Open enquiry</button></td></tr>').join('')||
+ '<tr><td colspan="6">No actionable enquiries need attention.</td></tr>';
+ return '<div class="panel"><div class="worklist-head"><h2>Smart priority queue</h2>'+
+ '<span class="muted-note">'+Number(queue.total||0)+' enquiries needing action</span></div>'+
+ '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Priority</th><th>Student</th><th>Reason</th><th>Due</th><th>Stage</th><th>Action</th></tr></thead>'+
+ '<tbody>'+rows+'</tbody></table></div></div>';
+}
 function myWork(){
  const open=(ext.tasks||[]).filter(t=>t.status==='Open');
  const due=open.filter(t=>['Overdue','Due Today'].includes(t.due_status));
@@ -217,6 +230,7 @@ function myWork(){
   ${stat('First contact',pending.length,'Parents not yet reached','☎')}${stat("SLA breached",ext.analytics.sla_breached||0,"Requires priority outreach","!","orange")}
   ${stat('Scheduled visits',(ext.visits||[]).filter(v=>v.status==='Scheduled').length,'Upcoming campus visits','▣')}
  </div>
+ ${smartQueuePanel(ext.workQueue||{})}
  <div class="panel"><div class="worklist-head"><h2>Priority actions</h2><span class="muted-note">School time · ${esc(day())}</span></div>
  <div class="table-scroll"><table class="lead-table"><thead><tr><th>Due</th><th>Action</th><th>Student</th><th>Assigned</th><th>Status</th><th>Next step</th></tr></thead>
  <tbody>${items.map(t=>`<tr>
