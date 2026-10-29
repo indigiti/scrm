@@ -41,3 +41,39 @@ function sf_ai_quality_report(array $cases,array $outputs):array {
     return ['total'=>count($cases),'passed'=>$pass,'failed'=>count($cases)-$pass,
         'pass_rate'=>count($cases)?round(100*$pass/count($cases),1):0,'cases'=>$results];
 }
+
+/**
+ * Aggregated school-specific question coverage. Current topic rows store the
+ * most recent response source, not the source of every historical response.
+ */
+function sf_ai_quality_coverage(array $s,int $sid):array{
+    $topics=[];$questions=0;$unverified=[];
+    foreach($s['public_counsellor_topics']??[] as $entry){
+        if((int)($entry['school_id']??0)!==$sid)continue;
+        $count=max(0,(int)($entry['count']??0));$questions+=$count;
+        $topic=(string)($entry['topic']??'other');$source=(string)($entry['last_source']??'unknown');
+        $key=$topic.'|'.($entry['grade']??'').'|'.($entry['academic_year']??'');
+        $row=['topic'=>$topic,'grade'=>substr((string)($entry['grade']??''),0,40),
+            'academic_year'=>substr((string)($entry['academic_year']??''),0,12),
+            'questions'=>$count,'latest_source'=>$source,
+            'needs_review'=>in_array($source,['ai','general_guidance','unknown'],true)];
+        $topics[$key]=$row;
+        if($row['needs_review'])$unverified[]=$key;
+    }
+    $out=array_values($topics);
+    usort($out,static fn($a,$b)=>($b['questions']<=>$a['questions'])?:strcmp($a['topic'],$b['topic']));
+    return ['observed_questions'=>$questions,'topic_groups'=>count($out),
+        'groups_needing_review'=>count($unverified),
+        'data_limit'=>'Latest source per topic/grade/year only, not an audited per-answer accuracy score',
+        'topics'=>array_slice($out,0,100)];
+}
+function sf_ai_quality_admin(string $method,string $ref,array $headers,SchoolFlowStore $store):array{
+    if($method!=='GET')sf_fail(405,'Quality report is read-only');
+    return $store->transaction(static function(array $s)use($ref,$headers):array{
+        $u=sf_session($s,(string)($headers['authorization']??''));
+        if(!empty($u['must_change_password']))sf_fail(403,'Change password first');
+        $sid=sf_record_id($s,'schools',$ref);
+        sf_membership($s,$sid,(int)$u['id'],['Admin']);
+        return [200,sf_ai_quality_coverage($s,$sid)];
+    });
+}
