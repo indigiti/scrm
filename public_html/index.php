@@ -63,6 +63,16 @@ $raw=file_get_contents('php://input',false,null,0,$maxBody+1);
 if (!is_string($raw)||strlen($raw)>$maxBody) sf_json(['detail'=>'Request too large'],413);
 // Provider signatures cover the original raw body. Do not decode and
 // re-encode the payload before verification.
+if($webhookRequest && ($_SERVER['REQUEST_METHOD']??'GET')==='GET'
+   && str_starts_with($path,'/api/webhooks/meta/')){
+    $query=[];parse_str((string)($_SERVER['QUERY_STRING']??''),$query);
+    try{
+        $challenge=sf_webhook_meta_challenge($path,$query,new SchoolFlowStore());
+        header('Content-Type: text/plain; charset=utf-8');
+        http_response_code(200);echo $challenge;exit;
+    }catch(SFError $e){sf_json(['detail'=>$e->getMessage()],$e->httpStatus);}
+    catch(Throwable $e){error_log('SchoolFlow Meta handshake failed');sf_json(['detail'=>'Webhook unavailable'],503);}
+}
 if($webhookRequest){
     $deliveryHeaders=[
         'svix-id'=>$_SERVER['HTTP_SVIX_ID']??'',
