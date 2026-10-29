@@ -454,13 +454,13 @@ ${input('Internal checklist note','note','text',doc.note||'')}
 async function loadPublicChat(){
  if(!isAdmin())return;
  const base='/api/schools/'+state.schoolId+'/public-chat';
- const [settings,provider,review,groups,report,sources,files]=await Promise.all([
+ const [settings,provider,review,groups,report,sources,files,quality]=await Promise.all([
    api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites'),
-   api(base+'/counsellor-report'),api(base+'/sources'),api(base+'/knowledge-files')
+   api(base+'/counsellor-report'),api(base+'/sources'),api(base+'/knowledge-files'),api(base+'/quality')
  ]);
  ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;
  ext.chatQueue=review.items||[];ext.chatGroups=Array.isArray(groups)?groups:[];
- ext.counsellorReport=report;ext.chatSources=sources;ext.chatFiles=files;
+ ext.counsellorReport=report;ext.chatSources=sources;ext.chatFiles=files;ext.chatQuality=quality;
  render();
 }
 
@@ -512,7 +512,8 @@ function publicChatPage(){
   ['Knowledge files',activeFiles.length,files.length-activeFiles.length+' awaiting publication'],
   ['Approved answers',faqs.length,'Reusable without AI generation'],
   ['Questions to review',review.length+candidates.length,'Unanswered or unverified facts'],
-  ['Chatbot leads',leads.length,'Converted parent enquiries']
+  ['Chatbot leads',leads.length,'Converted parent enquiries'],
+  ['AI topics to review',Number(ext.chatQuality?.groups_needing_review||0),'Review latest AI or general-guidance answers']
  ].map(x=>'<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong><small>'+esc(x[2])+'</small></div>').join('')+'</div>';
  const fileList=files.length?'<div class="ai-file-list">'+files.map(file=>
   '<article class="ai-file-card">'+
@@ -652,7 +653,15 @@ function publicChatPage(){
    ['Callbacks requested',leads.filter(l=>l.contact_state==='Callback Requested').length]].map(x=>
     '<div class="ai-kpi"><span>'+esc(x[0])+'</span><strong>'+Number(x[1])+'</strong></div>').join('')+'</div>'+
    '<div class="ai-item-actions"><button type="button" class="btn primary" data-action="chat-goto-leads">Open Chatbot Leads</button></div></section>';
- const overview='<div class="ai-overview">'+metrics+
+ const quality=ext.chatQuality||{topics:[],data_limit:'Latest source only'};
+ const reviewTopics=(quality.topics||[]).filter(x=>x.needs_review).slice(0,8);
+ const qualityPanel='<section class="ai-surface"><div class="ai-section-head"><div><span class="ai-eyebrow">ANSWER QUALITY</span><h3>Topics needing school verification</h3>'+
+  '<p>Check where the most recent response relied on AI or general guidance. This is not an accuracy score.</p></div><span class="ai-status pending">'+Number(quality.groups_needing_review||0)+' groups</span></div>'+
+  (reviewTopics.length?'<div class="ai-qa-list">'+reviewTopics.map(x=>'<div class="ai-record"><div class="ai-record-body"><strong>'+
+  esc(String(x.topic||'').replaceAll('_',' '))+'</strong><small>'+esc(x.grade||'Class not specified')+
+  ' · '+esc(x.academic_year||'Year not specified')+' · '+Number(x.questions||0)+' questions · Last source: '+esc(x.latest_source||'unknown')+
+  '</small></div></div>').join('')+'</div>':'<p class="ai-muted">No latest-response groups have been flagged for review.</p>')+'</section>';
+ const overview='<div class="ai-overview">'+metrics+qualityPanel+
   '<div class="ai-grid-two"><section class="ai-surface ai-feature"><span class="ai-eyebrow">RECOMMENDED WORKFLOW</span>'+
   '<h3>Teach the counsellor once. Answer consistently.</h3>'+
   '<div class="ai-steps"><div><b>1</b><span><strong>Upload</strong><small>Add the school’s approved knowledge file</small></span></div>'+
