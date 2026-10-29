@@ -63,3 +63,21 @@ function sf_work_queue_build(array $s,int $sid,int $uid,string $role,int $limit=
     return ['as_of'=>$clock->format(DATE_ATOM),'total'=>count($rows),'summary'=>$summary,'offset'=>$offset,
         'limit'=>$limit,'items'=>array_slice($rows,$offset,$limit)];
 }
+
+/** Response contains only leads visible to this authenticated school member. */
+function sf_work_queue_endpoint(string $method,string $schoolRef,array $headers,string $uri,SchoolFlowStore $store):array {
+    if($method!=='GET')sf_fail(405,'Work queue is read-only');
+    $params=[];
+    parse_str((string)(parse_url($uri,PHP_URL_QUERY)??''),$params);
+    $limit=filter_var($params['limit']??100,FILTER_VALIDATE_INT);
+    $offset=filter_var($params['offset']??0,FILTER_VALIDATE_INT);
+    if($limit===false||$offset===false||$limit<1||$limit>250||$offset<0||$offset>10000)
+        sf_fail(422,'Invalid queue pagination');
+    return $store->transaction(static function(array $s)use($schoolRef,$headers,$limit,$offset):array{
+        $user=sf_session($s,(string)($headers['authorization']??''));
+        if(!empty($user['must_change_password']))sf_fail(403,'Change password first');
+        $sid=sf_record_id($s,'schools',$schoolRef);
+        $role=sf_membership($s,$sid,(int)$user['id']);
+        return [200,sf_work_queue_build($s,$sid,(int)$user['id'],$role,$limit,$offset)];
+    });
+}
