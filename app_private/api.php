@@ -557,6 +557,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         return sf_chat_provider_admin($method,$providerChat[1],$payload,$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat$~iD',$path,$adminChat))
         return sf_chat_admin($method,$adminChat[1],$payload,$headers,$store);
+    if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/quality$~iD',$path,$quality))
+        return sf_ai_quality_admin($method,$quality[1],$headers,$store);
     if(preg_match('~^/api/schools/([a-f0-9-]{36}|[0-9]+)/public-chat/review$~iD',$path,$review))
         return sf_kb_review($method,$review[1],$payload,$headers,$store);
     if (str_starts_with($path,'/api/public/forms/'))
