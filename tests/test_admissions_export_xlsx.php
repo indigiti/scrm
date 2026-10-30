@@ -63,6 +63,9 @@ try {
         ex_check(isset($parts[$path]),'required OOXML part '.$path);
     $sheet=$parts['xl/worksheets/sheet1.xml'];$history=$parts['xl/worksheets/sheet2.xml'];
     ex_check(str_contains($sheet,'Remarks / Follow-up Notes') && str_contains($sheet,'Kalyani Nagar'),'screenshot layout and campus');
+    ex_check(str_contains($sheet,'Source Type') && str_contains($sheet,'Form Surface') && str_contains($sheet,'First Touch Date'),'attribution export columns present');
+    ex_check(str_contains($sheet,'manual'),'manual lead attribution exported');
+    ex_check(ex_call('POST',$base.'/exports/admissions.xlsx',['source_type'=>'forged'])[0]===422,'invalid source type filter rejected');
     ex_check(str_contains($sheet,'Aarav Sharma')&&str_contains($sheet,'Diya Sharma'),'both authorized enquiries present');
     ex_check(str_contains($sheet,'Parent requested a campus tour &amp; forms &lt;next week&gt;'),'note properly escaped');
     ex_check(str_contains($sheet,'09876543210') && str_contains($sheet,'t="inlineStr"'),'phone remains text with zero preserved');

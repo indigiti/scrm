@@ -82,7 +82,9 @@ function sf_xlsx_zip(array $files):string{
 function sf_xlsx_build(array $leads,array $history):string {
     $leadColumns=['Timestamp','Name','Email','Phone','City','State','Class','Campus',
         'Remarks / Follow-up Notes','Parent / Guardian','Lead Stage','Temperature','Follow-up Status',
-        'Next Follow-up','Assigned Counsellor','Academic Year','Source','Pincode','UTM Campaign','Lead GUID'];
+        'Next Follow-up','Assigned Counsellor','Academic Year','Source','Pincode','UTM Campaign','Lead GUID',
+        'Source Type','Form Surface','Form Variant','Landing Page Version','Landing Page URL','Referrer',
+        'UTM Source','First Touch Date','First Touch Source','Latest Touch Date','Latest Touch Source'];
     $historyColumns=['Timestamp','Name','Phone','Campus','Activity','Outcome / Status','Notes','Recorded By','Lead GUID'];
     $xmlTypes='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'.
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'.
@@ -134,7 +136,7 @@ function sf_xlsx_build(array $leads,array $history):string {
         'xl/_rels/workbook.xml.rels'=>$workbookRels,
         'xl/styles.xml'=>$styles,
         'xl/worksheets/sheet1.xml'=>sf_xlsx_sheet($leadColumns,$leads,
-            [23,25,34,20,22,22,15,26,74,26,24,18,23,20,26,17,26,14,27,39],0,3,8),
+            [23,25,34,20,22,22,15,26,74,26,24,18,23,20,26,17,26,14,27,39,24,18,18,20,58,50,20,24,24,24,24],0,3,8),
         'xl/worksheets/sheet2.xml'=>sf_xlsx_sheet($historyColumns,$history,
             [23,25,20,26,23,24,78,27,39],0,2,6),
     ]);
@@ -143,6 +145,8 @@ function sf_export_matches(array $lead,array $filters):bool{
     if(($filters['status']??'All')!=='All' && ($lead['status']??'')!==$filters['status'])return false;
     if(($filters['temperature']??'All')!=='All' && ($lead['temperature']??'Unrated')!==$filters['temperature'])return false;
     if(($filters['site']??'All')!=='All' && (string)($lead['site_id']??'')!==(string)$filters['site'])return false;
+    if(($filters['source_type']??'All')!=='All' && ($lead['source_type']??'other')!==$filters['source_type'])return false;
+    if(($filters['form_type']??'All')!=='All' && ($lead['form_type']??'unknown')!==$filters['form_type'])return false;
     if(($filters['assigned']??'All')!=='All'){
         $assigned=$filters['assigned'];
         if($assigned==='Unassigned' && !empty($lead['assigned_to']))return false;
@@ -175,7 +179,7 @@ function sf_export_matches(array $lead,array $filters):bool{
     return true;
 }
 function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):array{
-    foreach(['status','temperature','site','assigned','contact','due','search','from','to'] as $name){
+    foreach(['status','temperature','site','assigned','contact','due','search','from','to','source_type','form_type'] as $name){
         if(!is_string($filters[$name]??''))sf_fail(422,'Invalid report filter');
     }
     foreach(['from','to'] as $d)if(($filters[$d]??'')!=='')sf_date($filters[$d]);
@@ -184,6 +188,8 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
         'temperature'=>array_merge(['All'],SF_TEMPERATURES),
         'contact'=>['All','Pending','Contacted'],
         'due'=>['All','Overdue','Today','Upcoming','Unscheduled'],
+        'source_type'=>['All','group_website','individual_website','chatbot','manual','import','other'],
+        'form_type'=>['All','inline','popup','chat','api','manual','import','unknown'],
     ];
     foreach($limits as $key=>$choices)if(isset($filters[$key]) && !in_array($filters[$key],$choices,true))
         sf_fail(422,'Invalid report filter');
@@ -200,7 +206,8 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
         $selected=[];
         foreach($s['leads'] as $lead){
             if($lead['school_id']!==$schoolId || ($role==='Counsellor'&&$lead['assigned_to']!==$uid))continue;
-            if(sf_export_matches($lead,$filters))$selected[]=$lead;
+            $leadView=sf_lead_view($s,$lead);
+            if(sf_export_matches($leadView,$filters))$selected[]=$leadView;
         }
         if(count($selected)>10000)sf_fail(413,'Please narrow your filters: Excel export is limited to 10,000 enquiries');
         usort($selected,static fn($a,$b)=>strcmp($b['created_at']??'',$a['created_at']??''));
@@ -249,7 +256,12 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
                 (string)($lead['temperature']??'Unrated'),sf_admission_followup($lead),
                 (string)($lead['followup_date']??''),(string)($owner['name']??''),
                 (string)($lead['academic_year']??''),(string)(sf_source($s,(int)($lead['site_id']??0))['name']??'Manual'),
-                (string)($lead['pincode']??''),(string)($lead['utm_campaign']??''),(string)($lead['guid']??'')];
+                (string)($lead['pincode']??''),(string)($lead['utm_campaign']??''),(string)($lead['guid']??''),
+                (string)($lead['source_type']??''),(string)($lead['form_type']??''),(string)($lead['form_variant']??''),
+                (string)($lead['landing_page_version']??''),(string)($lead['landing_page']??''),(string)($lead['referrer']??''),
+                (string)($lead['utm_source']??''),(string)($lead['first_touch']['captured_at']??''),
+                (string)($lead['first_touch']['utm_source']??''),(string)($lead['latest_touch']['captured_at']??''),
+                (string)($lead['latest_touch']['utm_source']??'')];
         }
         usort($historyRows,static fn($a,$b)=>strcmp($b[0],$a[0]));
         sf_event($s,$schoolId,null,$uid,'admissions_xlsx_exported','Exported '.count($leadRows).' enquiries and '.count($historyRows).' activity rows');
