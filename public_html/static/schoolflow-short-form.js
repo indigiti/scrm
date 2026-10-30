@@ -62,7 +62,7 @@ function init(){
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
-   school_code:campus.value,consent:true,website:p.website.value,captcha_token:token,
+   school_code:campus.value,form_display:mode,consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),utm_source:query.get('utm_source')||'',
    utm_medium:query.get('utm_medium')||'',utm_campaign:query.get('utm_campaign')||'',
