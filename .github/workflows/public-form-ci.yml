@@ -24,6 +24,8 @@ jobs:
           php -l dist/digiops-release/index.php
           test -f dist/digiops-release/static/lexicon-form.js
           test -f dist/digiops-release/static/lexicon-form.css
+          test -f dist/digiops-release/static/schoolflow-short-form.js
+          test -f dist/digiops-release/static/schoolflow-short-form.css
           ! find dist/digiops-release -type f \( -name '*.json' -o -name '*.key' -o -name '*.env' \) | grep .
       - name: Regression suite
         run: |
@@ -33,6 +35,7 @@ jobs:
         run: |
           node --check public_html/static/app.js
           node --check public_html/static/lexicon-form.js
+          node --check public_html/static/schoolflow-short-form.js
           node tests/check_frontend_v2.js
           node tests/check_group_routing.js
           node tests/check_lexicon_chat_autoload.js
