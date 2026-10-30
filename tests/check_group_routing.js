@@ -17,7 +17,7 @@ const data={
  '/api/schools/overview':schools.map(s=>({id:s.id,name:s.name,leads:0,new_leads:0,unassigned:0,sites:[],assignment_mode:'least_loaded'})),
  '/api/group-sites':routes,
 };
-const ctx={document:{getElementById:()=>root,addEventListener:()=>{},body:{append:()=>{}}},
+const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
  fetch:async path=>{const route=path.replace('/scrm','');if(!(route in data))throw Error('Unexpected API '+route);return {status:200,ok:true,json:async()=>data[route]};},
  setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
