@@ -8,7 +8,7 @@ var mode=loader.dataset.schoolflowMode==='inline'?'inline':'popup';
 var target=loader.dataset.schoolflowTarget||'#schoolflow-admissions';
 var base=new URL(loader.src).href.replace(/\/static\/schoolflow-short-form\.js(?:\?.*)?$/,'');
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
-var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/schoolflow-short-form.css';document.head.appendChild(css);
+var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/schoolflow-short-form.css?v='+encodeURIComponent(loader.dataset.schoolflowShortCssVersion||'1');document.head.appendChild(css);
 function init(){
  var host=mode==='inline'?document.querySelector(target):document.createElement('div');
  if(!host){console.warn('SchoolFlow inline target not found:',target);return;}
