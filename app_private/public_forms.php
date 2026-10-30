@@ -42,7 +42,8 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
     });
     if(!$enabled)sf_fail(404,'Public form not found');
     $assets=['static/lexicon-form.js','static/lexicon-form.css',
-        'static/admissions-chat.js','static/admissions-chat.css'];
+        'static/admissions-chat.js','static/admissions-chat.css',
+        'static/schoolflow-short-form.js','static/schoolflow-short-form.css'];
     $versions=[];
     foreach($assets as $asset){
         $file=rtrim($publicRoot,'/').'/'.$asset;
@@ -58,9 +59,10 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'var base=new URL(current.src).origin+"/scrm";'."\n".
         'var shortForm=current.getAttribute("data-schoolflow-form")==="short";'."\n".
         'var script=document.createElement("script");script.async=true;'."\n".
-        'script.src=shortForm?base+"/static/schoolflow-short-form.js":base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
+        'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
         '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
         'script.setAttribute("data-schoolflow-chat-css-version",meta.versions[3]);'."\n".
