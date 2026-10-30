@@ -54,6 +54,7 @@ jobs:
           php tests/test_admissions_operations.php
           php tests/test_staff_management.php
           php tests/test_public_forms.php
+          php tests/test_lead_attribution.php
           php tests/test_public_chat.php
           php tests/test_counsellor.php
           php tests/test_cf7_group.php
