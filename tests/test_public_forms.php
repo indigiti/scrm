@@ -44,6 +44,8 @@ try {
     pf(req('POST',$base.'/enquiries',[...$payload,'captcha_answer'=>'0'],'https://lexiconedu.in','public-attempt-2')[0]===422,'wrong CAPTCHA blocked');
     pf(req('POST',$base.'/enquiries',[...$payload,'consent'=>false],'https://lexiconedu.in','public-attempt-3')[0]===422,'consent enforced');
     pf(req('POST',$base.'/enquiries',[...$payload,'school_code'=>'campus-3'],'https://lexiconedu.in','public-attempt-4')[0]===422,'unauthorized school rejected');
+    pf(req('POST',$base.'/enquiries',[...$payload,'school_code'=>'Campus'],'https://lexiconedu.in','public-attempt-placeholder')[0]===422,'placeholder Campus is never a valid school choice');
+    pf(req('POST',$base.'/enquiries',[...$payload,'school_code'=>''],'https://lexiconedu.in','public-attempt-empty-campus')[0]===422,'empty campus selection rejected');
     [$code,$ok]=req('POST',$base.'/enquiries',$payload,'https://lexiconedu.in','public-attempt-good');
     pf($code===201 && !empty($ok['guid']),'accepted new lead with GUID');
     pf(req('POST',$base.'/enquiries',$payload,'https://lexiconedu.in','public-attempt-good')[1]['duplicate_submission']===true,'idempotency response');

@@ -68,7 +68,7 @@ function init(){
  '<input id="lf_city" name="city" class="lf-input lf-readonly" placeholder="City" aria-label="City" readonly required>',
  '</div><div class="lf-row">',
  '<select id="lf_class" name="grade" class="lf-select" required>',
- '<option value="">Class</option>',
+ '<option value="" disabled selected hidden>Select Class</option>',
  '<option>Nursery</option><option>LKG</option><option>UKG</option>',
  '<option>I</option><option>II</option><option>III</option><option>IV</option><option>V</option><option>VI</option>',
  '<option>VII</option><option>VIII</option><option>IX</option><option>X</option><option>XI</option><option>XII</option>',
@@ -157,22 +157,41 @@ function init(){
   get('/challenge').then(function(data){token=data.token;$('lf_captcha_label').textContent=data.question;})
   .catch(function(){$('lf_captcha_label').textContent='CAPTCHA unavailable';feedback('Cannot load the math question. Please reopen the form.');});
  }
+ // The empty option is an instruction, not a school. It must never be
+ // selectable or sent as a campus code.
+ function campusPlaceholder(label){
+  var option=new Option(label,'',true,true);
+  option.disabled=true;option.hidden=true;
+  return option;
+ }
  function loadSchools(force){
   if(!force && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
-  var selected=campus.value;campus.disabled=true;campus.replaceChildren(new Option('Loading campuses...',''));
+  var selected=campus.value;campus.disabled=true;
+  campus.replaceChildren(campusPlaceholder('Loading campuses...'));
   return get('/config').then(function(data){
-   campus.replaceChildren(new Option('Campus',''));
-   (data.schools||[]).forEach(function(item){if(typeof item.code==='string'&&typeof item.name==='string')campus.add(new Option(item.name,item.code));});
-   campus.disabled=campus.options.length<=1;
-   if(Array.from(campus.options).some(function(option){return option.value===selected;}))campus.value=selected;
+   campus.replaceChildren(campusPlaceholder('Select Campus'));
+   var seen=new Set();
+   (Array.isArray(data.schools)?data.schools:[]).forEach(function(item){
+    if(!item||typeof item.code!=='string'||typeof item.name!=='string')return;
+    var code=item.code.trim(),name=item.name.trim();
+    if(!code||!name||seen.has(code))return;
+    seen.add(code);campus.add(new Option(name,code));
+   });
+   campus.disabled=seen.size===0;
+   // Preserve a choice only while it is still present in the approved group.
+   if(!campus.disabled && selected && seen.has(selected))campus.value=selected;
+   else campus.value='';
    if(campus.disabled)feedback('No campus is available for this website.');
    loadedAt=Date.now();
-  }).catch(function(){campus.replaceChildren(new Option('Campuses unavailable',''));feedback('Cannot load campuses. Please try again.');});
+  }).catch(function(){
+   campus.replaceChildren(campusPlaceholder('Campuses unavailable'));
+   campus.disabled=true;feedback('Cannot load campuses. Please try again.');
+  });
  }
  function open(){
   lastFocus=document.activeElement;
   popup.classList.add('lf-visible');popup.setAttribute('aria-hidden','false');document.body.classList.add('lf-popup-open');
-  feedback('');loadSchools(false);resetCaptcha();$('lf_name').focus();
+  feedback('');loadSchools(true);resetCaptcha();$('lf_name').focus();
  }
  function close(){
   popup.classList.remove('lf-visible');popup.setAttribute('aria-hidden','true');document.body.classList.remove('lf-popup-open');
@@ -226,7 +245,9 @@ function init(){
   if(!/^[6-9]\d{9}$/.test(tel))return feedback('Enter a valid 10-digit mobile number.');
   if(!/^\d{6}$/.test(value('lf_pincode')))return feedback('Enter a valid 6-digit Pincode.');
   if(!value('lf_state') || !value('lf_city'))return feedback('State and City are required. Enter manually if lookup failed.');
-  if(!campus.value || campus.disabled)return feedback('Select your preferred campus.');
+  if(campus.disabled || !campus.value || !Array.from(campus.options).some(function(option){
+   return !option.disabled && option.value===campus.value;
+  }))return feedback('Select an available campus.');
   if(!value('lf_class'))return feedback('Select Class.');
   if(!token || !/^\d+$/.test(value('lf_captcha')))return feedback('Please answer the math CAPTCHA.');
   if(!$('lf_consent').checked)return feedback('Please agree to be contacted.');
