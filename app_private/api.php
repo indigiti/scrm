@@ -230,6 +230,35 @@ function sf_audit_cursor(string $uri): ?int {
     if (!is_scalar($args['before']) || !ctype_digit((string)$args['before']) || (int)$args['before']<=0) sf_fail(422,'Invalid audit cursor');
     return (int)$args['before'];
 }
+/** Classify an enquiry from server-owned routing, not a public client's source_type label. */
+function sf_lead_origin(array $lead, ?array $site): string {
+    $known=(string)($lead['source_type']??'');
+    if(in_array($known,['group_website','individual_website','chatbot','manual','import','other'],true))return $known;
+    if(($lead['lead_channel']??'')==='chatbot' ||
+        in_array((string)($lead['utm_source']??''),['admissions_guided_chat','public_admissions_chat','admissions_ai_counsellor'],true))
+        return 'chatbot';
+    if($site!==null)return !empty($site['is_group_route'])?'group_website':'individual_website';
+    return 'manual';
+}
+/** Normalize only supported campaign/landing-page labels; never use these for authorisation. */
+function sf_lead_page_version(string $url): string {
+    $path=parse_url($url,PHP_URL_PATH);
+    if(!is_string($path))return '';
+    if(preg_match('~(?:^|/)(?:ver/demo/)?v([23])(?:/|$)~i',$path,$m))return 'v'.$m[1];
+    return '';
+}
+function sf_lead_touch(array $lead,string $type,string $form,string $variant): array {
+    return ['source_type'=>$type,'form_type'=>$form,'form_variant'=>$variant,
+        'landing_page_version'=>sf_lead_page_version((string)($lead['landing_page']??'')),
+        'landing_page'=>(string)($lead['landing_page']??''),
+        'referrer'=>(string)($lead['referrer']??''),
+        'utm_source'=>(string)($lead['utm_source']??''),
+        'utm_medium'=>(string)($lead['utm_medium']??''),
+        'utm_campaign'=>(string)($lead['utm_campaign']??''),
+        'utm_term'=>(string)($lead['utm_term']??''),
+        'utm_content'=>(string)($lead['utm_content']??''),
+        'captured_at'=>(string)($lead['created_at']??'')];
+}
 function sf_lead_view(array $s, array $lead): array {
     $source = $lead['site_id'] ? sf_source($s, $lead['site_id']) : null;
     $owner = $lead['assigned_to'] ? sf_user($s, $lead['assigned_to']) : null;
@@ -241,6 +270,13 @@ function sf_lead_view(array $s, array $lead): array {
         ? 'Chatbot · '.($source['name']??'Admissions')
         : ($source['name']??null);
     $lead['source_domain'] = $source['domain'] ?? null;
+    $lead['source_type']=sf_lead_origin($lead,$source);
+    $lead['form_type']=$lead['form_type']??'unknown';
+    $lead['form_variant']=$lead['form_variant']??'unknown';
+    $lead['landing_page_version']=$lead['landing_page_version']??sf_lead_page_version((string)($lead['landing_page']??''));
+    // For historical rows preserve absence of first-touch evidence instead of inventing history.
+    $lead['first_touch']=$lead['first_touch']??null;
+    $lead['latest_touch']=$lead['latest_touch']??null;
     $lead['assigned_name'] = $owner['name'] ?? null;
     $lead['last_contact_at'] = $lead['last_contact_at'] ?? '';
     $lead['last_call_outcome'] = $lead['last_call_outcome'] ?? '';
@@ -319,6 +355,20 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         $duplicate = $previous['id']; break;
     }
     if ($assigned === null) $assigned = sf_assignment_owner($s, $schoolId);
+    // Form surface is a display hint; campus and source origin remain server-controlled.
+    $sourceSite=$siteId!==null?sf_source($s,$siteId):null;
+    $isChat=in_array($action,['public_chat_callback_requested','ai_counsellor_lead_created'],true)
+        || str_contains($action,'chat_') || str_contains($action,'counsellor_');
+    $sourceType=$isChat?'chatbot':($sourceSite!==null
+        ?(!empty($sourceSite['is_group_route'])?'group_website':'individual_website')
+        :(str_contains($action,'import')?'import':'manual'));
+    $display=(string)($p['form_display']??'');
+    $formType=$isChat?'chat':($action==='public_group_short_received'?
+        (in_array($display,['inline','popup'],true)?$display:'unknown'):
+        ($action==='public_group_website_received'?'unknown':
+        ($sourceType==='manual'?'manual':($sourceType==='import'?'import':'api'))));
+    $formVariant=$action==='public_group_short_received'?'short':
+        ($action==='public_group_website_received'?'detailed':'');
     $familyGuid=sf_family_create_profile($s,$schoolId,$guardian,$phone,sf_text($p,'email',160));
     $lead = ['id'=>sf_id($s,'leads'),'guid'=>sf_uuid(),'school_id'=>$schoolId,'site_id'=>$siteId,'family_guid'=>$familyGuid,'name'=>$name,'guardian'=>$guardian,
         'phone'=>$phone,'normalized_phone'=>$norm,'email'=>sf_text($p,'email',160),'grade'=>sf_text($p,'grade',80),
@@ -326,11 +376,22 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         'pincode'=>sf_text($p,'pincode',6),'state'=>sf_text($p,'state',100),'city'=>sf_text($p,'city',100),
         'utm_medium'=>sf_text($p,'utm_medium',140),'utm_term'=>sf_text($p,'utm_term',140),'utm_content'=>sf_text($p,'utm_content',140),
         'landing_page'=>sf_text($p,'landing_page',500),'referrer'=>sf_text($p,'referrer',500),
+        'source_type'=>$sourceType,'form_type'=>$formType,'form_variant'=>$formVariant,
+        'landing_page_version'=>sf_lead_page_version(sf_text($p,'landing_page',500)),
         'status'=>'New','temperature'=>'Unrated','temperature_suggestion'=>'Unrated',
         'contact_state'=>'Pending Contact','contact_attempts'=>0,'last_successful_contact_at'=>'',
         'consent_email'=>false,'consent_whatsapp'=>false,
         'academic_year'=>sf_text($p,'academic_year',7),'assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
         'consent'=>!empty($p['consent']) ? 1:0,'duplicate_of'=>$duplicate,'created_at'=>sf_time(),'updated_at'=>sf_time()];
+    $lead['first_touch']=sf_lead_touch($lead,$sourceType,$formType,$formVariant);
+    $lead['latest_touch']=$lead['first_touch'];
+    if($duplicate!==null){
+        foreach($s['leads'] as $previous)if($previous['id']===$duplicate && $previous['school_id']===$schoolId){
+            // Carry forward recorded first-touch evidence without rewriting the earlier enquiry.
+            $lead['first_touch']=$previous['first_touch']??null;
+            break;
+        }
+    }
     $s['leads'][] = $lead;
     sf_audit($s,$schoolId,$lead['id'],$actor,$action,$duplicate ? 'Potential duplicate' : '');
     sf_task_schedule($s,$lead,'First Contact',sf_admission_today(),$actor);
