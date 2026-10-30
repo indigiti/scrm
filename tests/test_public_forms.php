@@ -56,7 +56,8 @@ try {
     $short=['parent_name'=>'Example Parent','phone'=>'9876543210','school_code'=>'campus-1',
         'grade'=>'Nursery','student_name'=>'','consent'=>true,'website'=>'',
         'captcha_token'=>$shortCaptcha['token'],'captcha_answer'=>(string)((int)$shortParts[1]+(int)$shortParts[2]),
-        'landing_page'=>'https://lexiconedu.in/admissions?v=2'];
+        'form_display'=>'inline','utm_source'=>'google','utm_campaign'=>'nursery-oct',
+        'landing_page'=>'https://lexiconedu.in/ver/demo/v2/index.html'];
     pf(req('POST',$base.'/short-enquiries',[...$short,'school_code'=>'Campus'],'https://lexiconedu.in','short-bad-campus-id')[0]===422,'short form rejects placeholder campus');
     pf(req('POST',$base.'/short-enquiries',[...$short,'consent'=>false],'https://lexiconedu.in','short-consent-test')[0]===422,'short form requires consent');
     pf(req('POST',$base.'/short-enquiries',[...$short,'captcha_answer'=>'999'],'https://lexiconedu.in','short-wrong-captcha')[0]===422,'short form rejects wrong captcha');
@@ -69,6 +70,13 @@ try {
     });
     pf($shortStored!==null && $shortStored['name']==='' && $shortStored['guardian']==='Example Parent','no fabricated student name');
     pf($shortStored['school_id']===1 && $shortStored['grade']==='Nursery','short form campus and class routed');
+    pf($shortStored['source_type']==='group_website' && $shortStored['form_type']==='inline' && $shortStored['form_variant']==='short',
+        'server source routing with short inline display');
+    pf($shortStored['landing_page_version']==='v2' && $shortStored['utm_campaign']==='nursery-oct','landing page and ad attribution');
+    pf($shortStored['first_touch']['utm_source']==='google' && $shortStored['latest_touch']['source_type']==='group_website',
+        'first/latest touch captured');
+    pf(!isset($shortStored['source_type_override']),'public clients cannot override trusted origin');
+
     [$code,$another]=req('GET',$base.'/challenge');
     preg_match('/Solve: (\d+) \+ (\d+)/',$another['question'],$next);
     $anotherPayload=[...$payload,'captcha_token'=>$another['token'],'captcha_answer'=>(string)((int)$next[1]+(int)$next[2])];
