@@ -771,6 +771,7 @@ async function xlsxExport(){
  const filtering=state.page==='Enquiries';
  const filters=filtering?{
    status:state.status,temperature:ext.temperatureFilter,site:state.siteFilter,
+    source_type:ext.sourceTypeFilter,form_type:ext.formTypeFilter,
    assigned:ext.assignedFilter,contact:ext.contactFilter,due:ext.dueFilter,search:state.search
  }:{};
  const path='/api/schools/'+state.schoolId+'/exports/admissions.xlsx';
@@ -801,7 +802,7 @@ async function xlsxExport(){
  setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
  toast('Excel report downloaded: enquiries and follow-up history');
 }
-async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||''])];
+async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate','Origin Type','Form Surface','Form Variant','Landing Version','Landing URL','Campaign Source','Campaign Name','First Touch Source','Latest Touch Source'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||'',l.source_type||'',l.form_type||'',l.form_variant||'',l.landing_page_version||'',l.landing_page||'',l.utm_source||'',l.utm_campaign||'',l.first_touch?.utm_source||'',l.latest_touch?.utm_source||''])];
  const csv='\ufeff'+lines.map(r=>r.map(v=>'"'+( /^[\s]*[=+\-@]/.test(String(v??'')) ? "\'"+String(v??'') : String(v??'') ).replaceAll('"','""')+'"').join(',')).join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=`schoolflow-school-${state.schoolId}-enquiries.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported');}
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
 
