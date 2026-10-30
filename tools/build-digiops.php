@@ -120,7 +120,7 @@ $built = "<?php\ndeclare(strict_types=1);\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
     $store . "\n" . $messaging . "\n" . $publicForms . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $stagingResetWeb . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
-foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
+foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
 }
 // The public URL remains stable (/scrm/), but JavaScript/CSS must be versioned.
@@ -141,5 +141,5 @@ $exposedFiles = [];
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($output, FilesystemIterator::SKIP_DOTS));
 foreach($iterator as $file) $exposedFiles[] = str_replace($output.'/','',$file->getPathname());
 sort($exposedFiles);
-if ($exposedFiles !== ['.htaccess','index.php','static/admissions-chat.css','static/admissions-chat.js','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
+if ($exposedFiles !== ['.htaccess','index.php','static/admissions-chat.css','static/admissions-chat.js','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
 echo "DigiOps public-only payload: ".implode(', ',$exposedFiles)."\n";
