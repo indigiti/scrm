@@ -1,11 +1,6 @@
 // Regression: group enquiry form must not let "Campus" act as a selectable school.
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const src=fs.readFileSync(__dirname+'/../public_html/static/lexicon-form.js','utf8');
-const extract=(name)=>{
- const found=src.match(new RegExp(' function '+name+'\\\\([^]*?\\\\n \\}', 'm'));
- if(!found)throw new Error('Missing '+name+' helper');
- return found[0];
-};
 class Choice {
  constructor(text,value,defaultSelected=false,selected=false){
   this.text=text;this.value=value;this.defaultSelected=defaultSelected;
