@@ -274,6 +274,11 @@ function groupSchoolChecks(chosen=[]){
 function sfGroupEmbed(guid){
  return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'"></script>';
 }
+function sfGroupShortEmbed(guid,mode='inline'){
+ const src=window.location.origin+'/scrm/embed/'+encodeURIComponent(guid);
+ const tag='<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="'+mode+'"'+(mode==='inline'?' data-schoolflow-target="#schoolflow-admissions"':'')+'></script>';
+ return mode==='inline'?'<div id="schoolflow-admissions"></div>\n'+tag:tag;
+}
 function routingPage(){
  if(!canManageSchools())return '<div class="empty-state">School management requires administrator access.</div>';
  const rows=ext.schoolsOverview||[],groups=ext.groupSites||[];
@@ -281,7 +286,14 @@ function routingPage(){
  <div class="app-alert">For a school group website, connect the permitted campuses below. Copy the public one-tag script into the website head; no Google Script, WordPress plugin or HFCM required. The older Contact Form 7 connector remains optional. A parent's choice can route only to an approved campus.</div>
  <section class="page-card" style="margin-bottom:20px"><div class="section-head" style="margin-top:0"><div><h2>Group websites</h2><p>One form, one private group key, multiple school destinations</p></div>${btn('＋ Connect group website','new-group','primary small')}</div>
  ${ext.groupKey?`<div class="key-panel"><strong>New group website key — copy and save now</strong><p class="muted-note">This secret is shown once. Set SCHOOLFLOW_CRM_GROUP_SITE_KEY on the WordPress server, never in HTML.</p><div class="key-box">${esc(ext.groupKey)}</div><div class="button-row" style="margin-top:10px">${btn('Copy key','copy-group-key','primary small')}${btn('I saved the key','dismiss-group-key','small')}</div></div>`:''}
- <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div><div class="muted-note" style="margin:8px 0 4px"><b>GUID form embed</b> — script assets refresh automatically. This GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupEmbed(g.guid||'')) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div><div class="muted-note" style="margin:8px 0 4px"><b>GUID form embed</b> — script assets refresh automatically. This GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupEmbed(g.guid||'')) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div>
+ <div class="muted-note"><b>Compact inline admission form</b> — paste the div and script where the form should appear.</div>
+ <code style="display:block;overflow-wrap:anywhere;white-space:pre-wrap;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','inline'))}</code>
+ <div class="button-row" style="margin-bottom:10px">${btn("Copy inline form","copy-group-inline","small",`data-id="${Number(g.id)}"`)}</div>
+ <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
+ <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
+ <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
+ <div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -1006,10 +1018,11 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });
    return;
  }
- if(action==='copy-group-embed'){
+ if(['copy-group-embed','copy-group-inline','copy-group-short-popup'].includes(action)){
    const group=ext.groupSites.find(x=>x.id===Number(el.dataset.id));if(!group?.guid){toast('Group GUID not available yet',true);return;}
-   const code=sfGroupEmbed(group.guid);
-   navigator.clipboard.writeText(code).then(()=>toast('Head script copied')).catch(()=>toast('Copy blocked by the browser; select the code on the card',true));return;
+   const code=action==='copy-group-inline'?sfGroupShortEmbed(group.guid,'inline'):
+      action==='copy-group-short-popup'?sfGroupShortEmbed(group.guid,'popup'):sfGroupEmbed(group.guid);
+   navigator.clipboard.writeText(code).then(()=>toast('SchoolFlow embed copied')).catch(()=>toast('Copy blocked by the browser; select the code on the card',true));return;
  }
  if(action==='copy-group-key'){navigator.clipboard.writeText(ext.groupKey).then(()=>toast('Group website key copied'));return;}
  if(action==='dismiss-group-key'){ext.groupKey='';render();return;}

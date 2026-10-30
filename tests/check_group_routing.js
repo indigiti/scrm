@@ -17,7 +17,7 @@ const data={
 const ctx={document:{getElementById:()=>root,addEventListener:()=>{},body:{append:()=>{}}},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
  fetch:async path=>{const route=path.replace('/scrm','');if(!(route in data))throw Error('Unexpected API '+route);return {status:200,ok:true,json:async()=>data[route]};},
- setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},window:{location:{href:''},open:()=>{}}};
+ setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
 vm.runInNewContext(js,ctx);
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
@@ -28,5 +28,10 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  handlers.click({target:{closest:()=>({dataset:{action:'new-group'}})}});
  assert.match(html,/groupSiteForm/);assert.match(html,/Schools served by the group website/);
  assert.match(html,/ABC Baner/);
- console.log('PASS: Group Websites management, server-generated school routes and school selection form');
+ assert.match(html,/Copy head script/);
+ assert.match(html,/Copy inline form/);
+ assert.match(html,/Copy compact popup/);
+ assert.match(html,/data-schoolflow-form/);
+ assert.match(html,/schoolflow-admissions/);
+ console.log('PASS: Group Websites management, legacy popup and additional short inline\/popup snippets');
 })().catch(e=>{console.error(e);process.exitCode=1;});

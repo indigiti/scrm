@@ -61,6 +61,7 @@ jobs:
         run: |
           node --check public_html/static/app.js
           node --check public_html/static/lexicon-form.js
+          node --check public_html/static/schoolflow-short-form.js
           node --check public_html/static/admissions-chat.js
           node tests/check_frontend_v2.js
           node tests/check_dashboard_workspace.js
@@ -91,6 +92,8 @@ jobs:
           ! test -e dist/digiops-release/bin/verify-store.php
           ! grep -q "require_once __DIR__ . '/provider_webhooks.php'" dist/digiops-release/index.php
           test -f dist/digiops-release/static/lexicon-form.js
+          test -f dist/digiops-release/static/schoolflow-short-form.js
+          test -f dist/digiops-release/static/schoolflow-short-form.css
           test -f dist/digiops-release/static/admissions-chat.js
           test -f dist/digiops-release/static/admissions-chat.css
           test -f dist/digiops-release/static/lexicon-form.css

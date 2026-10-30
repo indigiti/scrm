@@ -307,8 +307,10 @@ function sf_visit_view(array $v,array $s): array {
     $l=sf_find($s['leads'],$v['lead_id']);$v['student_name']=$l['name']??'Unknown';
     $staff=isset($v['staff_id'])&&$v['staff_id']!==null?sf_user($s,(int)$v['staff_id']):null;$v['staff_name']=$staff['name']??'Unassigned';return $v;
 }
-function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $actor, ?int $assigned, string $action): array {
-    $name = sf_text($p,'student_name',140,2);$guardian = sf_text($p,'parent_name',140,2);
+function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $actor, ?int $assigned, string $action, bool $allowPendingStudent = false): array {
+    // Short public enquiries have no confirmed student name yet. Keep it empty in storage;
+    // never invent a child's name or use the parent's name as the student.
+    $name = sf_text($p,'student_name',140,$allowPendingStudent ? 0 : 2);$guardian = sf_text($p,'parent_name',140,2);
     $phone = sf_phone(sf_text($p,'phone',40,6));$norm = preg_replace('/\D/','',$phone);
     $duplicate = null;
     foreach ($s['leads'] as $previous) if ($previous['school_id'] === $schoolId &&

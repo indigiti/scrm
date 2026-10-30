@@ -47,6 +47,11 @@ try {
     ef(str_contains($js,$first),'GUID route embedded');
     ef(str_contains($js,substr(hash_file('sha256',$root.'/static/lexicon-form.js'),0,16)),'JS fingerprint matches release asset');
     ef(str_contains($js,'data-thank-you'),'optional website customization preserved');
+    ef(str_contains($js,'data-schoolflow-form'),'short form opt-in supported');
+    ef(str_contains($js,'data-schoolflow-target'),'inline target forwarded to short form');
+    ef(str_contains($js,'static/schoolflow-short-form.js?v='),'versioned short embed asset');
+    ef(str_contains($js,substr(hash_file('sha256',$root.'/static/schoolflow-short-form.js'),0,16)),'short form JS fingerprint matches release asset');
+    ef(str_contains($js,substr(hash_file('sha256',$root.'/static/schoolflow-short-form.css'),0,16)),'short form CSS fingerprint matches release asset');
     ef(er('POST','/api/group-sites/'.$id.'/refresh-form-id',[],'other')[0]===403,'counsellor cannot refresh form');
     [$status,$updated]=er('POST','/api/group-sites/'.$id.'/refresh-form-id',[]);
     ef($status===200,'owner refreshes form ID from dashboard');

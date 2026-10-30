@@ -50,6 +50,25 @@ try {
     pf($code===201 && !empty($ok['guid']),'accepted new lead with GUID');
     pf(req('POST',$base.'/enquiries',$payload,'https://lexiconedu.in','public-attempt-good')[1]['duplicate_submission']===true,'idempotency response');
     pf(req('POST',$base.'/enquiries',$payload,'https://lexiconedu.in','public-attempt-reused')[0]===409,'challenge replay rejected');
+    [$shortCaptchaStatus,$shortCaptcha]=req('GET',$base.'/challenge');
+    pf($shortCaptchaStatus===200,'short form challenge issued');
+    preg_match('/Solve: (\\d+) \\+ (\\d+)/',$shortCaptcha['question'],$shortParts);
+    $short=['parent_name'=>'Example Parent','phone'=>'9876543210','school_code'=>'campus-1',
+        'grade'=>'Nursery','student_name'=>'','consent'=>true,'website'=>'',
+        'captcha_token'=>$shortCaptcha['token'],'captcha_answer'=>(string)((int)$shortParts[1]+(int)$shortParts[2]),
+        'landing_page'=>'https://lexiconedu.in/admissions?v=2'];
+    pf(req('POST',$base.'/short-enquiries',[...$short,'school_code'=>'Campus'],'https://lexiconedu.in','short-bad-campus-id')[0]===422,'short form rejects placeholder campus');
+    pf(req('POST',$base.'/short-enquiries',[...$short,'consent'=>false],'https://lexiconedu.in','short-consent-test')[0]===422,'short form requires consent');
+    pf(req('POST',$base.'/short-enquiries',[...$short,'captcha_answer'=>'999'],'https://lexiconedu.in','short-wrong-captcha')[0]===422,'short form rejects wrong captcha');
+    [$shortCode,$shortCreated]=req('POST',$base.'/short-enquiries',$short,'https://lexiconedu.in','short-unique-123456');
+    pf($shortCode===201 && !empty($shortCreated['guid']),'short form creates parent-only enquiry');
+    pf(req('POST',$base.'/short-enquiries',$short,'https://lexiconedu.in','short-unique-123456')[1]['duplicate_submission']===true,'short form idempotent');
+    $shortStored=$store->transaction(static function(array $s)use($shortCreated){
+        foreach($s['leads'] as $lead)if($lead['guid']===$shortCreated['guid'])return $lead;
+        return null;
+    });
+    pf($shortStored!==null && $shortStored['name']==='' && $shortStored['guardian']==='Example Parent','no fabricated student name');
+    pf($shortStored['school_id']===1 && $shortStored['grade']==='Nursery','short form campus and class routed');
     [$code,$another]=req('GET',$base.'/challenge');
     preg_match('/Solve: (\d+) \+ (\d+)/',$another['question'],$next);
     $anotherPayload=[...$payload,'captcha_token'=>$another['token'],'captcha_answer'=>(string)((int)$next[1]+(int)$next[2])];

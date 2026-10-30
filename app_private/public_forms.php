@@ -22,7 +22,7 @@ function sf_public_origin_ok(array $group, string $origin): bool {
     return preg_replace('/^www\./', '', $website) === preg_replace('/^www\./', '', $request);
 }
 function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, string $origin): bool {
-    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|chat-config|chat|counsel|counsel-lead|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD', $path, $m)) return false;
+    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|chat-config|chat|counsel|counsel-lead|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD', $path, $m)) return false;
     return $store->transaction(static function (array $s) use ($m, $origin): bool {
         $group = sf_public_group($s, strtolower($m[1]));
         return $group !== null && sf_public_origin_ok($group, $origin) && count(sf_group_campuses($s, $group)) > 0;
@@ -42,7 +42,8 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
     });
     if(!$enabled)sf_fail(404,'Public form not found');
     $assets=['static/lexicon-form.js','static/lexicon-form.css',
-        'static/admissions-chat.js','static/admissions-chat.css'];
+        'static/admissions-chat.js','static/admissions-chat.css',
+        'static/schoolflow-short-form.js','static/schoolflow-short-form.css'];
     $versions=[];
     foreach($assets as $asset){
         $file=rtrim($publicRoot,'/').'/'.$asset;
@@ -56,9 +57,12 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'var current=document.currentScript;if(!current)return;'."\n".
         'var meta='.$data.';'."\n".
         'var base=new URL(current.src).origin+"/scrm";'."\n".
+        'var shortForm=current.getAttribute("data-schoolflow-form")==="short";'."\n".
         'var script=document.createElement("script");script.async=true;'."\n".
-        'script.src=base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
+        'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
+        '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
         'script.setAttribute("data-schoolflow-chat-css-version",meta.versions[3]);'."\n".
@@ -118,7 +122,7 @@ function sf_public_fetch_pin(string $pin): ?array {
     return sf_public_parse_pin($body);
 }
 function sf_public_handle(string $method, string $path, array $p, array $headers, string $ip, SchoolFlowStore $store): array {
-    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD',$path,$m))
+    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD',$path,$m))
         sf_fail(404,'Public form not found');
     $guid=strtolower($m[1]);$action=$m[2];$origin=(string)($headers['origin']??'');
     $group=$store->transaction(static function (array $s) use ($guid,$origin) {
@@ -158,6 +162,52 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $s['pin_cache'][$pin]=['result'=>$found,'expires_at'=>time()+2592000];
         },true);
         return [200,$found];
+    }
+    if($action==='short-enquiries' && $method==='POST') {
+        $idem=(string)($headers['idempotency-key']??'');
+        if(!preg_match('/^[a-zA-Z0-9_-]{12,100}$/D',$idem))sf_fail(422,'Submission ID missing');
+        if(trim((string)($p['website']??''))!=='')sf_fail(422,'Invalid submission');
+        if(($p['consent']??null)!==true)sf_fail(422,'Parent/guardian consent required');
+        $guardian=sf_text($p,'parent_name',140,2);
+        $phone=sf_text($p,'phone',20,10);
+        if(!preg_match('/^[6-9][0-9]{9}$/D',$phone))sf_fail(422,'Valid 10-digit mobile number required');
+        $code=sf_text($p,'school_code',50,3);
+        $grade=sf_text($p,'grade',80,1);
+        foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
+        $page=sf_text($p,'landing_page',500);
+        $referrer=sf_text($p,'referrer',500);
+        if($page!=='' && (parse_url($page,PHP_URL_HOST)===null ||
+            !sf_public_origin_ok($group,parse_url($page,PHP_URL_SCHEME).'://'.parse_url($page,PHP_URL_HOST))))
+            sf_fail(422,'Invalid enquiry page');
+        $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
+        $ipKey=substr(hash('sha256',$ip),0,20);
+        return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer):array{
+            $g=sf_public_group($s,$guid);
+            if(!$g || !sf_public_origin_ok($g,$origin))sf_fail(403,'Form unavailable');
+            $route=null;
+            foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
+            if(!$route)sf_fail(422,'Choose a valid school/campus');
+            foreach($s['receipts'] as $receipt)
+                if(($receipt['public_group_id']??null)===$g['id'] && ($receipt['idempotency_key']??'')===$idem){
+                    if(($receipt['school_id']??null)!==$route['school_id'])sf_fail(409,'Submission belongs to another school');
+                    return [200,['success'=>true,'duplicate_submission'=>true]];
+                }
+            sf_limit($s,'public-short-ip:'.$g['id'].':'.$ipKey,10,3600);
+            sf_limit($s,'public-short-group:'.$g['id'],150,3600);
+            foreach($s['receipts'] as $receipt)if(($receipt['public_challenge']??'')===$proof)sf_fail(409,'Math CAPTCHA already used');
+            $details=$p;
+            $details['student_name']='';
+            $details['parent_name']=$guardian;
+            $details['phone']='+91 '.$phone;
+            $details['grade']=$grade;
+            $details['email']='';
+            $details['pincode']='';$details['state']='';$details['city']='';
+            $details['message']='Short admission enquiry — student details pending';
+            $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_short_received',true);
+            $s['receipts'][]=['public_group_id'=>$g['id'],'school_id'=>$route['school_id'],
+                'idempotency_key'=>$idem,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
+            return [201,['success'=>true,'guid'=>$lead['guid'],'duplicate_submission'=>false]];
+        },true);
     }
     if($action==='enquiries' && $method==='POST') {
         $ipAttempt=substr(hash('sha256',$ip),0,20);
