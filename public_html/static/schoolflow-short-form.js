@@ -33,7 +33,7 @@ function init(){
  host.appendChild(outer);
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
- var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false;
+ var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true;
  var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
  var campaignKey='sf2_popup_'+guid;
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
@@ -103,12 +103,31 @@ function init(){
    document.addEventListener('mouseout',exitListener);
   }
  }
+ function approvedPage(policy){
+  if(!policy||!policy.primary_host)return true; // backwards-compatible config
+  var current;try{current=new URL(location.href);}catch(e){return false;}
+  if(current.protocol!=='https:')return false;
+  var hostname=current.hostname.replace(/^www\./,'').toLowerCase();
+  var primary=String(policy.primary_host).replace(/^www\./,'').toLowerCase();
+  if(hostname===primary&&!policy.restrict_primary)return true;
+  var pagePath=current.pathname.replace(/\/+$/,'')||'/';
+  return (policy.approved_urls||[]).some(function(raw){
+   try{var approved=new URL(raw),authorizedPath=approved.pathname.replace(/\/+$/,'')||'/';
+    return authorizedPath===pagePath&&(approved.host===current.host ||
+       (hostname===primary&&approved.hostname.replace(/^www\./,'').toLowerCase()===primary));
+   }catch(e){return false;}
+  });
+ }
  function error(s){status.textContent=s;status.classList.add('sf2-error');}
  function clear(){status.textContent='';status.classList.remove('sf2-error');}
  async function get(path){var r=await fetch(api+path,{credentials:'omit',cache:'no-store',headers:{Accept:'application/json'}});var d=await r.json().catch(function(){return {};});if(!r.ok)throw Error(d.detail||'SchoolFlow temporarily unavailable');return d;}
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
-  try{var d=await get('/config');campus.replaceChildren(new Option('Select campus',''));
+  try{var d=await get('/config');
+   pageAllowed=approvedPage(d.landing_pages);
+   if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
+    return error('This landing page URL is not approved. Contact the school website administrator.');}
+   campus.replaceChildren(new Option('Select campus',''));
    var permitted=d.popup&&Array.isArray(d.popup.school_codes)?d.popup.school_codes:null;
    (d.schools||[]).forEach(function(x){if(x&&x.code&&x.name&&(!config||!config.enabled||!permitted||permitted.includes(x.code)))campus.add(new Option(x.name,x.code));});
    campus.disabled=campus.options.length<2;
@@ -118,7 +137,7 @@ function init(){
  async function challenge(){token='';verify.hidden=false;try{var d=await get('/challenge');token=d.token;outer.querySelector('.sf2-question').textContent=d.question;form.elements.captcha_answer.value='';}
  catch(e){error('Unable to load verification. Check SchoolFlow configuration.');}}
  function open(){
-  if(opened)return;
+  if(opened||!pageAllowed)return;
   previousFocus=document.activeElement;outer.classList.add('sf2-open');opened=true;clear();campuses();
   if(mode==='popup'){outer.setAttribute('role','dialog');outer.setAttribute('aria-modal','true');}
   form.elements.parent_name.focus();
@@ -145,6 +164,8 @@ function init(){
   });
   get('/config').then(function(d){
    config=d.popup||null;configLoaded=true;
+   pageAllowed=approvedPage(d.landing_pages);
+   if(!pageAllowed){trigger.hidden=true;return;}
    if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
    setupTriggers();
