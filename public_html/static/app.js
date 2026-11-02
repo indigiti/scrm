@@ -331,6 +331,61 @@ function popupSettingsModal(group){
  '<div class="button-row">'+btn('Cancel','close-modal')+'<button type="submit" class="btn primary">Save popup settings</button></div></form>');
 }
 
+
+function landingPagesPage(){
+ if(!canManageSchools())return pageHead('Landing page approvals','Administrator access required.');
+ const groups=ext.groupSites||[];
+ const count=groups.reduce((n,g)=>n+(g.landing_pages?.approved_urls?.length||0),0);
+ return pageHead('Landing pages','Approve additional landing-page URLs for public admissions forms. The original group domain retains existing access unless you explicitly restrict it.',
+   btn('＋ Connect group website','new-group','primary'))+
+  '<div class="sf-admin-summary"><div><span>Group form websites</span><strong>'+groups.length+'</strong></div>'+
+  '<div><span>Approved additional URLs</span><strong>'+count+'</strong></div>'+
+  '<div><span>Restricted primary sites</span><strong>'+groups.filter(g=>g.landing_pages?.restrict_primary).length+'</strong></div></div>'+
+  '<div class="sf-help-panel"><strong>How page approval works</strong><p>Each added HTTPS URL is approved for that exact page, including visits with UTM query parameters. Other pages or subdomains are not automatically authorized. To restrict the original website to selected pages, enable the optional strict-primary setting.</p></div>'+
+  '<div class="sf-management-cards">'+groups.map(g=>{
+   const settings=g.landing_pages||{},urls=settings.approved_urls||[];
+   return '<section class="sf-management-card"><div class="sf-management-top"><div><span class="sf-eyebrow">GROUP FORM · #'+Number(g.id)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.domain)+'</p></div>'+
+   '<span class="sf-status-pill '+(g.enabled?'':'sf-muted')+'">'+(g.enabled?'Enabled':'Disabled')+'</span></div>'+
+   '<div class="sf-management-meta"><span>'+urls.length+' approved URLs</span><span>Primary domain: '+(settings.restrict_primary?'Restricted to list':'All pages')+'</span></div>'+
+   (urls.length?'<div class="sf-approved-list">'+urls.map(u=>'<div><span aria-hidden="true">✓</span><code>'+esc(u)+'</code></div>').join('')+'</div>':
+    '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
+   '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
+   btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+  }).join('')+
+  (!groups.length?'<div class="sf-management-card"><h3>No group forms connected</h3><p>Connect a group website from Schools & Routing first.</p>'+btn('Go to Schools & Routing','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
+}
+function popupCampaignsPage(){
+ if(!canManageSchools())return pageHead('Popup campaigns','Administrator access required.');
+ const groups=ext.groupSites||[];
+ return pageHead('Popup campaigns','Control timing, exit intent, scroll triggers and frequency independently for each group form.')+
+  '<div class="sf-management-cards">'+groups.map(g=>{
+   const p=g.popup_settings||{},enabled=!!p.enabled;
+   const trigger={'either':'Time or scroll','delay':'Time delay','scroll':'Scroll depth','exit':'Exit intent','manual':'Button only'}[p.trigger]||'Manual';
+   return '<section class="sf-management-card"><div class="sf-management-top"><div><span class="sf-eyebrow">CAMPAIGN · GROUP #'+Number(g.id)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.domain)+'</p></div>'+
+    '<span class="sf-status-pill '+(enabled?'':'sf-muted')+'">'+(enabled?'Auto-popup enabled':'Manual only')+'</span></div>'+
+    '<div class="sf-management-meta"><span>Trigger: '+esc(trigger)+'</span><span>Repeat: '+esc(p.repeat_after||'7')+' days / sessions</span></div>'+
+    '<p class="sf-management-empty">Manual enquiry button stays available even if automatic triggers are disabled.</p>'+
+    '<div class="button-row">'+btn('Configure campaign','edit-popup-settings','primary small','data-id="'+Number(g.id)+'"')+
+    btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+  }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
+}
+function landingPagesModal(group){
+ const config=group.landing_pages||{approved_urls:[],restrict_primary:false};
+ return modalFrame('Approved landing pages · '+esc(group.name),
+  'Allow an additional landing page or domain without changing the existing embed GUID.',
+  '<form id="landingPagesForm" data-id="'+Number(group.id)+'">'+
+  '<div class="sf-info-row"><strong>Primary domain</strong><span>'+esc(group.domain)+'</span></div>'+
+  '<div class="form-field"><label for="sfLandingUrls">Additional approved HTTPS URLs (one per line)</label>'+
+  '<textarea id="sfLandingUrls" name="approved_urls" rows="7" spellcheck="false" placeholder="https://school.example/admissions\nhttps://campaign.example/apply">'+
+  esc((config.approved_urls||[]).join('\n'))+'</textarea>'+
+  '<small>Use the complete page URL. Omit ?utm_source and other tracking parameters; these remain allowed. Max 25 approved URLs.</small></div>'+
+  '<label class="sf-check-row"><input type="checkbox" name="restrict_primary" '+(config.restrict_primary?'checked':'')+'>'+
+  '<span><strong>Restrict primary website too</strong><small>Require each page on the original website to appear in the approved list. Do not enable until those pages are listed.</small></span></label>'+
+  '<p class="sf-form-hint">Saving this list immediately revokes access from removed landing pages. Existing leads are preserved. This is website allowlisting, not proof of page ownership.</p>'+
+  '<div class="button-row" style="justify-content:flex-end">'+btn('Cancel','close-modal')+
+  '<button type="submit" class="btn primary">Save approved URLs</button></div></form>');
+}
+
 function routingPage(){
  if(!canManageSchools())return '<div class="empty-state">School management requires administrator access.</div>';
  const rows=ext.schoolsOverview||[],groups=ext.groupSites||[];
@@ -345,7 +400,7 @@ function routingPage(){
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- <div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ <div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -521,6 +576,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
  if(state.modal==='new-group'||state.modal==='edit-group'){
    const g=state.modal==='edit-group'?ext.groupSites.find(x=>x.id===ext.editGroupId):null;
@@ -815,7 +871,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
@@ -1090,6 +1146,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
+ }
+ if(action==='edit-landing-pages'){
+   if(!canManageSchools())return;
+   ext.editGroupId=Number(el.dataset.id);state.modal='landing-pages';render();return;
  }
  if(action==='edit-popup-settings'){
    if(!canManageSchools())return;
@@ -1390,6 +1450,19 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
  if(f.id==='leadForm'){perform(async()=>{let body={...fd,consent:fd.consent==='true',site_id:fd.site_id?Number(fd.site_id):null,assigned_to:fd.assigned_to?Number(fd.assigned_to):null};if(!body.site_id)delete body.site_id;if(!body.assigned_to)delete body.assigned_to;let newLead=await api(`/api/schools/${state.schoolId}/leads`,'POST',body);state.modal='';await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${newLead.id}`);render();toast('Enquiry saved');});return;}
+ if(f.id==='landingPagesForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const approved=String(fd.approved_urls||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(approved.length>25)return toast('Maximum 25 approved landing pages per form',true);
+  perform(async()=>{
+   const settings=await api('/api/group-sites/'+id+'/landing-pages','PATCH',{
+    approved_urls:approved,restrict_primary:!!f.elements.restrict_primary.checked
+   });
+   const group=ext.groupSites.find(g=>g.id===id);if(group)group.landing_pages=settings;
+   state.modal='';render();toast('Approved landing pages saved. Removed URLs are now blocked.');
+  });return;
+ }
  if(f.id==='popupSettingsForm'){
   if(!canManageSchools())return;
   const id=Number(f.dataset.id);
