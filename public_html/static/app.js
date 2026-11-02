@@ -27,7 +27,7 @@ const NAV_SECTIONS=[
 const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
-const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
+const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
 const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
@@ -72,7 +72,10 @@ async function initialize(){
  try{state.me=await api('/api/me');state.schoolId=Number(sessionStorage.getItem('schoolflow_school'))||state.me.schools[0]?.id;
  if(!state.me.schools.find(s=>s.id===state.schoolId))state.schoolId=state.me.schools[0]?.id;
  if(state.me.user.must_change_password){render();return;}
- await reload();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
+ if(!canSeePage(state.page))state.page='Dashboard';
+ await reload();
+ if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
+ if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
  if(!state.schoolId){render();return;}
@@ -1132,7 +1135,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='close-menu'){root.querySelector('.sidebar')?.classList.remove('open');return;}
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
-  if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';state.search='';state.status='All';state.modal='';state.detail=null;
+  if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';sessionStorage.setItem('schoolflow_last_page',state.page);state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
@@ -1143,7 +1146,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const sid=Number(el.dataset.schoolId);
    if(!canManageSchools() || !state.me.schools.some(s=>s.id===sid&&s.role==='Admin'))return;
    state.schoolId=sid;ext.resetResult=null;sessionStorage.setItem('schoolflow_school',String(sid));
-   state.page=action==='route-connect'?'Websites & Forms':'Dashboard';
+   state.page=action==='route-connect'?'Websites & Forms':'Dashboard';sessionStorage.setItem('schoolflow_last_page',state.page);
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
  }
