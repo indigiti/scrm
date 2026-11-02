@@ -279,6 +279,32 @@ function sfGroupShortEmbed(guid,mode='inline'){
  const tag='<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="'+mode+'"'+(mode==='inline'?' data-schoolflow-target="#schoolflow-admissions"':'')+'></script>';
  return mode==='inline'?'<div id="schoolflow-admissions"></div>\n'+tag:tag;
 }
+
+function popupSettingsModal(group){
+ const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
+ return modalFrame('Popup campaign · '+esc(group.name),'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
+ '<form id="popupSettingsForm" data-id="'+Number(group.id)+'">'+
+ '<div class="form-field"><label><input type="checkbox" name="enabled" '+(v('enabled',false)?'checked':'')+'> Enable automatic admission popup</label></div>'+
+ '<div class="two-cols">'+
+ select('Trigger','trigger',[['either','Time OR scroll'],['delay','Time delay'],['scroll','Scroll depth'],['exit','Exit intent'],['manual','Button only']].map(([id,label])=>option(id,label,v('trigger','either'))).join(''))+
+ input('Delay (seconds, 0–60)','delay_seconds','number',v('delay_seconds',8),true)+
+ input('Scroll depth (10–90%)','scroll_percent','number',v('scroll_percent',40),true)+
+ select('Repeat after dismissal','repeat_after',[['session','Next session'],['1','1 day'],['7','7 days'],['30','30 days'],['never','Never']].map(([id,label])=>option(id,label,v('repeat_after','7'))).join(''))+
+ select('Position','position',[['center','Center'],['right','Right panel'],['bottom','Bottom sheet']].map(([id,label])=>option(id,label,v('position','center'))).join(''))+
+ input('Start date (optional)','start_date','date',v('start_date',''))+
+ input('End date (optional)','end_date','date',v('end_date',''))+
+ input('Daily start time — IST (optional)','start_time','time',v('start_time',''))+
+ input('Daily end time — IST (optional)','end_time','time',v('end_time',''))+'</div>'+
+ '<div class="form-field"><label><input type="checkbox" name="exit_intent" '+(v('exit_intent',true)?'checked':'')+'> Allow desktop exit intent</label></div>'+
+ '<div class="form-field"><label><input type="checkbox" name="mobile_enabled" '+(v('mobile_enabled',true)?'checked':'')+'> Enable on mobile (time/scroll only)</label></div>'+
+ '<div class="form-field"><label>Include URL paths (one prefix per line; blank means all pages)<textarea name="include_paths" rows="3" placeholder="/admissions">'+esc((v('include_paths',[])).join('\n'))+'</textarea></label></div>'+
+ '<div class="form-field"><label>Exclude URL paths (one prefix per line)<textarea name="exclude_paths" rows="3" placeholder="/thank-you">'+esc((v('exclude_paths',[])).join('\n'))+'</textarea></label></div>'+
+ '<fieldset class="group-school-choice"><legend>Target destination campuses (none checked means all approved campuses)</legend>'+
+ group.schools.map(s=>'<label><input type="checkbox" name="popup_school_ids" value="'+Number(s.school_id)+'" '+(v('school_ids',[]).includes(s.school_id)?'checked':'')+'> '+esc(s.name)+'</label>').join('')+'</fieldset>'+
+ '<p class="muted-note">Popup campaigns are off by default. Manual Enquire Now remains available. Successful submissions are suppressed for at least 30 days on this browser. Only admins for this group may change settings.</p>'+
+ '<div class="button-row">'+btn('Cancel','close-modal')+'<button type="submit" class="btn primary">Save popup settings</button></div></form>');
+}
+
 function routingPage(){
  if(!canManageSchools())return '<div class="empty-state">School management requires administrator access.</div>';
  const rows=ext.schoolsOverview||[],groups=ext.groupSites||[];
@@ -293,7 +319,7 @@ function routingPage(){
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- <div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ <div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -469,6 +495,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
  if(state.modal==='new-group'||state.modal==='edit-group'){
    const g=state.modal==='edit-group'?ext.groupSites.find(x=>x.id===ext.editGroupId):null;
    return modalFrame(g?'Edit group website':'Connect group website','Choose the schools available in the parent enquiry dropdown.',`<form id="groupSiteForm">${input('Group website name','name','text',g?.name||'',true)}${input('Website domain','domain','text',g?.domain||'',true)}${groupSchoolChecks(g?.schools.map(x=>x.school_id)||[])}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">${g?'Save school routes':'Create group key'}</button></div></form>`);
@@ -500,6 +527,7 @@ function detailDrawer(){const d=state.detail;if(!d)return '';const l=d.lead;
  <div style="grid-column:1/-1"><small>Landing URL</small><strong style="overflow-wrap:anywhere">${esc(l.landing_page||'Not recorded')}</strong></div>
  <div><small>Campaign source</small><strong>${esc(l.utm_source||'Not recorded')}</strong></div>
  <div><small>Campaign name</small><strong>${esc(l.utm_campaign||'Not recorded')}</strong></div>
+  ${l.popup_campaign_id?`<div><small>Popup campaign</small><strong>${esc(l.popup_campaign_id)}</strong></div><div><small>Popup trigger</small><strong>${esc(l.popup_trigger||'Not recorded')}</strong></div>`:''}
  <div style="grid-column:1/-1"><small>Referrer</small><strong style="overflow-wrap:anywhere">${esc(l.referrer||'Not recorded')}</strong></div>
  <div><small>First touch</small><strong>${esc(l.first_touch?.source_type||'Not recorded')} ${esc(l.first_touch?.captured_at||'')}</strong></div>
  <div><small>Latest touch</small><strong>${esc(l.latest_touch?.source_type||'Not recorded')} ${esc(l.latest_touch?.captured_at||'')}</strong></div></div>
@@ -802,7 +830,7 @@ async function xlsxExport(){
  setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
  toast('Excel report downloaded: enquiries and follow-up history');
 }
-async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate','Origin Type','Form Surface','Form Variant','Landing Version','Landing URL','Campaign Source','Campaign Name','First Touch Source','Latest Touch Source'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||'',l.source_type||'',l.form_type||'',l.form_variant||'',l.landing_page_version||'',l.landing_page||'',l.utm_source||'',l.utm_campaign||'',l.first_touch?.utm_source||'',l.latest_touch?.utm_source||''])];
+async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate','Origin Type','Form Surface','Form Variant','Landing Version','Landing URL','Campaign Source','Campaign Name','First Touch Source','Latest Touch Source','Popup Campaign ID','Popup Trigger'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||'',l.source_type||'',l.form_type||'',l.form_variant||'',l.landing_page_version||'',l.landing_page||'',l.utm_source||'',l.utm_campaign||'',l.first_touch?.utm_source||'',l.latest_touch?.utm_source||'',l.popup_campaign_id||'',l.popup_trigger||''])];
  const csv='\ufeff'+lines.map(r=>r.map(v=>'"'+( /^[\s]*[=+\-@]/.test(String(v??'')) ? "\'"+String(v??'') : String(v??'') ).replaceAll('"','""')+'"').join(',')).join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=`schoolflow-school-${state.schoolId}-enquiries.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported');}
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
 
@@ -1029,6 +1057,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
+ }
+ if(action==='edit-popup-settings'){
+   if(!canManageSchools())return;
+   ext.editGroupId=Number(el.dataset.id);state.modal='popup-settings';render();return;
  }
  if(action==='new-group'||action==='edit-group'){
    if(!canManageSchools())return;
@@ -1325,6 +1357,26 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
  if(f.id==='leadForm'){perform(async()=>{let body={...fd,consent:fd.consent==='true',site_id:fd.site_id?Number(fd.site_id):null,assigned_to:fd.assigned_to?Number(fd.assigned_to):null};if(!body.site_id)delete body.site_id;if(!body.assigned_to)delete body.assigned_to;let newLead=await api(`/api/schools/${state.schoolId}/leads`,'POST',body);state.modal='';await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${newLead.id}`);render();toast('Enquiry saved');});return;}
+ if(f.id==='popupSettingsForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const paths=k=>String(fd[k]||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const selected=Array.from(f.querySelectorAll('input[name="popup_school_ids"]:checked')).map(x=>Number(x.value));
+  const data={
+   enabled:!!f.elements.enabled.checked,trigger:String(fd.trigger),
+   delay_seconds:Number(fd.delay_seconds),scroll_percent:Number(fd.scroll_percent),
+   exit_intent:!!f.elements.exit_intent.checked,mobile_enabled:!!f.elements.mobile_enabled.checked,
+   repeat_after:String(fd.repeat_after),position:String(fd.position),
+   include_paths:paths('include_paths'),exclude_paths:paths('exclude_paths'),
+   start_date:String(fd.start_date||''),end_date:String(fd.end_date||''),
+   start_time:String(fd.start_time||''),end_time:String(fd.end_time||''),school_ids:selected
+  };
+  perform(async()=>{
+   const updated=await api('/api/group-sites/'+id+'/popup-settings','PATCH',data);
+   const group=ext.groupSites.find(g=>g.id===id);if(group)group.popup_settings=updated;
+   state.modal='';render();toast('Popup campaign settings saved.');
+  });return;
+ }
  if(f.id==='groupSiteForm'){
    const chosen=Array.from(f.querySelectorAll('input[name="school_ids"]:checked')).map(x=>Number(x.value));
    if(!chosen.length){toast('Select at least one school',true);return;}
