@@ -23,6 +23,27 @@ try{
  $create=gr('POST','/api/group-sites',['name'=>'ABC Group Website','domain'=>'abc-school.test','school_ids'=>[1,2]]);
  gc($create[0]===201,'create group');$id=$create[1]['id'];$key=$create[1]['api_key'];
  gc(str_starts_with($key,'sfgroup_'),'has group-specific key');
+ $popup=gr('GET','/api/group-sites/'.$id.'/popup-settings');
+ gc($popup[0]===200 && $popup[1]['enabled']===false,'new group popup defaults off');
+ gc(gr('GET','/api/group-sites/'.$id.'/popup-settings',[],'staff-a')[0]===403,'nonadmin cannot read popup controls');
+ gc(gr('PATCH','/api/group-sites/'.$id.'/popup-settings',['enabled'=>true,'school_ids'=>[3]])[0]===422,
+    'school outside connected group rejected');
+ $set=gr('PATCH','/api/group-sites/'.$id.'/popup-settings',[
+     'enabled'=>true,'trigger'=>'either','delay_seconds'=>8,'scroll_percent'=>40,
+     'school_ids'=>[2],'include_paths'=>['/admissions'],'exclude_paths'=>['/thank-you']
+ ]);
+ gc($set[0]===200 && $set[1]['enabled']===true && $set[1]['school_ids']===[2],'admin publishes popup settings');
+ $guid=$create[1]['guid'];
+ $public=sf_handle('GET','/api/public/forms/'.$guid.'/config',[],
+     ['origin'=>'https://abc-school.test'],'198.51.100.1',$store);
+ gc($public[0]===200 && $public[1]['popup']['school_codes']===['campus-2'],
+    'public popup config exposes only allowed school choice codes');
+ try{
+     sf_handle('GET','/api/public/forms/'.$guid.'/config',[],
+        ['origin'=>'https://unrelated.test'],'198.51.100.1',$store);
+     throw new RuntimeException('Origin bypassed');
+ }catch(SFError $err){gc($err->httpStatus===403,'foreign origin is blocked');}
+
  $list=gr('GET','/api/group-sites')[1];gc(count($list)===1 && count($list[0]['schools'])===2 && !str_contains(json_encode($list),$key),'GET routes exclude private secret');
  gc(gr('GET','/api/group-sites',[],'outsider')[1]===[],'other admin cannot see group');
  gc(gr('GET','/api/v1/group-schools',[],'invalid')[0]===401,'invalid public read key');
