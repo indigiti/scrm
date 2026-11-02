@@ -34,7 +34,7 @@ function init(){
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
  var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false;
- var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null;
+ var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
  var campaignKey='sf2_popup_'+guid;
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
  function writeStored(x){try{localStorage.setItem(campaignKey,JSON.stringify(x));}catch(e){}}
@@ -68,9 +68,9 @@ function init(){
   if(scrollListener){removeEventListener('scroll',scrollListener);scrollListener=null;}
   if(exitListener){document.removeEventListener('mouseout',exitListener);exitListener=null;}
  }
- function openAuto(){
+ function openAuto(reason){
   if(!autoAllowed())return;
-  alreadyShown=true;remember('shown');
+  alreadyShown=true;popupTrigger=reason||'delay';remember('shown');
   try{sessionStorage.setItem(campaignKey+'_shown','1');}catch(e){}
   clearTriggers();open();
  }
@@ -79,16 +79,16 @@ function init(){
   if(!config||!config.enabled||!autoAllowed())return;
   if(config.trigger==='manual')return;
   var t=config.trigger;
-  if(t==='delay'||t==='either')timer=setTimeout(openAuto,Math.max(0,config.delay_seconds)*1000);
+  if(t==='delay'||t==='either')timer=setTimeout(function(){openAuto('delay');},Math.max(0,config.delay_seconds)*1000);
   if(t==='scroll'||t==='either'){
    scrollListener=function(){var max=document.documentElement.scrollHeight-innerHeight;
-    if(max>0&&scrollY/max*100>=config.scroll_percent)openAuto();};
+    if(max>0&&scrollY/max*100>=config.scroll_percent)openAuto('scroll');};
    addEventListener('scroll',scrollListener,{passive:true});scrollListener();
   }
   if(config.exit_intent||t==='exit'){
    exitListener=function(e){
     if(e.relatedTarget||e.clientY>4||Date.now()-openedAt<8000||matchMedia('(pointer:coarse)').matches)return;
-    openAuto();
+    openAuto('exit');
    };
    document.addEventListener('mouseout',exitListener);
   }
@@ -120,7 +120,7 @@ function init(){
  }
  if(mode==='popup'){
   var trigger=document.createElement('button');trigger.className='sf2-trigger';trigger.textContent=loader.dataset.schoolflowButton||'Enquire Now';
-  document.body.appendChild(trigger);trigger.addEventListener('click',open);
+  document.body.appendChild(trigger);trigger.addEventListener('click',function(){popupTrigger='manual';open();});
   outer.querySelector('.sf2-close').addEventListener('click',close);
   outer.addEventListener('click',function(e){if(e.target===outer)close();});
   outer.addEventListener('keydown',function(e){
@@ -155,7 +155,7 @@ function init(){
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
-   school_code:campus.value,form_display:mode,consent:true,website:p.website.value,captcha_token:token,
+   school_code:campus.value,form_display:mode,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),utm_source:query.get('utm_source')||'',
    utm_medium:query.get('utm_medium')||'',utm_campaign:query.get('utm_campaign')||'',
