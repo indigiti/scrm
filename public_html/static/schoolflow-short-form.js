@@ -61,6 +61,16 @@ function init(){
   var today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   if(config.start_date&&today<config.start_date)return false;
   if(config.end_date&&today>config.end_date)return false;
+  if(config.start_time&&config.end_time){
+   var hmParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+   var hour=hmParts.find(function(x){return x.type==='hour';});
+   var minute=hmParts.find(function(x){return x.type==='minute';});
+   if(!hour||!minute)return false;
+   var clock=hour.value+':'+minute.value;
+   if(config.start_time<=config.end_time){
+    if(clock<config.start_time||clock>config.end_time)return false;
+   }else if(clock<config.start_time&&clock>config.end_time)return false;
+  }
   return eligibleRepeat();
  }
  function clearTriggers(){
