@@ -891,6 +891,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             foreach($s['group_sites'] as $g) if($g['id']===$groupId && $g['owner_id']===$uid) {$group=$g;break;}
             if(!$group)sf_fail(404,'Group website not found');
             if($operation==='popup-settings') {
+                // Ownership alone is insufficient after membership changes. Every
+                // current destination must still be administered by the group owner.
+                foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
                 if($method==='GET')return [200,sf_popup_settings($group)];
                 if($method==='PATCH'){
                     $settings=sf_popup_validate($payload,$group);
