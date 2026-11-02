@@ -134,7 +134,7 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         return $store->transaction(static function (array $s) use ($guid): array {
             $g=sf_public_group($s,$guid);
             if(!$g)sf_fail(404,'Form unavailable');
-            return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g))]];
+            return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g)),'popup'=>sf_popup_public($s,$g)]];
         });
     }
     if($action==='challenge' && $method==='GET') {
