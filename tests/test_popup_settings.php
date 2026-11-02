@@ -29,5 +29,9 @@ popupCheck(popupReject(['start_date'=>'2027-12-01','end_date'=>'2027-01-01'],$gr
 popupCheck(popupReject(['include_paths'=>['https://example.com/admissions']],$group),'reject external URLs');
 popupCheck(popupReject(['include_paths'=>['/a?next=1']],$group),'reject query strings');
 popupCheck(popupReject(['enabled'=>'true'],$group),'reject string booleans');
+popupCheck(popupReject(['start_time'=>'9:00','end_time'=>'17:00'],$group),'reject unpadded time');
+popupCheck(popupReject(['start_time'=>'09:00'],$group),'require both time bounds');
+popupCheck(popupReject(['start_time'=>'24:00','end_time'=>'06:00'],$group),'reject invalid daily hour');
+popupCheck(sf_popup_validate(['start_time'=>'20:00','end_time'=>'06:00'],$group)['start_time']==='20:00','allow overnight windows');
 popupCheck(popupReject(['secret_api_key'=>'example'],$group),'reject unsupported private configuration');
 echo "PASS: popup defaults, validation, URL targeting, schedule and group campus isolation\n";
