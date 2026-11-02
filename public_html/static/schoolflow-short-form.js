@@ -55,6 +55,7 @@ function init(){
   if(!config||!config.enabled||completed||closedByUser||alreadyShown||opened||document.visibilityState==='hidden')return false;
   if(!config.mobile_enabled&&matchMedia('(max-width: 767px)').matches)return false;
   var path=location.pathname,includes=config.include_paths||[],excludes=config.exclude_paths||[];
+  if(path==='/scrm'||path.startsWith('/scrm/'))return false;
   if(includes.length&&!includes.some(function(x){return matchesPath(path,x);}))return false;
   if(excludes.some(function(x){return matchesPath(path,x);}))return false;
   var today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
@@ -134,6 +135,7 @@ function init(){
   });
   get('/config').then(function(d){
    config=d.popup||null;configLoaded=true;
+   if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
    setupTriggers();
   }).catch(function(){configLoaded=true;});
