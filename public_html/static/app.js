@@ -1129,7 +1129,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='create-application'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/applications','POST',{lead_id:Number(el.dataset.id)});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+Number(el.dataset.id));render();toast('Application started');});return;}
  if(action==='toggle-nav-group'){
   const key=el.dataset.group;if(!NAV_SECTIONS.some(([name])=>name===key))return;
-  ext.navExpanded[key]=!(ext.navExpanded[key]??false);render();return;
+  ext.navExpanded[key]=!(ext.navExpanded[key]??false);render();
+  root.querySelector('[data-action="toggle-nav-group"][data-group="'+key+'"]')?.focus();return;
  }
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
  if(action==='close-menu'){root.querySelector('.sidebar')?.classList.remove('open');return;}
