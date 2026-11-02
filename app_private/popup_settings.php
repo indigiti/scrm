@@ -53,7 +53,7 @@ function sf_popup_validate(array $input,array $group): array {
             sf_fail(422,$key.' must have at most 20 path prefixes');
         $clean=[];
         foreach($items as $item){
-            if(!is_string($item)||strlen($item)>120||!preg_match('~^/(?:[a-zA-Z0-9._~%/-]*)$~D',$item)||
+            if(!is_string($item)||strlen($item)>120||!preg_match('#^/(?:[a-zA-Z0-9._~%/-]*)$#D',$item)||
                 str_contains($item,'//')||str_contains($item,'/../')||str_contains($item,'/./'))
                 sf_fail(422,'Use website path prefixes beginning with / (no query strings)');
             $item=rtrim($item,'/')?:'/';
