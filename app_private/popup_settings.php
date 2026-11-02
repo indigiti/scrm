@@ -20,6 +20,8 @@ function sf_popup_defaults(): array {
         'exclude_paths'=>[],
         'start_date'=>'',
         'end_date'=>'',
+        'start_time'=>'',
+        'end_time'=>'',
         'school_ids'=>[],
     ];
 }
@@ -63,6 +65,13 @@ function sf_popup_validate(array $input,array $group): array {
     }
     $p['start_date']=sf_date($p['start_date']);
     $p['end_date']=sf_date($p['end_date']);
+    foreach(['start_time','end_time'] as $timeKey){
+        if(!is_string($p[$timeKey])||($p[$timeKey]!==''&&
+            !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D',$p[$timeKey])))
+            sf_fail(422,'Campaign time must use 24-hour HH:MM format');
+    }
+    if(($p['start_time']==='')!==($p['end_time']===''))
+        sf_fail(422,'Campaign start and end times must both be set or both blank');
     if($p['start_date']!==''&&$p['end_date']!==''&&$p['start_date']>$p['end_date'])
         sf_fail(422,'Popup end date cannot precede its start date');
     $allowed=array_map(static fn(array $route):int=>(int)$route['school_id'],$group['routes']??[]);
