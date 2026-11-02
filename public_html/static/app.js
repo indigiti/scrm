@@ -282,7 +282,7 @@ function sfGroupShortEmbed(guid,mode='inline'){
 
 function popupSettingsModal(group){
  const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
- return modalFrame('Popup campaign · '+group.name,'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
+ return modalFrame('Popup campaign · '+esc(group.name),'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
  '<form id="popupSettingsForm" data-id="'+Number(group.id)+'">'+
  '<div class="form-field"><label><input type="checkbox" name="enabled" '+(v('enabled',false)?'checked':'')+'> Enable automatic admission popup</label></div>'+
  '<div class="two-cols">'+
