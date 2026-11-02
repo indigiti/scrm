@@ -40,6 +40,7 @@ jobs:
           php tests/test_multischool_routing.php
           php tests/test_cf7_multischool.php
           php tests/test_group_routing.php
+          php tests/test_popup_settings.php
           php tests/test_guid_form_embed.php
           php tests/test_release_audit.php
           php tests/test_admission_classification.php
@@ -67,6 +68,7 @@ jobs:
           node tests/check_frontend_v2.js
           node tests/check_dashboard_workspace.js
           node tests/check_group_routing.js
+          node tests/check_short_popup_campaign.js
           node tests/check_lexicon_chat_autoload.js
           node tests/check_campus_placeholder.js
           node tests/check_conditional_enquiry_popup.js
