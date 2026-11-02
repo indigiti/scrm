@@ -292,7 +292,9 @@ function popupSettingsModal(group){
  select('Repeat after dismissal','repeat_after',[['session','Next session'],['1','1 day'],['7','7 days'],['30','30 days'],['never','Never']].map(([id,label])=>option(id,label,v('repeat_after','7'))).join(''))+
  select('Position','position',[['center','Center'],['right','Right panel'],['bottom','Bottom sheet']].map(([id,label])=>option(id,label,v('position','center'))).join(''))+
  input('Start date (optional)','start_date','date',v('start_date',''))+
- input('End date (optional)','end_date','date',v('end_date',''))+'</div>'+
+ input('End date (optional)','end_date','date',v('end_date',''))+
+ input('Daily start time — IST (optional)','start_time','time',v('start_time',''))+
+ input('Daily end time — IST (optional)','end_time','time',v('end_time',''))+'</div>'+
  '<div class="form-field"><label><input type="checkbox" name="exit_intent" '+(v('exit_intent',true)?'checked':'')+'> Allow desktop exit intent</label></div>'+
  '<div class="form-field"><label><input type="checkbox" name="mobile_enabled" '+(v('mobile_enabled',true)?'checked':'')+'> Enable on mobile (time/scroll only)</label></div>'+
  '<div class="form-field"><label>Include URL paths (one prefix per line; blank means all pages)<textarea name="include_paths" rows="3" placeholder="/admissions">'+esc((v('include_paths',[])).join('\n'))+'</textarea></label></div>'+
@@ -1366,7 +1368,8 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    exit_intent:!!f.elements.exit_intent.checked,mobile_enabled:!!f.elements.mobile_enabled.checked,
    repeat_after:String(fd.repeat_after),position:String(fd.position),
    include_paths:paths('include_paths'),exclude_paths:paths('exclude_paths'),
-   start_date:String(fd.start_date||''),end_date:String(fd.end_date||''),school_ids:selected
+   start_date:String(fd.start_date||''),end_date:String(fd.end_date||''),
+   start_time:String(fd.start_time||''),end_time:String(fd.end_time||''),school_ids:selected
   };
   perform(async()=>{
    const updated=await api('/api/group-sites/'+id+'/popup-settings','PATCH',data);
