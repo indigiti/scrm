@@ -45,5 +45,21 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/Lead attribution & conversion/);
  assert.match(html,/By origin/);assert.match(html,/By campaign/);
  assert.match(html,/nursery-pune/);
+
+ handlers.click({target:{closest:()=>({dataset:{action:'toggle-nav-group',group:'LEAD CAPTURE'}})}});
+ assert.match(html,/data-group="LEAD CAPTURE" aria-expanded="true"/,'lead capture submenu expanded');
+ handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Landing Pages'}})}});
+ await sleep(120);
+ assert.match(html,/Approved additional URLs/);
+ assert.match(html,/Manage approved URLs/);
+ handlers.click({target:{closest:()=>({dataset:{action:'edit-landing-pages',id:'1'}})}});
+ assert.match(html,/landingPagesForm/);
+ assert.match(html,/Approved landing pages/);
+ assert.match(html,/restrict_primary/);
+ handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
+ handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Popup Campaigns'}})}});
+ await sleep(120);
+ assert.match(html,/Configure campaign/);
+ assert.match(html,/Popup campaigns/);
  console.log('PASS: Group Websites management, legacy popup and additional short inline\/popup snippets');
 })().catch(e=>{console.error(e);process.exitCode=1;});

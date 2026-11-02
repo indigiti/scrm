@@ -4,6 +4,7 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/popup_settings.php';
+require_once __DIR__ . '/landing_pages.php';
 require_once __DIR__ . '/public_chat_knowledge.php';
 require_once __DIR__ . '/public_chat_callback.php';
 require_once __DIR__ . '/public_chat_session.php';
@@ -148,6 +149,7 @@ function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name
 function sf_group_public_view(array $s, array $group): array {
     return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'popup_settings'=>sf_popup_settings($group),
+        'landing_pages'=>sf_landing_settings($group),
         'schools'=>array_map(static fn($r)=>['code'=>$r['code'],'school_id'=>$r['school_id'],
             'name'=>(sf_find($s['schools'],(int)$r['school_id'])['name']??'Unknown school')], $group['routes'])];
 }
@@ -858,7 +860,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -890,6 +892,24 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $group=null;
             foreach($s['group_sites'] as $g) if($g['id']===$groupId && $g['owner_id']===$uid) {$group=$g;break;}
             if(!$group)sf_fail(404,'Group website not found');
+            if($operation==='landing-pages') {
+                // The owner must still administer every campus affected by this group.
+                foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if($method==='GET')return [200,sf_landing_settings($group)];
+                if($method==='PATCH'){
+                    $settings=sf_landing_validate($payload,$group);
+                    foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                        $row['approved_landing_urls']=$settings['approved_urls'];
+                        $row['restrict_primary_landing_pages']=$settings['restrict_primary'];
+                        break;
+                    }
+                    unset($row);
+                    foreach($group['routes'] as $route)sf_event($s,(int)$route['school_id'],null,$uid,'group_landing_urls_updated',
+                        'Approved landing pages changed for group #'.$groupId);
+                    return [200,$settings];
+                }
+                sf_fail(405,'Unsupported landing-page settings operation');
+            }
             if($operation==='popup-settings') {
                 // Ownership alone is insufficient after membership changes. Every
                 // current destination must still be administered by the group owner.

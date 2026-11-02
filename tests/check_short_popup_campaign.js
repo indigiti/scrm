@@ -65,12 +65,12 @@ function fixture(options={}){
  const sMap=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v))});
  const config={...defaults,...options.config};
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
-   schools:[{code:'campus-1',name:'Campus One'}],popup:config
+   schools:[{code:'campus-1',name:'Campus One'}],popup:config,landing_pages:options.landingPages
   }: {token:'test',question:'1 + 1'}});
  class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
   URL,URLSearchParams,Option:function(text,value){this.text=text;this.value=value;},
-  document,location:{pathname:options.path||'/admissions',search:'',href:'https://school.test/admissions'},
+  document,location:{pathname:options.path||'/admissions',search:'',href:'https://school.test'+(options.path||'/admissions')},
   localStorage:sMap(storage),sessionStorage:sMap(session),Date:Clock,
   fetch,console,crypto:{randomUUID:()=>guid},matchMedia:()=>({matches:!!options.mobile}),
   innerHeight:1000,scrollY:0,
@@ -124,6 +124,13 @@ function fixture(options={}){
  const insideHours=fixture({config:{trigger:'delay',start_time:'15:00',end_time:'16:00'}});
  await insideHours.ready();insideHours.advance(8000);
  assert.equal(insideHours.isOpen(),true,'daily IST campaign window permits inside hours');
+ const approval={primary_host:'primary.test',approved_urls:['https://school.test/admissions'],restrict_primary:false};
+ const unapprovedLanding=fixture({path:'/other',landingPages:approval});await unapprovedLanding.ready();
+ unapprovedLanding.advance(40000);unapprovedLanding.manual();
+ assert.equal(unapprovedLanding.isOpen(),false,'unapproved secondary landing path blocks both automatic and manual popup');
+ const approvedLanding=fixture({path:'/admissions',landingPages:approval});await approvedLanding.ready();
+ approvedLanding.advance(8000);
+ assert.equal(approvedLanding.isOpen(),true,'explicitly approved secondary landing path allows popup');
  const storage=new Map(),session=new Map();
  const first=fixture({storage,session});await first.ready();first.advance(8000);
  assert.equal(first.isOpen(),true);

@@ -12,14 +12,7 @@ function sf_public_group(array $s, string $guid): ?array {
     return null;
 }
 function sf_public_origin_ok(array $group, string $origin): bool {
-    if (!preg_match('~^https://[a-z0-9.-]+(?::443)?$~iD', $origin)) return false;
-    $configured = trim((string)($group['domain'] ?? ''));
-    $website = parse_url(str_contains($configured, '://') ? $configured : 'https://'.$configured, PHP_URL_HOST);
-    $request = parse_url($origin, PHP_URL_HOST);
-    if (!is_string($website) || !is_string($request) || !$website || !$request) return false;
-    $website = strtolower($website); $request = strtolower($request);
-    // Permit apex/www variants of the same configured domain, not arbitrary subdomains.
-    return preg_replace('/^www\./', '', $website) === preg_replace('/^www\./', '', $request);
+    return sf_landing_origin_approved($group,$origin);
 }
 function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, string $origin): bool {
     if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|chat-config|chat|counsel|counsel-lead|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD', $path, $m)) return false;
@@ -134,7 +127,10 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         return $store->transaction(static function (array $s) use ($guid): array {
             $g=sf_public_group($s,$guid);
             if(!$g)sf_fail(404,'Form unavailable');
-            return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g)),'popup'=>sf_popup_public($s,$g)]];
+            return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g)),'popup'=>sf_popup_public($s,$g),
+                'landing_pages'=>['primary_host'=>sf_landing_primary_host($g),
+                    'approved_urls'=>sf_landing_settings($g)['approved_urls'],
+                    'restrict_primary'=>sf_landing_settings($g)['restrict_primary']]]];
         });
     }
     if($action==='challenge' && $method==='GET') {
@@ -176,14 +172,12 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);
         $referrer=sf_text($p,'referrer',500);
-        if($page!=='' && (parse_url($page,PHP_URL_HOST)===null ||
-            !sf_public_origin_ok($group,parse_url($page,PHP_URL_SCHEME).'://'.parse_url($page,PHP_URL_HOST))))
-            sf_fail(422,'Invalid enquiry page');
+        if(!sf_landing_page_approved($group,$origin,$page))sf_fail(422,'Landing page URL is not approved for this form');
         $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
         $ipKey=substr(hash('sha256',$ip),0,20);
         return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer):array{
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin))sf_fail(403,'Form unavailable');
+            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
@@ -233,12 +227,11 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if($page!=='' && (parse_url($page,PHP_URL_HOST)===null ||
-            !sf_public_origin_ok($group,parse_url($page,PHP_URL_SCHEME).'://'.parse_url($page,PHP_URL_HOST))))sf_fail(422,'Invalid enquiry page');
+        if(!sf_landing_page_approved($group,$origin,$page))sf_fail(422,'Landing page URL is not approved for this form');
         $ipKey=substr(hash('sha256',$ip),0,20);
         return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin))sf_fail(403,'Form unavailable');
+            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
