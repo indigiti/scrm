@@ -6,7 +6,7 @@ const guid='a8b5de5d-ac84-4169-9347-21144cedd39c';
 const defaults={
  enabled:true,trigger:'either',delay_seconds:8,scroll_percent:40,
  exit_intent:true,mobile_enabled:true,repeat_after:'7',position:'center',
- include_paths:[],exclude_paths:[],start_date:'',end_date:'',
+ include_paths:[],exclude_paths:[],start_date:'',end_date:'',start_time:'',end_time:'',
  school_codes:['campus-1']
 };
 function fixture(options={}){
@@ -67,7 +67,7 @@ function fixture(options={}){
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
    schools:[{code:'campus-1',name:'Campus One'}],popup:config
   }: {token:'test',question:'1 + 1'}});
- class Clock extends Date{static now(){return now;}}
+ class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
   URL,URLSearchParams,Option:function(text,value){this.text=text;this.value=value;},
   document,location:{pathname:options.path||'/admissions',search:'',href:'https://school.test/admissions'},
@@ -118,6 +118,12 @@ function fixture(options={}){
  const excluded=fixture({path:'/thank-you',config:{exclude_paths:['/thank-you']}});await excluded.ready();
  excluded.advance(60000);assert.equal(excluded.isOpen(),false,'URL exclude targeting');
 
+ const outsideHours=fixture({config:{trigger:'delay',start_time:'16:00',end_time:'17:00'}});
+ await outsideHours.ready();outsideHours.advance(8000);
+ assert.equal(outsideHours.isOpen(),false,'daily IST campaign window blocks outside hours');
+ const insideHours=fixture({config:{trigger:'delay',start_time:'15:00',end_time:'16:00'}});
+ await insideHours.ready();insideHours.advance(8000);
+ assert.equal(insideHours.isOpen(),true,'daily IST campaign window permits inside hours');
  const storage=new Map(),session=new Map();
  const first=fixture({storage,session});await first.ready();first.advance(8000);
  assert.equal(first.isOpen(),true);
