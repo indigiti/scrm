@@ -203,6 +203,9 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['email']='';
             $details['pincode']='';$details['state']='';$details['city']='';
             $details['message']='Short admission enquiry — student details pending';
+            $trigger=(string)($p['popup_trigger']??'');
+            $details['popup_trigger']=in_array($trigger,['manual','delay','scroll','exit'],true)?$trigger:'';
+            $details['popup_campaign_id']='group-'.$g['id'];
             $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_short_received',true);
             $s['receipts'][]=['public_group_id'=>$g['id'],'school_id'=>$route['school_id'],
                 'idempotency_key'=>$idem,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
