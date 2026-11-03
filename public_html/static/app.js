@@ -1176,7 +1176,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
 async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
-function closeDialog(){state.modal='';state.detail=null;render();}
+function closeDialog(){state.modal='';state.detail=null;if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;render();}
 async function registerCsvExport(){
  const f=ext.registerFilters||{};
  const filters={status:f.status||'All',assigned:f.assigned||'All',grade:f.grade||'',
@@ -1470,6 +1470,25 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
     button.tabIndex=active?0:-1;button.classList.toggle('active',active);
    });el.focus();return;
  }
+ if(action==='detail-tab'){
+  const name=el.dataset.tab;
+  if(!Object.prototype.hasOwnProperty.call(ENQUIRY_TAB_NAMES,name)||
+     ext.enquiryPanels?.tabs?.[name]===false)return;
+  ext.detailTab=name;
+  root.querySelectorAll('[data-detail-panel]').forEach(panel=>{panel.hidden=panel.dataset.detailPanel!==name;});
+  root.querySelectorAll('[data-action="detail-tab"]').forEach(button=>{
+   const selected=button.dataset.tab===name;
+   button.setAttribute('aria-selected',String(selected));
+   button.tabIndex=selected?0:-1;
+   button.classList.toggle('active',selected);
+  });el.focus();return;
+ }
+ if(action==='open-enquiry-settings'){
+  if(!isAdmin())return;
+  state.detail=null;state.page='Enquiry Interface';
+  sessionStorage.setItem('schoolflow_last_page',state.page);
+  ext.enquirySettingsTab='communication';render();return;
+ }
  if(action==='close-menu'){root.querySelector('.sidebar')?.classList.remove('open');return;}
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
@@ -1548,7 +1567,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(['new-lead','new-site','new-member','new-school'].includes(action)){state.modal=action;state.detail=null;render();return;}
  if(action==='open-task-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
- if(action==='view-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
+ if(action==='view-lead'){if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;
+  ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
    await api(url+'/view','POST',{});state.detail=await api(url);render();});return;}
  if(action==='done-followup'){perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`,'PATCH',{followup_date:''});await reload();toast('Follow-up marked complete');});return;}
  if(action==='preview-web-stage-reset'){
@@ -1618,6 +1638,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='toggle-site'){perform(async()=>{await api(`/api/schools/${state.schoolId}/sites/${Number(el.dataset.id)}?enabled=${el.dataset.enabled==='1'}`,'PATCH');await reload();toast('Website status updated');});return;}
 
  if(action==='api-send-email'||action==='api-send-wa'){
+   if(!enquiryActionEnabled(action==='api-send-email'?'api_email':'api_whatsapp'))return;
    const l=state.detail?.lead;if(!l||!l.consent||l.is_demo)return;
    const channel=action==='api-send-email'?'email':'whatsapp';
    const provider=channel==='email'?'Resend':'Meta WhatsApp Cloud API';
@@ -1634,10 +1655,12 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });return;
  }
  if(action==='call-parent'){
-   const lead=state.leads.find(l=>l.id===Number(el.dataset.id));
+   if(!enquiryActionEnabled('call'))return;
+   const lead=state.detail?.lead?.id===Number(el.dataset.id)?state.detail.lead:state.leads.find(l=>l.id===Number(el.dataset.id));
    if(lead){api(`/api/schools/${state.schoolId}/leads/${lead.id}/contact-action`,'POST',{channel:'phone'}).catch(()=>{});window.location.href='tel:'+lead.phone.replace(/[^\d+]/g,'');}return;
  }
  if(action==='whatsapp'){
+   if(!enquiryActionEnabled('whatsapp'))return;
    const l=state.detail?.lead;if(!l||!l.consent)return;
    const number=l.phone.replace(/\D/g,'');
    if(number.length<10)return toast('Valid parent contact required',true);
@@ -1646,6 +1669,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    window.open('https://wa.me/'+number+'?text='+encodeURIComponent(message),'_blank','noopener,noreferrer');return;
  }
  if(action==='email-draft'){
+   if(!enquiryActionEnabled('email'))return;
    const l=state.detail?.lead?.id===Number(el.dataset.id)?state.detail.lead:state.leads.find(x=>x.id===Number(el.dataset.id));if(!l||!l.consent||!l.email)return;
    const t=ext.templates.find(t=>String(t.id)===String(root.querySelector('#emailTemplateChoice')?.value))||ext.templates[0];let subject=t?.subject||'School admissions enquiry';let body=t?.body||'Hello {parent},\n\nThank you for your enquiry for {student} at {school}.\n\nAdmissions Team';
    const values={parent:l.guardian,student:l.name,grade:l.grade,school:school()?.name||'SchoolFlow'};
@@ -1690,7 +1714,7 @@ root.addEventListener('toggle',e=>{
 },true);
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
@@ -1859,7 +1883,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='autoReconcileForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/automation/queue/'+Number(fd.queue_id)+'/reconcile','POST',{status:fd.status,provider_evidence_reference:fd.provider_evidence_reference});await reload();toast('Provider evidence recorded');});return;}
  if(f.id==='channelConsentForm'){perform(async()=>{const leadId=state.detail.lead.id;await api('/api/schools/'+state.schoolId+'/leads/'+leadId,'PATCH',{consent_email:!!f.querySelector('input[name="consent_email"]:checked'),consent_whatsapp:!!f.querySelector('input[name="consent_whatsapp"]:checked'),consent_source:fd.consent_source});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+leadId);render();toast('Channel-specific consent recorded');});return;}
  if(f.id==='assignmentForm'){perform(async()=>{ext.assignment=await api(`/api/schools/${state.schoolId}/assignment`,'PATCH',{mode:fd.mode});toast('Assignment policy saved');render();});return;}
- if(f.id==='callForm'){perform(async()=>{const lid=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${lid}/calls`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${lid}`);render();toast('Call outcome recorded');});return;}
+ if(f.id==='callForm'){if(!fd.outcome)return toast('Select a call outcome before saving',true);perform(async()=>{const lid=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${lid}/calls`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${lid}`);render();toast('Call outcome recorded');});return;}
  if(f.id==='siblingForm'){perform(async()=>{const lid=state.detail.lead.id;const result=await api(`/api/schools/${state.schoolId}/families/${lid}/siblings`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${result.id}`);render();toast('Sibling enquiry added');});return;}
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
