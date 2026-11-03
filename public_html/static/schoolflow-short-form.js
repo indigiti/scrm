@@ -33,7 +33,7 @@ function init(){
  host.appendChild(outer);
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
- var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true;
+ var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true,submissionSettings=null;
  var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
  var campaignKey='sf2_popup_'+guid;
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
@@ -118,6 +118,38 @@ function init(){
    }catch(e){return false;}
   });
  }
+ var touchKey='schoolflow_first_touch_'+guid;
+ function currentTouch(){
+  var q=new URLSearchParams(location.search);
+  return {landing_page:location.href.slice(0,500),referrer:document.referrer.slice(0,500),
+   utm_source:(q.get('utm_source')||'').slice(0,140),utm_medium:(q.get('utm_medium')||'').slice(0,140),
+   utm_campaign:(q.get('utm_campaign')||'').slice(0,140),utm_term:(q.get('utm_term')||'').slice(0,140),
+   utm_content:(q.get('utm_content')||'').slice(0,140)};
+ }
+ function firstTouch(){
+  try{
+   var saved=JSON.parse(sessionStorage.getItem(touchKey)||'null');
+   if(saved&&saved.value&&Date.now()-saved.time<86400000)return saved.value;
+  }catch(e){}
+  var touch=currentTouch();
+  try{sessionStorage.setItem(touchKey,JSON.stringify({time:Date.now(),value:touch}));}catch(e){}
+  return touch;
+ }
+ firstTouch();
+ function completeSubmission(response){
+  if(response.duplicate_submission)return;
+  var settings=submissionSettings||{},url=settings.thank_you_url||'';
+  var redirect=(mode==='inline'&&settings.inline_redirect)||(mode==='popup'&&settings.popup_redirect);
+  if(!redirect||!url)return;
+  try{
+   var destination=new URL(url);
+   if(destination.origin!==location.origin||destination.protocol!=='https:')return;
+   sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
+    time:Date.now(),event_id:response.guid||attemptId,form_surface:mode,school_code:campus.value
+   }));
+   location.assign(destination.href);
+  }catch(e){console.warn('SchoolFlow: thank-you redirect could not be completed');}
+ }
  function error(s){status.textContent=s;status.classList.add('sf2-error');}
  function clear(){status.textContent='';status.classList.remove('sf2-error');}
  async function get(path){var r=await fetch(api+path,{credentials:'omit',cache:'no-store',headers:{Accept:'application/json'}});var d=await r.json().catch(function(){return {};});if(!r.ok)throw Error(d.detail||'SchoolFlow temporarily unavailable');return d;}
@@ -125,6 +157,7 @@ function init(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
    pageAllowed=approvedPage(d.landing_pages);
+   submissionSettings=d.submission_settings||null;
    if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
     return error('This landing page URL is not approved. Contact the school website administrator.');}
    campus.replaceChildren(new Option('Select campus',''));
@@ -165,6 +198,7 @@ function init(){
   get('/config').then(function(d){
    config=d.popup||null;configLoaded=true;
    pageAllowed=approvedPage(d.landing_pages);
+   submissionSettings=d.submission_settings||null;
    if(!pageAllowed){trigger.hidden=true;return;}
    if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
@@ -188,14 +222,16 @@ function init(){
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
    school_code:campus.value,form_display:mode,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
-   referrer:document.referrer.slice(0,500),utm_source:query.get('utm_source')||'',
+   referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),utm_source:query.get('utm_source')||'',
    utm_medium:query.get('utm_medium')||'',utm_campaign:query.get('utm_campaign')||'',
    utm_term:query.get('utm_term')||'',utm_content:query.get('utm_content')||''};
   busy=true;submit.disabled=true;submit.textContent='Submitting…';
   try{var res=await fetch(api+'/short-enquiries',{method:'POST',credentials:'omit',cache:'no-store',headers:{'Content-Type':'application/json','Idempotency-Key':attemptId},body:JSON.stringify(data)});
    var body=await res.json().catch(function(){return {};});if(!res.ok)throw Error(body.detail||'Submission failed');
-   status.textContent='Thank you. Your admission enquiry has been received.';form.reset();verify.hidden=true;token='';attemptId='';
+   status.textContent='Thank you. Your admission enquiry has been received.';
    completed=true;remember('completed');clearTriggers();
+   completeSubmission(body);
+   form.reset();verify.hidden=true;token='';attemptId='';
   }catch(e){error(e.message);await challenge();}
   finally{busy=false;submit.disabled=false;submit.textContent='Request Admission Callback';}
  });
