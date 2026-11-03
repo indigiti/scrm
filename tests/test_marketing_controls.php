@@ -43,8 +43,8 @@ try{
  marketing_ok(marketing_api('PATCH','/api/schools/1/enquiry-panels',[],'counsellor')[0]===403,
   'counsellor cannot change school UI settings');
  [$defaultStatus,$defaults]=marketing_api('GET','/api/schools/1/enquiry-panels',[],'counsellor');
- marketing_ok($defaultStatus===200 && $defaults['sections']['audit']['visible']===false,
-  'audit controls are private to administrators');
+ marketing_ok($defaultStatus===200 && $defaults['sections']['audit']['visible']===true,
+  'audit starts visible but collapsed for authorized staff');
  $sections=sf_enquiry_panel_defaults();
  $sections['family']=['visible'=>false,'expanded'=>false];
  $sections['audit']=['visible'=>true,'expanded'=>false];
@@ -52,8 +52,8 @@ try{
   'reject unknown UI panel keys');
  [$updatedCode,$updated]=marketing_api('PATCH','/api/schools/1/enquiry-panels',['sections'=>$sections]);
  marketing_ok($updatedCode===200&&$updated['sections']['family']['visible']===false,'school admin saved panel choices');
- marketing_ok(marketing_api('GET','/api/schools/1/enquiry-panels',[],'counsellor')[1]['sections']['audit']['visible']===false,
-  'staff never gains audit access through admin display settings');
+ marketing_ok(marketing_api('GET','/api/schools/1/enquiry-panels',[],'counsellor')[1]['sections']['audit']['expanded']===false,
+  'school audit preference applies to authorized staff');
 
  $reported=sf_marketing_first_touch(['first_touch_data'=>[
   'landing_page'=>'https://school.test/admissions','referrer'=>'https://google.com/',
@@ -96,8 +96,8 @@ try{
    'cross-school campaign report blocked');
  marketing_ok(marketing_api('GET','/api/schools/1/campaign-report',[],'counsellor')[1]['totals']['enquiries']===3,
    'counsellor aggregate restricted to assigned enquiries');
- marketing_ok(marketing_api('GET','/api/schools/1/leads/1/audit',[],'counsellor')[0]===403,
-   'enquiry audit backend is administrator-only');
+ marketing_ok(marketing_api('GET','/api/schools/1/leads/1/audit',[],'counsellor')[0]===200,
+   'assigned counselor can access only their assigned lead audit');
 
  $logs=$store->transaction(static fn(array $s):array=>$s['audit_logs']??[]);
  marketing_ok(count(array_filter($logs,static fn(array $e):bool=>in_array($e['action']??'',[
