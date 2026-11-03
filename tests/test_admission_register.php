@@ -69,6 +69,12 @@ try{
  rg_ok(rg_req('GET',$base.'/admission-register?per_page=500')[0]===422,'unbounded report page rejected');
  rg_ok(rg_req('GET',$base.'/admission-register?sort%5Bname%5D=asc')[0]===422,'nested query filter rejected');
  rg_ok(rg_req('GET',$base.'/admission-register?assigned=999')[1]['total']===0,'staff filter cannot widen scope');
+ [$followStatus]=rg_req('PATCH',$base.'/leads/'.$a['id'],['followup_date'=>sf_admission_today()]);
+ rg_ok($followStatus===200,'follow-up scheduled for today');
+ [$dueStatus,$dueRows]=rg_req('GET',$base.'/admission-register?due=due');
+ rg_ok($dueStatus===200&&$dueRows['total']===1&&$dueRows['rows'][0]['id']===$a['id'],
+    'due filter includes an enquiry scheduled for today');
+
  [$c,$xlsx]=rg_req('POST',$base.'/exports/admissions.xlsx',
     ['grade'=>'VIII','call_outcome'=>'No Answer','search'=>'follow-up']);
  rg_ok($c===200&&str_starts_with($xlsx,'PK')&&strlen($xlsx)>300,'filtered XLSX created');
