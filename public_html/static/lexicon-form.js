@@ -17,7 +17,8 @@ function firstTouch(){
  try{var saved=JSON.parse(sessionStorage.getItem(firstTouchKey)||'null');
   if(saved&&saved.value&&Date.now()-saved.time<86400000)return saved.value;}catch(e){}
  var q=new URLSearchParams(location.search);
- var touch={landing_page:location.href.slice(0,500),referrer:document.referrer.slice(0,500),
+ var touch={landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
+    referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),
   utm_source:(q.get('utm_source')||'').slice(0,140),utm_medium:(q.get('utm_medium')||'').slice(0,140),
   utm_campaign:(q.get('utm_campaign')||'').slice(0,140),utm_term:(q.get('utm_term')||'').slice(0,140),
   utm_content:(q.get('utm_content')||'').slice(0,140)};
@@ -272,7 +273,8 @@ function init(){
    student_name:value('lf_name'),parent_name:value('lf_parent'),email:value('lf_email'),phone:tel,
    pincode:value('lf_pincode'),state:value('lf_state'),city:value('lf_city'),grade:value('lf_class'),
    school_code:campus.value,consent:true,captcha_token:token,captcha_answer:value('lf_captcha'),
-   website:value('lf_website'),landing_page:location.href.slice(0,500),referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),
+   website:value('lf_website'),landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
+    referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),first_touch_data:firstTouch(),
    utm_source:params.get('utm_source')||'',utm_medium:params.get('utm_medium')||'',
    utm_campaign:params.get('utm_campaign')||'',utm_term:params.get('utm_term')||'',
    utm_content:params.get('utm_content')||''
