@@ -701,7 +701,7 @@ function admissionRegisterPage(){
   (d?'<div class="sf-register-pager"><span>Page '+Number(d.page)+' / '+Number(d.pages)+'</span>'+
     '<div class="button-row"><button type="button" class="btn small" data-action="register-prev" '+(d.page<=1?'disabled':'')+'>Previous</button>'+
     '<button type="button" class="btn small" data-action="register-next" '+(d.has_more?'':'disabled')+'>Next</button></div></div>':'')+
-  '<p class="sf-register-help">Report data is read-only and scoped to the selected school. Call remarks come from actual saved call entries and conversation notes. * Calls are counted by the employee who logged them when they are present in the assigned-staff group. Excel exports contain the full authorized filtered result and follow-up history, not just this page.</p></div>';
+  '<p class="sf-register-help">Report data is read-only and scoped to the selected school. Call remarks come from actual saved call entries and conversation notes. * Calls are counted by the employee who actually recorded them; a staff member may have calls but no currently assigned enquiries. Excel exports contain the full authorized filtered result and follow-up history, not just this page.</p></div>';
 }
 
 function reportsPage(){const total=ext.campaignReport?.totals?.enquiries??state.leads.length, enrolled=ext.campaignReport?.totals?.enrolled??state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
