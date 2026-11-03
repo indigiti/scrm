@@ -348,7 +348,7 @@ function enquiryInterfacePage(){
  const config=ext.enquiryPanels?.sections||{};
  return pageHead('Enquiry interface','Set which detail sections are visible and expanded by default for this school.')+
  '<section class="panel sf-panel-admin"><form id="enquiryPanelsForm">'+
- '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. Audit history remains administrator-only.</p>'+
+ '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. School staff can see the audit for enquiries they are already permitted to access unless you disable the section.</p>'+
  '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
  Object.entries(PANEL_NAMES).map(([key,label])=>{
   const item=config[key]||{visible:true,expanded:key==='communication'};
@@ -711,7 +711,7 @@ function modal(){if(!state.modal)return '';
 
 function drawerPanelStart(key,title){
  const pref=ext.enquiryPanels?.sections?.[key]||{visible:true,expanded:key==='communication'};
- const visible=pref.visible!==false&&(key!=='audit'||isAdmin());
+ const visible=pref.visible!==false;
  const opened=ext.detailOpen[key]??!!pref.expanded;
  return '<details class="sf-drawer-panel" data-panel="'+key+'" '+(visible?'':'hidden')+' '+
   (opened?'open':'')+'><summary><span>'+esc(title)+'</span><span class="sf-panel-chevron" aria-hidden="true">⌄</span></summary>'+
@@ -1426,7 +1426,7 @@ root.addEventListener('toggle',e=>{
  }
  if(!state.detail)return;
  const key=details.dataset.panel;ext.detailOpen[key]=details.open;
- if(key==='audit'&&details.open&&isAdmin()&&ext.detailAudit?.forLeadId!==state.detail.lead.id){
+ if(key==='audit'&&details.open&&ext.enquiryPanels?.sections?.audit?.visible!==false&&ext.detailAudit?.forLeadId!==state.detail.lead.id){
   const id=state.detail.lead.id;
   perform(async()=>{
    const audit=await api('/api/schools/'+state.schoolId+'/leads/'+id+'/audit');
