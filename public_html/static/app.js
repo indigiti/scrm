@@ -336,6 +336,51 @@ function popupSettingsModal(group){
 }
 
 
+
+const PANEL_NAMES={
+ attribution:'Lead attribution',communication:'Parent communication',
+ family:'Parent & sibling profile',application:'Application progress',
+ documents:'Admission document checklist',consent:'Messaging consent',audit:'Audit log'
+};
+function enquiryInterfacePage(){
+ if(!isAdmin())return pageHead('Enquiry interface','Administrator permission required');
+ const config=ext.enquiryPanels?.sections||{};
+ return pageHead('Enquiry interface','Set which detail sections are visible and expanded by default for this school.')+
+ '<section class="panel sf-panel-admin"><form id="enquiryPanelsForm">'+
+ '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. Audit history remains administrator-only.</p>'+
+ '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
+ Object.entries(PANEL_NAMES).map(([key,label])=>{
+  const item=config[key]||{visible:true,expanded:key==='communication'};
+  return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
+   '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
+   '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
+ }).join('')+
+ '<div class="button-row" style="margin-top:20px">'+
+ '<button type="submit" class="btn primary">Save enquiry interface</button></div></form></section>';
+}
+function submissionSettingsModal(group){
+ const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
+ const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
+ return modalFrame('Submission & tracking · '+group.name,
+   'Approved same-website success redirects and privacy-safe tracking for lead forms.',
+   '<form id="submissionSettingsForm" data-id="'+Number(group.id)+'">'+
+   '<div class="form-field"><label>Approved thank-you URLs (one HTTPS URL per website origin)</label>'+
+   '<textarea name="thank_you_urls" rows="6" spellcheck="false" placeholder="https://school.example/thank-you/">'+
+   esc(links.join('\n'))+'</textarea>'+
+   '<small>Each destination must belong to the registered website or an approved additional form domain. Redirects never cross website origins.</small></div>'+
+   '<label class="sf-check-row"><input type="checkbox" name="inline_redirect" '+(settings.inline_redirect!==false?'checked':'')+'>'+
+   '<span><strong>Redirect short inline form after success</strong><small>Requires a matching approved thank-you URL. Otherwise keep the success message.</small></span></label>'+
+   '<label class="sf-check-row"><input type="checkbox" name="popup_redirect" '+(settings.popup_redirect?'checked':'')+'>'+
+   '<span><strong>Redirect short popup after success</strong><small>Default is to display confirmation in the popup.</small></span></label>'+
+   '<label class="sf-check-row"><input type="checkbox" name="detailed_redirect" '+(settings.detailed_redirect?'checked':'')+'>'+
+   '<span><strong>Use approved destination for detailed form</strong><small>When disabled, preserve the original detailed form redirect.</small></span></label>'+
+   '<div class="sf-help-panel"><strong>Required on every approved thank-you page</strong><p>Install this tracking snippet to create one GTM event only after an accepted form submission. No parent or student information is included.</p>'+
+   '<code class="sf-code-snippet">'+esc(code)+'</code>'+
+   '<p>Configure Google Ads and Meta Lead conversions inside your own GTM workspace using the <code>schoolflow_lead</code> custom event. Ad-platform connection and consent setup are separate.</p></div>'+
+   '<div class="button-row">'+btn('Cancel','close-modal')+
+   '<button type="submit" class="btn primary">Save submission settings</button></div></form>');
+}
+
 function landingPagesPage(){
  if(!canManageSchools())return pageHead('Landing page approvals','Administrator access required.');
  const groups=ext.groupSites||[];
@@ -354,7 +399,8 @@ function landingPagesPage(){
    (urls.length?'<div class="sf-approved-list">'+urls.map(u=>'<div><span aria-hidden="true">✓</span><code>'+esc(u)+'</code></div>').join('')+'</div>':
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
-   btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+   btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
   (!groups.length?'<div class="sf-management-card"><h3>No group forms connected</h3><p>Connect a group website from Schools & Routing first.</p>'+btn('Go to Schools & Routing','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -404,7 +450,7 @@ function routingPage(){
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -593,6 +639,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
  if(state.modal==='new-group'||state.modal==='edit-group'){
@@ -888,7 +935,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
@@ -1164,6 +1211,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';sessionStorage.setItem('schoolflow_last_page',state.page);
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
+ }
+ if(action==='edit-submission-settings'){
+  if(!canManageSchools())return;
+  ext.editGroupId=Number(el.dataset.id);state.modal='submission-settings';render();return;
  }
  if(action==='edit-landing-pages'){
    if(!canManageSchools())return;
@@ -1475,6 +1526,31 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
  if(f.id==='leadForm'){perform(async()=>{let body={...fd,consent:fd.consent==='true',site_id:fd.site_id?Number(fd.site_id):null,assigned_to:fd.assigned_to?Number(fd.assigned_to):null};if(!body.site_id)delete body.site_id;if(!body.assigned_to)delete body.assigned_to;let newLead=await api(`/api/schools/${state.schoolId}/leads`,'POST',body);state.modal='';await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${newLead.id}`);render();toast('Enquiry saved');});return;}
+ if(f.id==='submissionSettingsForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const links=String(fd.thank_you_urls||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  perform(async()=>{
+   const settings=await api('/api/group-sites/'+id+'/submission-settings','PATCH',{
+    thank_you_urls:links,inline_redirect:!!f.elements.inline_redirect.checked,
+    popup_redirect:!!f.elements.popup_redirect.checked,
+    detailed_redirect:!!f.elements.detailed_redirect.checked
+   });
+   const group=ext.groupSites.find(g=>g.id===id);if(group)group.submission_settings=settings;
+   state.modal='';render();toast('Approved submission and conversion settings saved');
+  });return;
+ }
+ if(f.id==='enquiryPanelsForm'){
+  if(!isAdmin())return;
+  const sections={};
+  Object.keys(PANEL_NAMES).forEach(key=>{sections[key]={
+   visible:!!f.elements['visible_'+key]?.checked,expanded:!!f.elements['expanded_'+key]?.checked
+  };});
+  perform(async()=>{
+   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{sections});
+   render();toast('Enquiry panel display updated for this school');
+  });return;
+ }
  if(f.id==='landingPagesForm'){
   if(!canManageSchools())return;
   const id=Number(f.dataset.id);
