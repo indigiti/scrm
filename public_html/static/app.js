@@ -542,26 +542,70 @@ function importPage(){
  ${isAdmin()?`<button class="btn small" data-action="import-rollback" data-guid="${esc(result.batch_guid)}">Roll back this batch</button>`:''}</div>`:''}`;
 }
 
-function attributionReport(){
- const names={group_website:'Group website',individual_website:'Individual school website',chatbot:'AI chatbot',manual:'Manual enquiry',import:'Imported',other:'Other'};
- const bySource=new Map(),bySurface=new Map(),byPage=new Map(),byCampaign=new Map();
- const countInto=(map,key,lead)=>{const old=map.get(key)||{name:key,total:0,admitted:0,applied:0};old.total++;
-  if(lead.status==='Enrolled')old.admitted++;
-  if(['Applied','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled'].includes(lead.status))old.applied++;
-  map.set(key,old);};
- state.leads.forEach(l=>{countInto(bySource,names[l.source_type]||'Other',l);
-  countInto(bySurface,l.form_type||'unknown',l);
-  countInto(byPage,l.landing_page_version||'Unknown / other',l);
-  countInto(byCampaign,(l.utm_source||'Unattributed')+' · '+(l.utm_campaign||'No campaign'),l);});
- const section=(title,map)=>'<div class="panel" style="padding:20px"><h3>'+esc(title)+'</h3>'+
-  '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Channel</th><th>Leads</th><th>Applied*</th><th>Enrolled</th><th>Enrollment rate</th></tr></thead><tbody>'+
-  [...map.values()].sort((a,b)=>b.total-a.total).map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+row.total+'</td><td>'+row.applied+'</td><td>'+row.admitted+'</td><td>'+Math.round(100*row.admitted/Math.max(1,row.total))+'%</td></tr>').join('')+
-  '</tbody></table></div></div>';
- return '<section style="margin:20px 0"><h2>Lead attribution & conversion</h2><p class="muted-note">Counts are enquiries, not unique families. Applied* means currently at an application-or-later stage, not verified application submissions. Group routes and manually submitted API leads are identified from CRM source records; unknown historical form surfaces remain unknown.</p>'+
-  '<div class="two-cols">'+section('By origin',bySource)+section('By form surface',bySurface)+'</div><div style="margin-top:16px">'+section('By landing page version',byPage)+'</div><div style="margin-top:16px">'+section('By campaign',byCampaign)+'</div></section>';
+
+async function loadCampaignReport(){
+ if(!state.schoolId||!state.token)return;
+ const query=new URLSearchParams();
+ for(const [key,value] of Object.entries(ext.campaignFilters||{}))if(value)query.set(key,value);
+ const sid=state.schoolId;
+ const results=await api('/api/schools/'+sid+'/campaign-report'+(query.size?'?'+query.toString():''));
+ if(sid!==state.schoolId)return;
+ ext.campaignReport=results;render();
 }
-function reportsPage(){const total=state.leads.length, enrolled=state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
- return `${pageHead('Admissions reports','Source attribution and live funnel performance.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<section class="audit-school aria-label="School activity log"><div class="section-head"><div><h2>School activity log</h2><p>Admin-only history of important account, website and enquiry actions.</p></div></div><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Loading audit history…</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></section>`:''}`;}
+function attributionReport(){
+ const r=ext.campaignReport,filters=ext.campaignFilters||{};
+ const values=(key)=>[...(r?.by?.[key]||[]).map(x=>x.name),...(filters[key]?[filters[key]]:[])].filter((x,i,a)=>x!=='Unattributed'&&a.indexOf(x)===i).sort();
+ const choice=(key,label)=>select(label,key,'<option value="">All '+esc(label.toLowerCase())+'</option>'+
+  values(key).map(v=>option(v,v,filters[key]||'')).join(''));
+ const summary=r?.totals||{};
+ const table=(dimension,title)=>{
+  const rows=r?.by?.[dimension]||[];
+  return '<section class="panel sf-campaign-breakdown"><h3>'+esc(title)+'</h3>'+
+   '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Value</th><th>Enquiries</th><th>Applied*</th><th>Confirmed*</th><th>Enrolled</th></tr></thead><tbody>'+
+    (rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+Number(x.enquiries)+'</td><td>'+Number(x.applied)+'</td><td>'+Number(x.confirmed)+'</td><td>'+Number(x.enrolled)+'</td></tr>').join('')||
+    '<tr><td colspan="5">No matching campaign data</td></tr>')+'</tbody></table></div></section>';
+ };
+ return '<section class="sf-campaign-report"><div class="section-head"><div><h2>Campaign performance</h2>'+
+  '<p>Server-side totals for this school, including older enquiries outside the inbox window. Updated '+esc(r?.as_of?auditStamp(r.as_of):'when refreshed')+'.</p></div>'+
+  '<div class="button-row">'+btn('↻ Refresh','refresh-campaign-report','small')+
+  btn('⇩ Campaign CSV','export-campaign-report','small')+'</div></div>'+
+  '<form id="campaignFilterForm" class="sf-campaign-filters">'+
+   input('From date','from','date',filters.from||'')+input('To date','to','date',filters.to||'')+
+   choice('utm_source','UTM source')+choice('utm_medium','UTM medium')+
+   choice('utm_campaign','UTM campaign')+choice('utm_content','UTM content')+
+   choice('utm_term','UTM term')+
+   select('Form surface','form_type','<option value="">All forms</option>'+
+    ['inline','popup','chat','api','manual','unknown'].map(v=>option(v,v,filters.form_type||'')).join(''))+
+   select('Current stage','status','<option value="">All stages</option>'+STAGES.map(v=>option(v,v,filters.status||'')).join(''))+
+   '<div class="button-row sf-filter-actions"><button type="submit" class="btn primary">Apply filters</button>'+
+   btn('Clear','clear-campaign-report','small')+'</div></form>'+
+  '<div class="sf-campaign-kpis">'+
+   stat('Enquiries',summary.enquiries??'—','Matching enquiry records','♧')+
+   stat('Applied or later',summary.applied_or_later??'—','Current stage only','▤')+
+   stat('Confirmed',summary.confirmed_or_enrolled??'—','Confirmed or enrolled','✓','green')+
+   stat('Enrolled',summary.enrolled??'—','Enrolled status','▣','blue')+
+   '</div>'+
+   '<p class="sf-report-disclaimer">Application and admission figures reflect current stage, not event-date conversions. Potential duplicates: '+Number(summary.potential_duplicates||0)+
+    '. Hot/Warm classified leads: '+Number(summary.hot_or_warm||0)+'. No ad spend or verified Google/Meta conversions are implied.</p>'+
+   table('utm_campaign','By UTM campaign')+
+   '<div class="two-cols">'+table('utm_source','By source')+table('utm_medium','By medium')+'</div>'+
+   '<details class="sf-campaign-additional"><summary>More attribution breakdowns · content, term, form and page</summary><div class="two-cols">'+
+   table('utm_content','By UTM content')+table('utm_term','By UTM term')+
+   table('form_type','By form surface')+table('landing_page_version','By landing version')+
+   '</div></details></section>';
+}
+function campaignCsvExport(){
+ const r=ext.campaignReport;if(!r)return toast('Refresh the campaign report first',true);
+ const headers=['Dimension','Value','Enquiries','Applied (current stage)','Confirmed (current stage)','Enrolled (current stage)'];
+ const rows=[headers,...Object.entries(r.by||{}).flatMap(([dimension,values])=>values.map(v=>[
+   dimension,v.name,v.enquiries,v.applied,v.confirmed,v.enrolled]))];
+ const csv='\ufeff'+rows.map(row=>row.map(val=>'"'+( /^[\s]*[=+\-@]/.test(String(val??''))?"'"+String(val??''):String(val??'')).replaceAll('"','""')+'"').join(',')).join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');link.href=url;link.download='schoolflow-campaign-'+state.schoolId+'-'+day()+'.csv';link.click();URL.revokeObjectURL(url);
+ toast('Aggregated campaign CSV exported');
+}
+function reportsPage(){const total=ext.campaignReport?.totals?.enquiries??state.leads.length, enrolled=ext.campaignReport?.totals?.enrolled??state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
+ return `${pageHead('Admissions reports','Live server-side campaign attribution for the selected campus. Other operational analytics follow.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<section class="audit-school aria-label="School activity log"><div class="section-head"><div><h2>School activity log</h2><p>Admin-only history of important account, website and enquiry actions.</p></div></div><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Loading audit history…</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></section>`:''}`;}
 
 function schoolVisits(){
  const v=ext.visits.filter(x=>!ext.visitMonth||x.starts_at.startsWith(ext.visitMonth));
