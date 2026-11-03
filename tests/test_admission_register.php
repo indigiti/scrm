@@ -74,6 +74,15 @@ try{
  rg_ok($c===200&&str_starts_with($xlsx,'PK')&&strlen($xlsx)>300,'filtered XLSX created');
  rg_ok(rg_req('POST',$base.'/exports/admissions.xlsx',['call_outcome'=>'forged'])[0]===422,
     'invalid XLSX call filter blocked');
+ [$c,$csvReport]=rg_req('POST',$base.'/exports/admissions-register.csv',
+    ['grade'=>'VIII','call_outcome'=>'No Answer']);
+ rg_ok($c===200&&str_starts_with($csvReport,"\xEF\xBB\xBF")&&
+    str_contains($csvReport,'Assigned To')&&str_contains($csvReport,'Vaishali'),
+    'CSV export preserves school staff and Google Sheet columns');
+ rg_ok(!str_contains($csvReport,'Fictional B')&&!str_contains($csvReport,'Other Campus Student'),
+    'CSV export obeys filters and campus isolation');
+ rg_ok(rg_req('POST',$base.'/exports/admissions-register.csv',[],'outside')[0]===403,
+    'CSV export rejects different campus user');
  // Import the user's spreadsheet-style Assigned To header via an existing,
  // school-scoped staff name and preserve the saved original remark.
  $csv="Timestamp,Name,Email,Phone,City,State,Class,Campus,Assigned To,Remarks\n".
