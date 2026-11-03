@@ -129,8 +129,7 @@ function sf_enquiry_panel_settings(array $s,int $sid,string $role):array{
   if(isset($saved[$key])&&is_array($saved[$key]))
    foreach(['visible','expanded'] as $prop)if(is_bool($saved[$key][$prop]??null))$p[$key][$prop]=$saved[$key][$prop];
  }
- if($role!=='Admin')$p['audit']=['visible'=>false,'expanded'=>false];
- return ['sections'=>$p,'audit_admin_only'=>true];
+ return ['sections'=>$p,'audit_access'=>'assigned_lead'];
 }
 function sf_enquiry_panel_validate(array $payload):array{
  if(array_keys($payload)!==['sections']||!is_array($payload['sections'])||array_is_list($payload['sections']))
