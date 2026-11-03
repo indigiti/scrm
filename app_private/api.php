@@ -796,12 +796,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
-        if(preg_match('#^/api/schools/(\\d+)/campaign-report$#D',$path,$campaignMatch)){
+        if(preg_match('#^/api/schools/(\d+)/campaign-report$#D',$path,$campaignMatch)){
             if($method!=='GET')sf_fail(405,'Unsupported campaign report method');
             $sid=(int)$campaignMatch[1];$schoolRole=sf_membership($s,$sid,$uid);
             return [200,sf_campaign_report($s,$sid,$uid,$schoolRole,$uri)];
         }
-        if(preg_match('#^/api/schools/(\\d+)/enquiry-panels$#D',$path,$panelMatch)){
+        if(preg_match('#^/api/schools/(\d+)/enquiry-panels$#D',$path,$panelMatch)){
             $sid=(int)$panelMatch[1];$schoolRole=sf_membership($s,$sid,$uid);
             if($method==='GET')return [200,sf_enquiry_panel_settings($s,$sid,$schoolRole)];
             if($method==='PATCH'){
