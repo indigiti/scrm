@@ -162,6 +162,7 @@ function sf_export_matches(array $lead,array $filters,string $lastCall='Pending'
     if(($filters['contact']??'All')==='Contacted' && !$connected)return false;
     $day=sf_admission_today();$due=$lead['followup_date']??'';
     switch($filters['due']??'All'){
+        case 'Due': if(!$due||$due>$day)return false;break;
         case 'Overdue': if(!$due||$due>=$day)return false;break;
         case 'Today': if($due!==$day)return false;break;
         case 'Upcoming': if(!$due||$due<=$day)return false;break;
@@ -192,7 +193,7 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
         'status'=>array_merge(['All'],SF_STAGES),
         'temperature'=>array_merge(['All'],SF_TEMPERATURES),
         'contact'=>['All','Pending','Contacted'],
-        'due'=>['All','Overdue','Today','Upcoming','Unscheduled'],
+        'due'=>['All','Due','Overdue','Today','Upcoming','Unscheduled'],
         'source_type'=>['All','group_website','individual_website','chatbot','manual','import','other'],
         'form_type'=>['All','inline','popup','chat','api','manual','import','unknown'],
     ];
