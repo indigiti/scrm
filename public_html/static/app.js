@@ -75,7 +75,8 @@ async function initialize(){
  if(!canSeePage(state.page))state.page='Dashboard';
  await reload();
  if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
- if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
+ if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();
+ if(state.page==='Reports')await loadCampaignReport();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
  if(!state.schoolId){render();return;}
@@ -1242,6 +1243,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
   if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';sessionStorage.setItem('schoolflow_last_page',state.page);state.search='';state.status='All';state.modal='';state.detail=null;
+   if(state.page==='Reports'){ext.campaignReport=null;perform(loadCampaignReport);}
    if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
@@ -1342,6 +1344,9 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${state.detail.audit.next_before}`);
    state.detail.audit={events:[...state.detail.audit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
+ if(action==='refresh-campaign-report'){perform(loadCampaignReport);return;}
+ if(action==='clear-campaign-report'){ext.campaignFilters={};perform(loadCampaignReport);return;}
+ if(action==='export-campaign-report'){campaignCsvExport();return;}
  if(action==='export-xlsx'){perform(xlsxExport);return;}
  if(action==='export-csv'){perform(csvExport);return;}
  if(action==='dismiss-key'){state.key='';render();return;}
@@ -1570,6 +1575,11 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
  if(f.id==='leadForm'){perform(async()=>{let body={...fd,consent:fd.consent==='true',site_id:fd.site_id?Number(fd.site_id):null,assigned_to:fd.assigned_to?Number(fd.assigned_to):null};if(!body.site_id)delete body.site_id;if(!body.assigned_to)delete body.assigned_to;let newLead=await api(`/api/schools/${state.schoolId}/leads`,'POST',body);state.modal='';await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${newLead.id}`);render();toast('Enquiry saved');});return;}
+ if(f.id==='campaignFilterForm'){
+  const names=['from','to','utm_source','utm_medium','utm_campaign','utm_content','utm_term','form_type','status'];
+  ext.campaignFilters=Object.fromEntries(names.map(k=>[k,String(fd[k]||'').trim()]));
+  perform(loadCampaignReport);return;
+ }
  if(f.id==='submissionSettingsForm'){
   if(!canManageSchools())return;
   const id=Number(f.dataset.id);
@@ -1699,4 +1709,8 @@ document.addEventListener('keydown',e=>{
  else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus();}
 });
 initialize();
+if(typeof setInterval==='function')setInterval(function(){
+ if(state.token&&state.me&&state.page==='Reports'&&document.visibilityState==='visible'&&!state.modal)
+  loadCampaignReport().catch(function(){/* next explicit refresh can retry */});
+},60000);
 })();
