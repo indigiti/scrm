@@ -124,13 +124,14 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         return $g;
     });
     if($action==='config' && $method==='GET') {
-        return $store->transaction(static function (array $s) use ($guid): array {
+        return $store->transaction(static function (array $s) use ($guid,$origin): array {
             $g=sf_public_group($s,$guid);
             if(!$g)sf_fail(404,'Form unavailable');
             return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g)),'popup'=>sf_popup_public($s,$g),
                 'landing_pages'=>['primary_host'=>sf_landing_primary_host($g),
                     'approved_urls'=>sf_landing_settings($g)['approved_urls'],
-                    'restrict_primary'=>sf_landing_settings($g)['restrict_primary']]]];
+                    'restrict_primary'=>sf_landing_settings($g)['restrict_primary']],
+                'submission_settings'=>sf_submission_public($g,$origin)]];
         });
     }
     if($action==='challenge' && $method==='GET') {
