@@ -110,7 +110,7 @@ function sf_campaign_report(array $s,int $sid,int $uid,string $role,string $uri)
    'potential_duplicates'=>'Rows flagged as potential duplicates, not a deduplicated unique-family count'
   ]];
 }
-/** Per-school administrator layout preferences. Disabled sections still store and audit server events. */
+/** Per-school enquiry workspace preferences; existing section settings migrate in place. */
 function sf_enquiry_panel_defaults():array{
  return [
   'attribution'=>['visible'=>true,'expanded'=>false],
@@ -122,26 +122,94 @@ function sf_enquiry_panel_defaults():array{
   'audit'=>['visible'=>true,'expanded'=>false],
  ];
 }
+function sf_enquiry_action_defaults():array{
+ return ['call'=>true,'whatsapp'=>true,'email'=>true,'api_email'=>true,'api_whatsapp'=>true];
+}
+function sf_enquiry_tab_defaults():array{
+ return ['followup'=>true,'admission'=>true,'family'=>true,'history'=>true,'more'=>true];
+}
+function sf_enquiry_preference_defaults():array{
+ return ['default_tab'=>'followup','remember_tab'=>true,'admin_shortcut'=>true];
+}
 function sf_enquiry_panel_settings(array $s,int $sid,string $role):array{
- $p=sf_enquiry_panel_defaults();
+ $defaults=sf_enquiry_panel_defaults();
+ $actions=sf_enquiry_action_defaults();
+ $tabs=sf_enquiry_tab_defaults();
+ $prefs=sf_enquiry_preference_defaults();
  $saved=$s['enquiry_panels'][(string)$sid]??[];
- if(is_array($saved))foreach($p as $key=>$default){
-  if(isset($saved[$key])&&is_array($saved[$key]))
-   foreach(['visible','expanded'] as $prop)if(is_bool($saved[$key][$prop]??null))$p[$key][$prop]=$saved[$key][$prop];
+ // Version 1 stored the seven sections flat. The new format stores
+ // sections/actions/tabs/preferences; both are readable without migration.
+ $oldSections=is_array($saved)?($saved['sections']??$saved):[];
+ if(is_array($oldSections))foreach($defaults as $key=>$default){
+  if(isset($oldSections[$key])&&is_array($oldSections[$key]))
+   foreach(['visible','expanded'] as $prop)
+    if(is_bool($oldSections[$key][$prop]??null))$defaults[$key][$prop]=$oldSections[$key][$prop];
  }
- return ['sections'=>$p,'audit_access'=>'assigned_lead'];
+ if(is_array($saved))foreach(['actions','tabs','preferences'] as $key){
+  $stored=$saved[$key]??null;
+  if(!is_array($stored))continue;
+  $target=$key==='actions'?$actions:($key==='tabs'?$tabs:$prefs);
+  foreach($target as $prop=>$default){
+   $candidate=$stored[$prop]??null;
+   if($prop==='default_tab'){
+    if(is_string($candidate)&&array_key_exists($candidate,$tabs))$target[$prop]=$candidate;
+   }elseif(is_bool($candidate))$target[$prop]=$candidate;
+  }
+  if($key==='actions')$actions=$target;
+  elseif($key==='tabs')$tabs=$target;
+  else $prefs=$target;
+ }
+ if(!in_array(true,$tabs,true))$tabs['followup']=true;
+ if(!$tabs[$prefs['default_tab']])
+  $prefs['default_tab']=array_key_first(array_filter($tabs));
+ return ['sections'=>$defaults,'actions'=>$actions,'tabs'=>$tabs,'preferences'=>$prefs,
+   'audit_access'=>'assigned_lead'];
 }
 function sf_enquiry_panel_validate(array $payload):array{
- if(array_keys($payload)!==['sections']||!is_array($payload['sections'])||array_is_list($payload['sections']))
+ // Section-only updates remain accepted for older clients. In that case
+ // preserve actions, tabs and preferences in the API handler.
+ foreach(array_keys($payload) as $key)
+  if(!in_array($key,['sections','actions','tabs','preferences'],true))
+   sf_fail(422,'Unknown enquiry interface setting');
+ if(!isset($payload['sections'])||!is_array($payload['sections'])||array_is_list($payload['sections']))
   sf_fail(422,'Provide enquiry panel section settings');
  $defaults=sf_enquiry_panel_defaults();$submitted=$payload['sections'];
  if(array_keys($submitted)!==array_keys($defaults))sf_fail(422,'Provide exactly the supported enquiry sections');
  $result=[];
  foreach($defaults as $key=>$props){
   $value=$submitted[$key];
-  if(!is_array($value)||array_keys($value)!==['visible','expanded']||!is_bool($value['visible'])||!is_bool($value['expanded']))
+  if(!is_array($value)||array_keys($value)!==['visible','expanded']||
+     !is_bool($value['visible'])||!is_bool($value['expanded']))
    sf_fail(422,'Invalid enquiry section setting: '.$key);
   $result[$key]=$value;
  }
- return $result;
+ $out=['sections'=>$result];
+ foreach(['actions'=>sf_enquiry_action_defaults(),'tabs'=>sf_enquiry_tab_defaults()] as $name=>$expected){
+  if(!array_key_exists($name,$payload))continue;
+  $given=$payload[$name];
+  if(!is_array($given)||count($given)!==count($expected)||
+     array_diff(array_keys($given),array_keys($expected))||
+     array_diff(array_keys($expected),array_keys($given)))
+    sf_fail(422,'Invalid '.$name.' settings');
+  foreach($expected as $key=>$val)
+   if(!is_bool($given[$key]))sf_fail(422,'Invalid '.$name.' setting: '.$key);
+  // Save in stable canonical order regardless of how the client serialized keys.
+  $given=array_replace($expected,$given);
+  if($name==='tabs'&&!in_array(true,$given,true))sf_fail(422,'At least one enquiry workspace tab must remain enabled');
+  $out[$name]=$given;
+ }
+ if(array_key_exists('preferences',$payload)){
+  $given=$payload['preferences'];$expected=sf_enquiry_preference_defaults();
+  if(!is_array($given)||array_keys($given)!==array_keys($expected)||
+    !is_string($given['default_tab'])||
+    !array_key_exists($given['default_tab'],sf_enquiry_tab_defaults())||
+    !is_bool($given['remember_tab'])||!is_bool($given['admin_shortcut']))
+    sf_fail(422,'Invalid enquiry workspace preferences');
+  $out['preferences']=$given;
+ }
+ return $out;
+}
+function sf_enquiry_action_allowed(array $s,int $sid,string $key):bool{
+ $actions=sf_enquiry_panel_settings($s,$sid,'Admin')['actions'];
+ return isset($actions[$key])&&$actions[$key]===true;
 }

@@ -816,8 +816,17 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             if($method==='PATCH'){
                 sf_membership($s,$sid,$uid,['Admin']);
                 $settings=sf_enquiry_panel_validate($payload);
-                $s['enquiry_panels'][(string)$sid]=$settings;
-                sf_event($s,$sid,null,$uid,'enquiry_panels_updated','Enquiry panel visibility and defaults updated');
+                $prior=sf_enquiry_panel_settings($s,$sid,'Admin');
+                $saved=[
+                    'sections'=>$settings['sections'],
+                    'actions'=>$settings['actions']??$prior['actions'],
+                    'tabs'=>$settings['tabs']??$prior['tabs'],
+                    'preferences'=>$settings['preferences']??$prior['preferences']
+                ];
+                if(!$saved['tabs'][$saved['preferences']['default_tab']])
+                    $saved['preferences']['default_tab']=array_key_first(array_filter($saved['tabs']));
+                $s['enquiry_panels'][(string)$sid]=$saved;
+                sf_event($s,$sid,null,$uid,'enquiry_panels_updated','Enquiry interface actions, tabs and display settings updated');
                 return [200,sf_enquiry_panel_settings($s,$sid,'Admin')];
             }
             sf_fail(405,'Unsupported enquiry panel operation');
@@ -1489,6 +1498,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if ($sub==='contact-action' && $method==='POST') {
                     $channel=sf_text($payload,'channel',16,3);
                     if(!in_array($channel,['phone','whatsapp','email'],true))sf_fail(422,'Invalid communication channel');
+                    if(!sf_enquiry_action_allowed($s,$schoolId,
+                        ['phone'=>'call','whatsapp'=>'whatsapp','email'=>'email'][$channel]))
+                        sf_fail(403,'This parent communication action is disabled by the school administrator');
                     if($channel!=='phone'&&!$lead['consent'])sf_fail(403,'Guardian contact consent required');
                     if($channel==='email'&&!filter_var($lead['email'],FILTER_VALIDATE_EMAIL))sf_fail(422,'Guardian email required');
                     sf_event($s,$schoolId,$itemId,$uid,'communication_link_opened',$channel.' action opened (delivery not confirmed)');

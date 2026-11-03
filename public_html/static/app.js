@@ -28,7 +28,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,enquirySettingsTab:'communication',detailTab:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -345,22 +345,63 @@ const PANEL_NAMES={
  family:'Parent & sibling profile',application:'Application progress',
  documents:'Admission document checklist',consent:'Messaging consent',audit:'Audit log'
 };
+const ENQUIRY_ACTION_NAMES={
+ call:['Call parent','Show the tap-to-call button'],
+ whatsapp:['WhatsApp','Allow opening a WhatsApp draft, subject to consent'],
+ email:['Email draft','Allow opening an email draft, subject to consent'],
+ api_whatsapp:['WhatsApp API send','Allow provider sends only when Meta integration and consent are ready'],
+ api_email:['Email API send','Allow provider sends only when email integration and consent are ready']
+};
+const ENQUIRY_TAB_NAMES={
+ followup:'Follow-up',admission:'Admission',family:'Family',history:'History',more:'More'
+};
 function enquiryInterfacePage(){
  if(!isAdmin())return pageHead('Enquiry interface','Administrator permission required');
- const config=ext.enquiryPanels?.sections||{};
- return pageHead('Enquiry interface','Set which detail sections are visible and expanded by default for this school.')+
- '<section class="panel sf-panel-admin"><form id="enquiryPanelsForm">'+
- '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. School staff can see the audit for enquiries they are already permitted to access unless you disable the section.</p>'+
- '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
- Object.entries(PANEL_NAMES).map(([key,label])=>{
-  const item=config[key]||{visible:true,expanded:key==='communication'};
-  return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
-   '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
-   '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
- }).join('')+
- '<div class="button-row" style="margin-top:20px">'+
- '<button type="submit" class="btn primary">Save enquiry interface</button></div></form></section>';
+ const sections=ext.enquiryPanels?.sections||{},actions=ext.enquiryPanels?.actions||{};
+ const tabs=ext.enquiryPanels?.tabs||{},prefs=ext.enquiryPanels?.preferences||{};
+ const current=ext.enquirySettingsTab||'communication';
+ const nav=[['communication','Communication'],['tabs','Drawer tabs'],['settings','Settings']];
+ const subnav='<nav class="sf-interface-tabs" role="tablist" aria-label="Enquiry interface configuration">'+
+   nav.map(([key,label])=>'<button type="button" id="sf-settings-tab-'+key+
+    '" role="tab" aria-controls="sf-settings-panel-'+key+'" data-action="enquiry-settings-tab" data-tab="'+key+
+    '" aria-selected="'+(current===key)+'" tabindex="'+(current===key?'0':'-1')+'" class="'+(current===key?'active':'')+'">'+esc(label)+'</button>').join('')+'</nav>';
+ const wrap=(key,body)=>'<section role="tabpanel" id="sf-settings-panel-'+key+
+  '" aria-labelledby="sf-settings-tab-'+key+'" data-settings-panel="'+key+'" '+(current===key?'':'hidden')+'>'+body+'</section>';
+ const actionContent='<div class="sf-setting-intro"><h3>Parent communication actions</h3>'+
+  '<p>Show or hide each communication button for this school. Sending also requires valid parent consent and the corresponding provider setup.</p></div>'+
+  Object.entries(ENQUIRY_ACTION_NAMES).map(([key,[label,description]])=>
+   '<label class="sf-interface-toggle"><span><strong>'+esc(label)+'</strong><small>'+esc(description)+'</small></span>'+
+   '<input type="checkbox" name="action_'+key+'" '+(actions[key]!==false?'checked':'')+' aria-label="Enable '+esc(label)+'"></label>').join('');
+ const tabContent='<div class="sf-setting-intro"><h3>Enquiry workspace tabs</h3>'+
+  '<p>Choose which tabs your school team sees. Keep at least one enabled; disabled tabs do not delete admission or audit data.</p></div>'+
+  Object.entries(ENQUIRY_TAB_NAMES).map(([key,label])=>
+   '<label class="sf-interface-toggle"><span><strong>'+esc(label)+'</strong><small>'+esc(key==='followup'?'Calling and follow-up tools':key==='admission'?'Enquiry stage, application and checklist':key==='family'?'Student, sibling and consent details':key==='history'?'Call, visit, note and stage activity':'Lead attribution and audit history')+'</small></span>'+
+   '<input type="checkbox" name="tab_'+key+'" '+(tabs[key]!==false?'checked':'')+' aria-label="Show '+esc(label)+' tab"></label>').join('');
+ const settingsContent='<div class="sf-setting-intro"><h3>Workspace behavior</h3>'+
+  '<p>Keep the drawer usable for counsellors while controlling visibility of advanced detail sections.</p></div>'+
+  select('Default opening tab','default_tab',Object.entries(ENQUIRY_TAB_NAMES).map(([key,label])=>
+   option(key,label,prefs.default_tab||'followup')).join(''))+
+  '<label class="sf-interface-toggle"><span><strong>Remember selected tab</strong><small>Keep the selected tab when moving between enquiries in the same session</small></span>'+
+   '<input type="checkbox" name="remember_tab" '+(prefs.remember_tab!==false?'checked':'')+'></label>'+
+  '<label class="sf-interface-toggle"><span><strong>Show admin Settings shortcut</strong><small>Only Admin staff can see the shortcut in an enquiry drawer</small></span>'+
+   '<input type="checkbox" name="admin_shortcut" '+(prefs.admin_shortcut!==false?'checked':'')+'></label>'+
+  '<h3 class="sf-setting-subtitle">Advanced section visibility</h3>'+
+  '<p class="muted-note">Existing section controls are preserved. Disabling a section hides its interface, not its historical records or audit logging.</p>'+
+  '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
+  Object.entries(PANEL_NAMES).map(([key,label])=>{
+   const item=sections[key]||{visible:true,expanded:key==='communication'};
+   return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
+    '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
+    '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
+  }).join('');
+ return pageHead('Enquiry interface','Manage communication buttons, workspace tabs and display preferences for the selected school.')+
+  '<section class="panel sf-panel-admin sf-interface-admin"><form id="enquiryPanelsForm">'+
+  '<p class="muted-note">Changes apply only to '+esc(school()?.name||'this school')+'. Permission checks, consent requirements and audit records remain enforced by the server.</p>'+
+  subnav+wrap('communication',actionContent)+wrap('tabs',tabContent)+wrap('settings',settingsContent)+
+  '<div class="sf-interface-save"><button type="submit" class="btn primary">Save enquiry interface</button></div>'+
+  '</form></section>';
 }
+
 function submissionSettingsModal(group){
  const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
  const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
@@ -735,14 +776,36 @@ function communicationsPage(){
  <div class="page-card" style="margin-top:16px"><h3>Official setup and custom API</h3><p>Create a verified sender domain and sending API key in Resend. For WhatsApp, create a Meta Business account, register a phone number, generate a long-lived system-user token and get an approved no-variable template. Use the corresponding provider settings above. Custom webhook APIs can be integrated later using a reviewed server-only adapter; arbitrary URLs are intentionally not accepted here.</p></div>`;
 }
 function templatesPage(){return `${pageHead('Email templates','Build personalized drafts; optionally send directly from a configured provider in the enquiry sidebar.',isAdmin()?btn('＋ New template','new-template','primary'):'')}<div class="family-grid">${ext.templates.map(t=>`<article class="panel family-card"><h3>${esc(t.title)}</h3><p><strong>Subject:</strong> ${esc(t.subject)}</p><div class="template-preview">${esc(t.body)}</div>${isAdmin()&&t.id?btn('Edit template','edit-template','small',`data-id="${t.id}"`):''}</article>`).join('')}</div><div class="footer-tip">Personalized variables: {parent}, {student}, {school}, {grade}. Only mailto links are opened after you choose a parent with a valid email and contact consent.</div>`;}
+function enquiryActionEnabled(key){return ext.enquiryPanels?.actions?.[key]!==false;}
 function contactActions(l){
- return `<section class="contact-actions"><h3 class="section-title">Parent communication</h3><div class="button-row">${btn('☎ Call','call-parent','small',`data-id="${l.id}"`)}${btn('WhatsApp ↗','whatsapp','small',`data-id="${l.id}" ${l.consent?'':'disabled title="Guardian consent required"'}`)}${btn('✉ Email draft','email-draft','small',`data-id="${l.id}" ${l.consent&&l.email?'':'disabled title="Email and contact consent required"'}`)}${ext.messaging?.email?.connected?btn('Send email via API','api-send-email','primary small',`data-id="${l.id}" ${l.consent&&!l.is_demo&&l.email?'':'disabled'}`):''}${ext.messaging?.whatsapp?.connected?btn('Send WhatsApp template','api-send-wa','primary small',`data-id="${l.id}" ${l.consent&&!l.is_demo?'':'disabled'}`):''}</div>${l.consent&&l.email?`<div class="form-field" style="margin-top:12px"><label>Email template</label><select id="emailTemplateChoice">${ext.templates.map(t=>option(t.id,t.title,ext.templates[0]?.id)).join('')}</select></div>`:''}<p class="muted-note">Draft buttons open apps only. API send buttons submit to your configured provider after confirmation. Consent required. Demo contacts cannot receive API messages.</p></section>`;
+ const flags=ext.enquiryPanels?.actions||{},actions=[];
+ const allowed=k=>flags[k]!==false;
+ const id='data-id="'+Number(l.id)+'"';
+ if(allowed('call'))actions.push(btn('☎ Call parent','call-parent','small',id));
+ if(allowed('whatsapp'))actions.push(btn('WhatsApp ↗','whatsapp','small',
+  id+(l.consent?'':' disabled title="Guardian consent required"')));
+ if(allowed('email'))actions.push(btn('✉ Email draft','email-draft','small',
+  id+(l.consent&&l.email?'':' disabled title="Email and contact consent required"')));
+ if(allowed('api_email')&&ext.messaging?.email?.connected)
+  actions.push(btn('Send email via API','api-send-email','primary small',
+   id+(l.consent&&!l.is_demo&&l.email?'':' disabled')));
+ if(allowed('api_whatsapp')&&ext.messaging?.whatsapp?.connected)
+  actions.push(btn('Send WhatsApp template','api-send-wa','primary small',
+   id+(l.consent&&!l.is_demo?'':' disabled')));
+ return '<section class="contact-actions"><h3 class="section-title">Parent communication</h3>'+
+  (actions.length?'<div class="button-row sf-contact-grid">'+actions.join('')+'</div>':
+   '<p class="muted-note">Parent communication buttons are disabled for this school.</p>')+
+  (l.consent&&l.email&&(allowed('email')||allowed('api_email'))?
+    '<div class="form-field" style="margin-top:12px"><label>Email template</label><select id="emailTemplateChoice">'+
+    ext.templates.map(t=>option(t.id,t.title,ext.templates[0]?.id)).join('')+'</select></div>':'')+
+  (actions.length?'<p class="muted-note">Draft actions open external apps only. API sending needs a connected provider and guardian consent. Calls and messages are still recorded under their normal access rules.</p>':'')+
+  '</section>';
 }
 function familyDetails(d){const f=d.family||{children:[]};const l=d.lead;
  return `<section class="family-details"><h3 class="section-title">Parent & sibling profile</h3><p class="muted-note">${esc(f.guardian||l.guardian)} · ${esc(f.phone||l.phone)} · ${f.count||1} connected enquiry(ies)</p>${(f.children||[]).map(c=>`<div class="button-row family-child" style="justify-content:space-between"><span>${esc(c.name)} · ${esc(c.grade||'—')} (${esc(c.status)})</span>${c.id!==l.id?btn('View','view-lead','small',`data-id="${c.id}"`):'<span class="muted-note">Current</span>'}</div>`).join('')}<form id="siblingForm" class="two-cols" style="margin-top:12px">${input('Sibling name','student_name','text','',true)}${input('Grade','grade','text','',true)}<button class="btn small" type="submit">＋ Add sibling enquiry</button></form></section>`;
 }
 function callVisitDetails(d){const l=d.lead;
- return `<section class="call-management"><h3 class="section-title">Record a call</h3><form id="callForm">${select('Call outcome','outcome',['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'].map(x=>option(x,x,'Answered')).join(''))}${input('Next follow-up date (optional)','followup_date','date','')}<div class="form-field"><label>Call summary (optional)</label><textarea name="note" maxlength="1000" placeholder="Optional internal call notes"></textarea></div><button class="btn primary" type="submit">Save call outcome</button></form><div class="call-history">${(d.calls||[]).slice(0,6).map(c=>`<div class="audit-entry"><strong>${esc(c.outcome)}</strong><div class="muted-note">${esc(auditStamp(c.created_at))}${c.followup_date?' · Next '+esc(c.followup_date):''}</div>${c.note?`<p>${esc(c.note)}</p>`:''}</div>`).join('')||'<p class="muted-note">No calls recorded.</p>'}</div><h3 class="section-title">Campus visits</h3><div class="button-row">${btn('＋ Book visit','book-visit','small',`data-id="${l.id}"`)}</div>${(d.visits||[]).map(v=>`<div class="audit-entry">${esc(v.starts_at.replace('T',' '))} · ${esc(v.purpose)} · ${esc(v.status)}</div>`).join('')||'<p class="muted-note">No campus visits booked.</p>'}</section>`;
+ return `<section class="call-management"><h3 class="section-title">Record a call</h3><form id="callForm">${select('Call outcome','outcome','<option value="" selected disabled>Select call outcome</option>'+['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'].map(x=>option(x,x,'')).join(''))}${input('Next follow-up date (optional)','followup_date','date','')}<div class="form-field"><label>Call summary (optional)</label><textarea name="note" maxlength="1000" placeholder="Optional internal call notes"></textarea></div><button class="btn primary" type="submit">Save call outcome</button></form><div class="call-history">${(d.calls||[]).slice(0,6).map(c=>`<div class="audit-entry"><strong>${esc(c.outcome)}</strong><div class="muted-note">${esc(auditStamp(c.created_at))}${c.followup_date?' · Next '+esc(c.followup_date):''}</div>${c.note?`<p>${esc(c.note)}</p>`:''}</div>`).join('')||'<p class="muted-note">No calls recorded.</p>'}</div><h3 class="section-title">Campus visits</h3><div class="button-row">${btn('＋ Book visit','book-visit','small',`data-id="${l.id}"`)}</div>${(d.visits||[]).map(v=>`<div class="audit-entry">${esc(v.starts_at.replace('T',' '))} · ${esc(v.purpose)} · ${esc(v.status)}</div>`).join('')||'<p class="muted-note">No campus visits booked.</p>'}</section>`;
 }
 
 function modalFrame(title,subtitle,inner){return `<div class="modal-wrap" data-action="close-modal" id="modalWrap"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="sf-modal-title"><div class="modalhead"><div><h2 id="sf-modal-title">${esc(title)}</h2><p>${esc(subtitle)}</p></div><button class="icon-btn" aria-label="Close dialog" data-action="close-modal">✕</button></div><div style="padding:21px 24px">${inner}</div></div></div>`;}
@@ -818,8 +881,34 @@ function drawerPanelStart(key,title){
 }
 function drawerPanelEnd(){return '</div></details>';}
 
-function detailDrawer(){const d=state.detail;if(!d)return '';const l=d.lead;
- return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name)}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(l.source_name||'Manual entry')}</p></div><button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body"><div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="detail-jump" aria-label="Enquiry sections"><a href="#sf-contact">Contact</a><a href="#sf-admission">Admission</a><a href="#sf-history">History</a></nav><div class="detail-meta" id="sf-contact"><div><small>Guardian</small><strong>${esc(l.guardian)}</strong></div><div><small>Contact</small><strong>${esc(l.phone)}</strong></div><div><small>Email</small><strong>${esc(l.email||'Not provided')}</strong></div><div><small>Received</small><strong>${esc(l.created_at.slice(0,16).replace('T',' '))} UTC</strong></div>${l.duplicate_of?`<div style="grid-column:1/-1"><small>Potential duplicate</small><strong>Same contact as enquiry #${l.duplicate_of}</strong></div>`:''}${l.message?`<div style="grid-column:1/-1"><small>Message</small><strong>${esc(l.message)}</strong></div>`:''}</div>${drawerPanelStart('attribution','Lead attribution')}<section class="panel" style="padding:16px;margin:14px 0">
+function detailDrawer(){
+ const d=state.detail;if(!d)return '';
+ const l=d.lead;
+ const available=ext.enquiryPanels?.tabs||{};
+ const prefs=ext.enquiryPanels?.preferences||{};
+ const tabs=Object.keys(ENQUIRY_TAB_NAMES).filter(key=>available[key]!==false);
+ let selected=ext.detailTab;
+ if(!selected||!tabs.includes(selected))
+  selected=tabs.includes(prefs.default_tab)?prefs.default_tab:tabs[0]||'followup';
+ ext.detailTab=selected;
+ const tabButtons=tabs.map(key=>
+   '<button type="button" role="tab" data-action="detail-tab" data-tab="'+key+
+   '" id="sf-detail-tab-'+key+'" aria-controls="sf-detail-panel-'+key+
+   '" aria-selected="'+(selected===key)+'" tabindex="'+(selected===key?'0':'-1')+
+   '" class="'+(selected===key?'active':'')+'">'+esc(ENQUIRY_TAB_NAMES[key])+'</button>'
+  ).join('');
+ const beginPanel=key=>'<section class="sf-detail-tab-panel" data-detail-panel="'+key+
+  '" role="tabpanel" id="sf-detail-panel-'+key+'" aria-labelledby="sf-detail-tab-'+key+
+  '" '+(selected===key?'':'hidden')+'>';
+ const endPanel='</section>';
+ return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name)}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(l.source_name||'Manual entry')}</p></div>${isAdmin()&&prefs.admin_shortcut!==false?'<button class="sf-detail-settings" type="button" data-action="open-enquiry-settings" aria-label="Configure school enquiry interface">⚙ Settings</button>':''}<button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body"><div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="sf-detail-tabs" role="tablist" aria-label="Enquiry workspace tabs">${tabButtons}</nav><div class="detail-meta" id="sf-contact"><div><small>Guardian</small><strong>${esc(l.guardian)}</strong></div><div><small>Contact</small><strong>${esc(l.phone)}</strong></div><div><small>Email</small><strong>${esc(l.email||'Not provided')}</strong></div><div><small>Received</small><strong>${esc(auditStamp(l.created_at))}</strong></div>${l.duplicate_of?`<div style="grid-column:1/-1"><small>Potential duplicate</small><strong>Same contact as enquiry #${l.duplicate_of}</strong></div>`:''}${l.message?`<div style="grid-column:1/-1"><small>Message</small><strong>${esc(l.message)}</strong></div>`:''}</div>${beginPanel('followup')}${drawerPanelStart('communication','Parent communication')}${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${drawerPanelEnd()}${callVisitDetails(d)}${endPanel}${beginPanel('admission')}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form>${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
+<div class="page-card"><p class="muted-note">Record documents received or verified. No student document files are uploaded to this CRM.</p>
+${(d.documents||[]).map(doc=>`<div class="doc-status-row"><strong>${esc(doc.type)}</strong><span>${esc(doc.status)}</span>
+${doc.status==='Verified'&&role()==='Counsellor'?'':`<form class="documentStatusForm">
+<input type="hidden" name="type" value="${esc(doc.type)}">
+${select('Status','status',['Pending','Received','Verified','Rejected'].filter(v=>v!=='Verified'||role()!=='Counsellor').map(v=>option(v,v,doc.status)).join(''))}
+${input('Internal checklist note','note','text',doc.note||'')}
+<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div>${drawerPanelEnd()}${endPanel}${beginPanel('family')}${drawerPanelStart('family','Parent & sibling profile')}${familyDetails(d)}${drawerPanelEnd()}${drawerPanelStart('consent','Parent messaging consent')}<form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form>${drawerPanelEnd()}${endPanel}${beginPanel('history')}<h3 class="section-title">Calling history</h3>${(d.calls||[]).map(c=>`<div class="timeline-item"><strong>Call · ${esc(c.outcome)}</strong><p>${esc(c.note||'No notes')}</p><small>${esc(auditStamp(c.created_at))}</small></div>`).join('')||'<p class="muted-note">No calls recorded.</p>'}<h3 class="section-title">Campus visit history</h3>${(d.visits||[]).map(v=>`<div class="timeline-item"><strong>Campus visit · ${esc(v.status)}</strong><small>${esc(v.starts_at?.replace('T',' ')||'')}</small></div>`).join('')||'<p class="muted-note">No visits recorded.</p>'}<h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}${endPanel}${beginPanel('more')}${drawerPanelStart('attribution','Lead attribution')}<section class="panel" style="padding:16px;margin:14px 0">
  <div class="detail-meta"><div><small>Origin</small><strong>${esc((l.source_type||'other').replaceAll('_',' '))}</strong></div>
  <div><small>Form surface</small><strong>${esc(l.form_type||'unknown')} ${esc(l.form_variant||'')}</strong></div>
  <div><small>Source website</small><strong>${esc(l.source_name||'Manual entry')}</strong></div>
@@ -832,14 +921,7 @@ function detailDrawer(){const d=state.detail;if(!d)return '';const l=d.lead;
  <div><small>First touch</small><strong>${esc(l.first_touch?.source_type||'Not recorded')} ${esc(l.first_touch?.captured_at||'')}</strong></div>
  <div><small>Latest touch</small><strong>${esc(l.latest_touch?.source_type||'Not recorded')} ${esc(l.latest_touch?.captured_at||'')}</strong></div></div>
  <p class="muted-note">Historic source categories are inferred from saved routing; unavailable first-touch evidence is not reconstructed. Page and form labels can be client-reported and are not verified ad-platform conversions.</p>
- </section>${drawerPanelEnd()}${drawerPanelStart('communication','Parent communication')}${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${drawerPanelEnd()}${drawerPanelStart('family','Parent & sibling profile')}${familyDetails(d)}${drawerPanelEnd()}${callVisitDetails(d)}${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
-<div class="page-card"><p class="muted-note">Record documents received or verified. No student document files are uploaded to this CRM.</p>
-${(d.documents||[]).map(doc=>`<div class="doc-status-row"><strong>${esc(doc.type)}</strong><span>${esc(doc.status)}</span>
-${doc.status==='Verified'&&role()==='Counsellor'?'':`<form class="documentStatusForm">
-<input type="hidden" name="type" value="${esc(doc.type)}">
-${select('Status','status',['Pending','Received','Verified','Rejected'].filter(v=>v!=='Verified'||role()!=='Counsellor').map(v=>option(v,v,doc.status)).join(''))}
-${input('Internal checklist note','note','text',doc.note||'')}
-<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div>${drawerPanelEnd()}${drawerPanelStart('consent','Parent messaging consent')}<form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form>${drawerPanelEnd()}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}${drawerPanelStart('audit','Audit log')}<section class="drawer-audit" aria-label="Enquiry audit log"><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${ext.detailAudit?.forLeadId===l.id?auditEntries(ext.detailAudit.events):'<p class="muted-note">Expand to load audit history.</p>'}${ext.detailAudit?.forLeadId===l.id&&ext.detailAudit.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section>${drawerPanelEnd()}</div></div></div>`;
+ </section>${drawerPanelEnd()}${drawerPanelStart('audit','Audit log')}<section class="drawer-audit" aria-label="Enquiry audit log"><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${ext.detailAudit?.forLeadId===l.id?auditEntries(ext.detailAudit.events):'<p class="muted-note">Expand to load audit history.</p>'}${ext.detailAudit?.forLeadId===l.id&&ext.detailAudit.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section>${drawerPanelEnd()}${endPanel}</div></div></div>`;
 }
 
 async function loadPublicChat(){
@@ -1094,7 +1176,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
 async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
-function closeDialog(){state.modal='';state.detail=null;render();}
+function closeDialog(){state.modal='';state.detail=null;if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;render();}
 async function registerCsvExport(){
  const f=ext.registerFilters||{};
  const filters={status:f.status||'All',assigned:f.assigned||'All',grade:f.grade||'',
@@ -1378,6 +1460,35 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
   root.querySelector('[data-action="toggle-nav-group"][data-group="'+key+'"]')?.focus();return;
  }
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
+ if(action==='enquiry-settings-tab'){
+   const key=el.dataset.tab;
+   if(!['communication','tabs','settings'].includes(key))return;
+   ext.enquirySettingsTab=key;
+   root.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==key);
+   root.querySelectorAll('[data-action="enquiry-settings-tab"]').forEach(button=>{
+    const active=button.dataset.tab===key;button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;button.classList.toggle('active',active);
+   });el.focus();return;
+ }
+ if(action==='detail-tab'){
+  const name=el.dataset.tab;
+  if(!Object.prototype.hasOwnProperty.call(ENQUIRY_TAB_NAMES,name)||
+     ext.enquiryPanels?.tabs?.[name]===false)return;
+  ext.detailTab=name;
+  root.querySelectorAll('[data-detail-panel]').forEach(panel=>{panel.hidden=panel.dataset.detailPanel!==name;});
+  root.querySelectorAll('[data-action="detail-tab"]').forEach(button=>{
+   const selected=button.dataset.tab===name;
+   button.setAttribute('aria-selected',String(selected));
+   button.tabIndex=selected?0:-1;
+   button.classList.toggle('active',selected);
+  });el.focus();return;
+ }
+ if(action==='open-enquiry-settings'){
+  if(!isAdmin())return;
+  state.detail=null;state.page='Enquiry Interface';
+  sessionStorage.setItem('schoolflow_last_page',state.page);
+  ext.enquirySettingsTab='communication';render();return;
+ }
  if(action==='close-menu'){root.querySelector('.sidebar')?.classList.remove('open');return;}
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
@@ -1456,7 +1567,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(['new-lead','new-site','new-member','new-school'].includes(action)){state.modal=action;state.detail=null;render();return;}
  if(action==='open-task-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
- if(action==='view-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
+ if(action==='view-lead'){if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;
+  ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
    await api(url+'/view','POST',{});state.detail=await api(url);render();});return;}
  if(action==='done-followup'){perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`,'PATCH',{followup_date:''});await reload();toast('Follow-up marked complete');});return;}
  if(action==='preview-web-stage-reset'){
@@ -1526,6 +1638,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='toggle-site'){perform(async()=>{await api(`/api/schools/${state.schoolId}/sites/${Number(el.dataset.id)}?enabled=${el.dataset.enabled==='1'}`,'PATCH');await reload();toast('Website status updated');});return;}
 
  if(action==='api-send-email'||action==='api-send-wa'){
+   if(!enquiryActionEnabled(action==='api-send-email'?'api_email':'api_whatsapp'))return;
    const l=state.detail?.lead;if(!l||!l.consent||l.is_demo)return;
    const channel=action==='api-send-email'?'email':'whatsapp';
    const provider=channel==='email'?'Resend':'Meta WhatsApp Cloud API';
@@ -1542,10 +1655,12 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });return;
  }
  if(action==='call-parent'){
-   const lead=state.leads.find(l=>l.id===Number(el.dataset.id));
+   if(!enquiryActionEnabled('call'))return;
+   const lead=state.detail?.lead?.id===Number(el.dataset.id)?state.detail.lead:state.leads.find(l=>l.id===Number(el.dataset.id));
    if(lead){api(`/api/schools/${state.schoolId}/leads/${lead.id}/contact-action`,'POST',{channel:'phone'}).catch(()=>{});window.location.href='tel:'+lead.phone.replace(/[^\d+]/g,'');}return;
  }
  if(action==='whatsapp'){
+   if(!enquiryActionEnabled('whatsapp'))return;
    const l=state.detail?.lead;if(!l||!l.consent)return;
    const number=l.phone.replace(/\D/g,'');
    if(number.length<10)return toast('Valid parent contact required',true);
@@ -1554,6 +1669,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    window.open('https://wa.me/'+number+'?text='+encodeURIComponent(message),'_blank','noopener,noreferrer');return;
  }
  if(action==='email-draft'){
+   if(!enquiryActionEnabled('email'))return;
    const l=state.detail?.lead?.id===Number(el.dataset.id)?state.detail.lead:state.leads.find(x=>x.id===Number(el.dataset.id));if(!l||!l.consent||!l.email)return;
    const t=ext.templates.find(t=>String(t.id)===String(root.querySelector('#emailTemplateChoice')?.value))||ext.templates[0];let subject=t?.subject||'School admissions enquiry';let body=t?.body||'Hello {parent},\n\nThank you for your enquiry for {student} at {school}.\n\nAdmissions Team';
    const values={parent:l.guardian,student:l.name,grade:l.grade,school:school()?.name||'SchoolFlow'};
@@ -1598,7 +1714,7 @@ root.addEventListener('toggle',e=>{
 },true);
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
@@ -1767,7 +1883,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='autoReconcileForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/automation/queue/'+Number(fd.queue_id)+'/reconcile','POST',{status:fd.status,provider_evidence_reference:fd.provider_evidence_reference});await reload();toast('Provider evidence recorded');});return;}
  if(f.id==='channelConsentForm'){perform(async()=>{const leadId=state.detail.lead.id;await api('/api/schools/'+state.schoolId+'/leads/'+leadId,'PATCH',{consent_email:!!f.querySelector('input[name="consent_email"]:checked'),consent_whatsapp:!!f.querySelector('input[name="consent_whatsapp"]:checked'),consent_source:fd.consent_source});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+leadId);render();toast('Channel-specific consent recorded');});return;}
  if(f.id==='assignmentForm'){perform(async()=>{ext.assignment=await api(`/api/schools/${state.schoolId}/assignment`,'PATCH',{mode:fd.mode});toast('Assignment policy saved');render();});return;}
- if(f.id==='callForm'){perform(async()=>{const lid=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${lid}/calls`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${lid}`);render();toast('Call outcome recorded');});return;}
+ if(f.id==='callForm'){if(!fd.outcome)return toast('Select a call outcome before saving',true);perform(async()=>{const lid=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${lid}/calls`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${lid}`);render();toast('Call outcome recorded');});return;}
  if(f.id==='siblingForm'){perform(async()=>{const lid=state.detail.lead.id;const result=await api(`/api/schools/${state.schoolId}/families/${lid}/siblings`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${result.id}`);render();toast('Sibling enquiry added');});return;}
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
@@ -1793,13 +1909,25 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  }
  if(f.id==='enquiryPanelsForm'){
   if(!isAdmin())return;
-  const sections={};
+  const sections={},actions={},tabs={};
   Object.keys(PANEL_NAMES).forEach(key=>{sections[key]={
    visible:!!f.elements['visible_'+key]?.checked,expanded:!!f.elements['expanded_'+key]?.checked
   };});
+  Object.keys(ENQUIRY_ACTION_NAMES).forEach(key=>{actions[key]=!!f.elements['action_'+key]?.checked;});
+  Object.keys(ENQUIRY_TAB_NAMES).forEach(key=>{tabs[key]=!!f.elements['tab_'+key]?.checked;});
+  if(!Object.values(tabs).some(Boolean))return toast('Enable at least one enquiry tab',true);
+  const pref=String(f.elements.default_tab?.value||'followup');
+  const preferences={
+   default_tab:tabs[pref]?pref:Object.keys(tabs).find(key=>tabs[key]),
+   remember_tab:!!f.elements.remember_tab?.checked,
+   admin_shortcut:!!f.elements.admin_shortcut?.checked
+  };
   perform(async()=>{
-   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{sections});
-   render();toast('Enquiry panel display updated for this school');
+   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{
+    sections,actions,tabs,preferences
+   });
+   if(state.detail&&!tabs[ext.detailTab])ext.detailTab=preferences.default_tab;
+   render();toast('Enquiry interface settings saved for this school');
   });return;
  }
  if(f.id==='landingPagesForm'){
@@ -1893,7 +2021,22 @@ root.addEventListener('dragstart',e=>{const el=e.target.closest('[data-lead]');i
 root.addEventListener('dragover',e=>{const col=e.target.closest('[data-phase]');if(col){e.preventDefault();col.classList.add('drag-active');}});
 root.addEventListener('dragleave',e=>{const col=e.target.closest('[data-phase]');if(col&&!col.contains(e.relatedTarget))col.classList.remove('drag-active');});
 root.addEventListener('drop',e=>{const col=e.target.closest('[data-phase]');if(!col)return;e.preventDefault();let leadId=Number(e.dataTransfer.getData('text/plain')||dragged);col.classList.remove('drag-active');dragged=null;if(!leadId)return;const phase=col.dataset.phase;const lead=state.leads.find(l=>l.id===leadId);if(!lead||!PHASE_TARGETS[phase]||admissionPhase(lead.status)===phase)return;if(lead.status==='Enrolled'&&!confirm('Move this enrolled admission to an earlier phase?'))return;perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${leadId}`,'PATCH',{status:PHASE_TARGETS[phase]});await reload();toast('Moved to '+phase);});});
-root.addEventListener('keydown',e=>{const el=e.target.closest?.('[role="button"][data-action="view-lead"]');if(el&&(e.key==='Enter'||e.key===' ')){e.preventDefault();el.click();}});
+root.addEventListener('keydown',e=>{
+ const tab=e.target.closest?.('[role="tab"][data-action="detail-tab"],[role="tab"][data-action="enquiry-settings-tab"]');
+ if(tab&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){
+  const siblings=Array.from(tab.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]')||[]);
+  const index=siblings.indexOf(tab);
+  if(index>=0&&siblings.length){
+   e.preventDefault();
+   const next=e.key==='Home'?0:e.key==='End'?siblings.length-1:
+    (index+(e.key==='ArrowRight'?1:-1)+siblings.length)%siblings.length;
+   siblings[next].click();siblings[next].focus();
+  }
+  return;
+ }
+ const lead=e.target.closest?.('[role="button"][data-action="view-lead"]');
+ if(lead&&(e.key==='Enter'||e.key===' ')){e.preventDefault();lead.click();}
+});
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape'&&(state.modal||state.detail)){closeDialog();return;}
  if(e.key!=='Tab'||(!state.modal&&!state.detail)||typeof document.querySelector!=='function')return;
