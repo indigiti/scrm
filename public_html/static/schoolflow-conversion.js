@@ -4,6 +4,25 @@
  var loader=document.currentScript;if(!loader)return;
  var guid=String(loader.dataset.schoolflowGroup||'').trim().toLowerCase();
  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(guid))return;
+ // Install in the site-wide head: capture first-touch UTMs even on pages with no form.
+ var firstKey='schoolflow_first_touch_'+guid;
+ try{
+  var old=JSON.parse(sessionStorage.getItem(firstKey)||'null');
+  if(!old||!old.value||!Number.isFinite(old.time)||Date.now()-old.time>=86400000){
+   var q=new URLSearchParams(location.search);
+   var cleanPage=location.origin+location.pathname;
+   var referrer='';
+   try{var ref=new URL(document.referrer);referrer=(ref.origin+ref.pathname).slice(0,500);}catch(e){}
+   sessionStorage.setItem(firstKey,JSON.stringify({time:Date.now(),value:{
+    landing_page:cleanPage.slice(0,500),referrer:referrer,
+    utm_source:(q.get('utm_source')||'').slice(0,140),
+    utm_medium:(q.get('utm_medium')||'').slice(0,140),
+    utm_campaign:(q.get('utm_campaign')||'').slice(0,140),
+    utm_term:(q.get('utm_term')||'').slice(0,140),
+    utm_content:(q.get('utm_content')||'').slice(0,140)
+   }}));
+  }
+ }catch(e){}
  var key='schoolflow_conversion_'+guid,stored;
  try{stored=JSON.parse(sessionStorage.getItem(key)||'null');}catch(e){return;}
  if(!stored||typeof stored.event_id!=='string'||!/^[-a-zA-Z0-9]{12,100}$/.test(stored.event_id)||
