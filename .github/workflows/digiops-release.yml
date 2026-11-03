@@ -59,6 +59,7 @@ jobs:
           php tests/test_public_forms.php
           php tests/test_landing_page_approvals.php
           php tests/test_marketing_controls.php
+          php tests/test_enquiry_interface_controls.php
           php tests/test_lead_attribution.php
           php tests/test_public_chat.php
           php tests/test_counsellor.php
