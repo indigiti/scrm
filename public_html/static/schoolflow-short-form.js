@@ -121,7 +121,8 @@ function init(){
  var touchKey='schoolflow_first_touch_'+guid;
  function currentTouch(){
   var q=new URLSearchParams(location.search);
-  return {landing_page:location.href.slice(0,500),referrer:document.referrer.slice(0,500),
+  return {landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
+    referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),
    utm_source:(q.get('utm_source')||'').slice(0,140),utm_medium:(q.get('utm_medium')||'').slice(0,140),
    utm_campaign:(q.get('utm_campaign')||'').slice(0,140),utm_term:(q.get('utm_term')||'').slice(0,140),
    utm_content:(q.get('utm_content')||'').slice(0,140)};
