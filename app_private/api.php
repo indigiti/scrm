@@ -1353,7 +1353,11 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         sf_event($s,$schoolId,null,$uid,'website_key_rotated','Source #'.$itemId.' key rotated');
                         return [200,['api_key'=>$key,'warning'=>'Old key revoked. Copy the new key now.']];
                     }
-                    if ($sub==='audit' && $method==='GET') {sf_membership($s,$schoolId,$uid,['Admin']);return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];}
+                    if ($sub==='audit' && $method==='GET') {
+                    $prefs=sf_enquiry_panel_settings($s,$schoolId,$role);
+                    if($role!=='Admin' && !$prefs['sections']['audit']['visible'])sf_fail(403,'Audit section disabled for school staff');
+                    return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                }
                 if ($sub==='view' && $method==='POST') {
                     sf_event($s,$schoolId,$itemId,$uid,'enquiry_viewed','Opened enquiry details');
                     return [200,['ok'=>true]];
