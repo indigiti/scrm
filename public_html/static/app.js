@@ -688,7 +688,7 @@ function admissionRegisterPage(){
   select('Last call outcome','outcome','<option value="">All outcomes</option>'+
    ['Pending','Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'].map(v=>option(v,v,f.outcome||'')).join(''))+
   select('Follow-up','due','<option value="">Any schedule</option>'+
-   [['today','Today'],['overdue','Overdue'],['upcoming','Upcoming'],['unscheduled','Unscheduled']].map(([v,name])=>option(v,name,f.due||'')).join(''))+
+   [['due','Due (today + overdue)'],['today','Today'],['overdue','Overdue'],['upcoming','Upcoming'],['unscheduled','Unscheduled']].map(([v,name])=>option(v,name,f.due||'')).join(''))+
   '<div class="sf-register-filter-actions"><button type="submit" class="btn primary">Apply filters</button>'+
    btn('Clear filters','register-clear','small')+'</div></form>'+
   '<div class="sf-register-heading"><strong>'+esc(tabs.find(t=>t[0]===view)?.[1]||'Register')+'</strong>'+
@@ -1124,7 +1124,7 @@ async function xlsxExport(){
    assigned:ext.registerFilters.assigned||'All',
    grade:ext.registerFilters.grade||'',
    call_outcome:ext.registerFilters.outcome||'',
-   due:({today:'Today',overdue:'Overdue',upcoming:'Upcoming',unscheduled:'Unscheduled'})[ext.registerFilters.due]||'All',
+   due:({due:'Due',today:'Today',overdue:'Overdue',upcoming:'Upcoming',unscheduled:'Unscheduled'})[ext.registerFilters.due]||'All',
    from:ext.registerFilters.from||'',to:ext.registerFilters.to||'',
    search:ext.registerFilters.search||'',source:ext.registerFilters.source||''
   }:filtering?{
@@ -1507,7 +1507,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='register-preset'){
   const p=el.dataset.preset,filters={};
   if(p==='unassigned'&&role()!=='Counsellor')filters.assigned='unassigned';
-  else if(p==='due')filters.due='overdue';
+  else if(p==='due')filters.due='due';
   else if(p==='no-answer')filters.outcome='No Answer';
   else if(p==='today'){filters.from=today();filters.to=today();}
   else if(p!=='all')return;
