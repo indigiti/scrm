@@ -59,6 +59,9 @@ try{
  rg_ok($c===200&&$performance['summary']['enquiries']===2,'performance summary');
  $staffRow=array_values(array_filter($performance['rows'],static fn(array $r):bool=>$r['user_id']===2));
  rg_ok(count($staffRow)===1&&$staffRow[0]['assigned']===1,'assigned staff metrics');
+ $callerRow=array_values(array_filter($performance['rows'],static fn(array $r):bool=>$r['user_id']===1));
+ rg_ok(count($callerRow)===1&&$callerRow[0]['call_attempts']===1,
+    'calls attributed to actual recording staff even with no currently assigned enquiries');
  [$c,$own]=rg_req('GET',$base.'/admission-register',[],'counsellor'); // method intentionally invalid payload shape; no write
  rg_ok($c===200&&$own['total']===1&&$own['rows'][0]['student']==='Fictional A','counsellor only assigned enquiry');
  [$c,$ownHistory]=rg_req('GET',$base.'/admission-register?view=history',[],'counsellor');
