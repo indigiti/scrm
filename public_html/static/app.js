@@ -1096,7 +1096,15 @@ async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
 function closeDialog(){state.modal='';state.detail=null;render();}
 async function xlsxExport(){
  const filtering=state.page==='Enquiries';
- const filters=filtering?{
+ const filters=state.page==='Admission Register'?{
+   status:ext.registerFilters.status||'All',
+   assigned:ext.registerFilters.assigned||'All',
+   grade:ext.registerFilters.grade||'',
+   call_outcome:ext.registerFilters.outcome||'',
+   due:({today:'Today',overdue:'Overdue',upcoming:'Upcoming',unscheduled:'Unscheduled'})[ext.registerFilters.due]||'All',
+   from:ext.registerFilters.from||'',to:ext.registerFilters.to||'',
+   search:ext.registerFilters.search||'',source:ext.registerFilters.source||''
+  }:filtering?{
    status:state.status,temperature:ext.temperatureFilter,site:state.siteFilter,
     source_type:ext.sourceTypeFilter,form_type:ext.formTypeFilter,
    assigned:ext.assignedFilter,contact:ext.contactFilter,due:ext.dueFilter,search:state.search
@@ -1453,6 +1461,36 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${ext.detailAudit.next_before}`);
    ext.detailAudit={forLeadId:leadId,events:[...ext.detailAudit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
+ if(action==='register-refresh'){perform(loadAdmissionRegister);return;}
+ if(action==='register-view'){
+  const v=el.dataset.view;if(!['enquiries','history','performance'].includes(v))return;
+  ext.registerView=v;ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-prev'||action==='register-next'){
+  if(!ext.registerReport||ext.registerLoading)return;
+  const next=ext.registerPage+(action==='register-next'?1:-1);
+  if(next<1||next>ext.registerReport.pages)return;
+  ext.registerPage=next;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-sort'){
+  if(!['created','name','assigned','latest','followup'].includes(el.dataset.sort))return;
+  const old=ext.registerFilters;
+  ext.registerFilters={...old,sort:el.dataset.sort,direction:old.sort===el.dataset.sort&&old.direction==='asc'?'desc':'asc'};
+  ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-clear'){
+  ext.registerFilters={};ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-preset'){
+  const p=el.dataset.preset,filters={};
+  if(p==='unassigned'&&role()!=='Counsellor')filters.assigned='unassigned';
+  else if(p==='due')filters.due='overdue';
+  else if(p==='no-answer')filters.outcome='No Answer';
+  else if(p==='today'){filters.from=today();filters.to=today();}
+  else if(p!=='all')return;
+  ext.registerFilters=filters;ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-export'){perform(xlsxExport);return;}
  if(action==='refresh-campaign-report'){perform(loadCampaignReport);return;}
  if(action==='clear-campaign-report'){ext.campaignFilters={};perform(loadCampaignReport);return;}
  if(action==='export-campaign-report'){campaignCsvExport();return;}
@@ -1549,6 +1587,10 @@ root.addEventListener('input',e=>{
  if(e.target.id==='q'){const p=e.target.selectionStart;state.search=e.target.value;render();const q=root.querySelector('#q');q?.focus();q?.setSelectionRange(p,p);}
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
+ if(f.id==='admissionRegisterFilters'){
+  ext.registerFilters=Object.fromEntries(Object.entries(fd).filter(([,v])=>String(v).trim()!==''));
+  ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
  if(f.id==='webStageResetForm'){
    if(!canWebStageReset()||!state.stagingResetPreview)return;
    if(fd.confirmation!=='RESET STAGING KEEP IN.STG.ADM')return toast('Type the complete confirmation phrase',true);
@@ -1843,5 +1885,7 @@ initialize();
 if(typeof setInterval==='function')setInterval(function(){
  if(state.token&&state.me&&state.page==='Reports'&&document.visibilityState==='visible'&&!state.modal)
   loadCampaignReport().catch(function(){/* next explicit refresh can retry */});
+ if(state.token&&state.me&&state.page==='Admission Register'&&document.visibilityState==='visible'&&!state.modal&&!ext.registerLoading)
+  loadAdmissionRegister().catch(function(){/* manual refresh available */});
 },60000);
 })();
