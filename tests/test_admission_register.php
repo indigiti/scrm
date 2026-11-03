@@ -85,6 +85,7 @@ try{
  rg_ok($c===200&&str_starts_with($csvReport,"\xEF\xBB\xBF")&&
     str_contains($csvReport,'Assigned To')&&str_contains($csvReport,'Vaishali'),
     'CSV export preserves school staff and Google Sheet columns');
+ rg_ok(str_contains($csvReport,"'09876543210"),'CSV preserves phone leading zero as text');
  rg_ok(!str_contains($csvReport,'Fictional B')&&!str_contains($csvReport,'Other Campus Student'),
     'CSV export obeys filters and campus isolation');
  rg_ok(rg_req('POST',$base.'/exports/admissions-register.csv',[],'outside')[0]===403,
