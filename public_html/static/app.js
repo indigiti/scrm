@@ -2021,7 +2021,22 @@ root.addEventListener('dragstart',e=>{const el=e.target.closest('[data-lead]');i
 root.addEventListener('dragover',e=>{const col=e.target.closest('[data-phase]');if(col){e.preventDefault();col.classList.add('drag-active');}});
 root.addEventListener('dragleave',e=>{const col=e.target.closest('[data-phase]');if(col&&!col.contains(e.relatedTarget))col.classList.remove('drag-active');});
 root.addEventListener('drop',e=>{const col=e.target.closest('[data-phase]');if(!col)return;e.preventDefault();let leadId=Number(e.dataTransfer.getData('text/plain')||dragged);col.classList.remove('drag-active');dragged=null;if(!leadId)return;const phase=col.dataset.phase;const lead=state.leads.find(l=>l.id===leadId);if(!lead||!PHASE_TARGETS[phase]||admissionPhase(lead.status)===phase)return;if(lead.status==='Enrolled'&&!confirm('Move this enrolled admission to an earlier phase?'))return;perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${leadId}`,'PATCH',{status:PHASE_TARGETS[phase]});await reload();toast('Moved to '+phase);});});
-root.addEventListener('keydown',e=>{const el=e.target.closest?.('[role="button"][data-action="view-lead"]');if(el&&(e.key==='Enter'||e.key===' ')){e.preventDefault();el.click();}});
+root.addEventListener('keydown',e=>{
+ const tab=e.target.closest?.('[role="tab"][data-action="detail-tab"],[role="tab"][data-action="enquiry-settings-tab"]');
+ if(tab&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){
+  const siblings=Array.from(tab.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]')||[]);
+  const index=siblings.indexOf(tab);
+  if(index>=0&&siblings.length){
+   e.preventDefault();
+   const next=e.key==='Home'?0:e.key==='End'?siblings.length-1:
+    (index+(e.key==='ArrowRight'?1:-1)+siblings.length)%siblings.length;
+   siblings[next].click();siblings[next].focus();
+  }
+  return;
+ }
+ const lead=e.target.closest?.('[role="button"][data-action="view-lead"]');
+ if(lead&&(e.key==='Enter'||e.key===' ')){e.preventDefault();lead.click();}
+});
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape'&&(state.modal||state.detail)){closeDialog();return;}
  if(e.key!=='Tab'||(!state.modal&&!state.detail)||typeof document.querySelector!=='function')return;
