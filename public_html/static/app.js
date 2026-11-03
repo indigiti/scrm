@@ -680,6 +680,7 @@ function admissionRegisterPage(){
   input('Enquiry from','from','date',f.from||'')+input('Enquiry to','to','date',f.to||'')+
   input('Name, phone or remarks','search','search',f.search||'')+
   input('Class','grade','text',f.grade||'')+
+  input('Lead source','source','text',f.source||'')+
   select('Assigned To','assigned','<option value="">All permitted staff</option>'+
    (role()==='Counsellor'?'':'<option value="unassigned" '+(f.assigned==='unassigned'?'selected':'')+'>Unassigned</option>')+
    members.map(m=>option(m.id,m.name,f.assigned||'')).join(''))+
