@@ -116,6 +116,15 @@ try {
         echo $data;
         exit;
     }
+    if($status===200 && is_string($data) &&
+       preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions-register\.csv$#iD',$path)){
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="schoolflow-admission-register-'.gmdate('Ymd').'.csv"');
+        header('Content-Length: '.strlen($data));
+        http_response_code(200);
+        echo $data;
+        exit;
+    }
     sf_json($data,$status);
 } catch (SFError $e) {sf_json(['detail'=>$e->getMessage()],$e->httpStatus);}
 catch(Throwable $e){error_log('SchoolFlow internal error (message redacted)');sf_json(['detail'=>'Server error; check private storage permissions'],500);}
