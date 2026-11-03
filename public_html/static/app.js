@@ -665,7 +665,7 @@ function admissionRegisterPage(){
  }
  const members=d?.staff||state.members.filter(m=>m.enabled!==false);
  return pageHead('Admission Enquiry Register','Live admissions register with Google Sheets-style columns and complete school-scoped calling history.',
-  btn('↻ Refresh','register-refresh','small')+btn('⇩ Export Excel','register-export','primary'))+
+  btn('↻ Refresh','register-refresh','small')+btn('⇩ Export Excel','register-export','primary')+btn('CSV','register-csv','small'))+
   '<div class="sf-register">'+
   '<div class="sf-register-summary">'+
   [['Enquiries',tot.enquiries],['Parents contacted',tot.contacted],['Follow-ups due',tot.followups_due],['Unassigned',tot.unassigned]].map(([title,value])=>
@@ -1095,6 +1095,28 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
 async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
 function closeDialog(){state.modal='';state.detail=null;render();}
+async function registerCsvExport(){
+ const f=ext.registerFilters||{};
+ const filters={status:f.status||'All',assigned:f.assigned||'All',grade:f.grade||'',
+  call_outcome:f.outcome||'',due:({today:'Today',overdue:'Overdue',upcoming:'Upcoming',
+   unscheduled:'Unscheduled'})[f.due]||'All',from:f.from||'',to:f.to||'',
+   search:f.search||'',source:f.source||''};
+ const res=await fetch(APP_BASE+'/api/schools/'+state.schoolId+'/exports/admissions-register.csv',{
+  method:'POST',headers:{Authorization:'Bearer '+state.token,'Content-Type':'application/json'},
+  body:JSON.stringify(filters),cache:'no-store',credentials:'same-origin'
+ });
+ if(res.status===401){state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();
+  throw new Error('Session expired. Sign in again to export.');}
+ if(!res.ok){const err=await res.json().catch(()=>({}));
+  throw new Error(err.detail||'CSV report unavailable');}
+ const payload=await res.blob();
+ if(!payload.size)throw new Error('Empty CSV report');
+ const url=URL.createObjectURL(payload),a=document.createElement('a');
+ a.href=url;a.download='SchoolFlow-Admission-Register-'+state.schoolId+'-'+day()+'.csv';
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ toast('Filtered school register CSV downloaded');
+}
 async function xlsxExport(){
  const filtering=state.page==='Enquiries';
  const filters=state.page==='Admission Register'?{
@@ -1492,6 +1514,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
   ext.registerFilters=filters;ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
  }
  if(action==='register-export'){perform(xlsxExport);return;}
+ if(action==='register-csv'){perform(registerCsvExport);return;}
  if(action==='refresh-campaign-report'){perform(loadCampaignReport);return;}
  if(action==='clear-campaign-report'){ext.campaignFilters={};perform(loadCampaignReport);return;}
  if(action==='export-campaign-report'){campaignCsvExport();return;}
