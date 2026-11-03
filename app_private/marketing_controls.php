@@ -184,9 +184,14 @@ function sf_enquiry_panel_validate(array $payload):array{
  foreach(['actions'=>sf_enquiry_action_defaults(),'tabs'=>sf_enquiry_tab_defaults()] as $name=>$expected){
   if(!array_key_exists($name,$payload))continue;
   $given=$payload[$name];
-  if(!is_array($given)||array_keys($given)!==array_keys($expected))sf_fail(422,'Invalid '.$name.' settings');
+  if(!is_array($given)||count($given)!==count($expected)||
+     array_diff(array_keys($given),array_keys($expected))||
+     array_diff(array_keys($expected),array_keys($given)))
+    sf_fail(422,'Invalid '.$name.' settings');
   foreach($expected as $key=>$val)
    if(!is_bool($given[$key]))sf_fail(422,'Invalid '.$name.' setting: '.$key);
+  // Save in stable canonical order regardless of how the client serialized keys.
+  $given=array_replace($expected,$given);
   if($name==='tabs'&&!in_array(true,$given,true))sf_fail(422,'At least one enquiry workspace tab must remain enabled');
   $out[$name]=$given;
  }
