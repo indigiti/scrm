@@ -498,7 +498,7 @@ function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_count
 const IMPORT_FIELDS=[
  ['timestamp','Timestamp'],['name','Student name'],['email','Email'],['phone','Phone'],
  ['city','City'],['state','State'],['grade','Class'],['campus','Campus'],
- ['remarks','Remarks / Follow-up Notes'],['guardian','Parent / Guardian'],['academic_year','Academic year']
+ ['remarks','Remarks / Follow-up Notes'],['assigned_to','Assigned To (school staff)'],['guardian','Parent / Guardian'],['academic_year','Academic year']
 ];
 
 function seatPlanning(){
