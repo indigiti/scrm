@@ -2,6 +2,85 @@
 declare(strict_types=1);
 /** School-scoped staff lifecycle; legacy memberships without enabled remain enabled. */
 function sf_staff_enabled(array $member):bool { return ($member['enabled']??true)!==false; }
+
+/**
+ * An active Counsellor assignment is an exclusive home-campus assignment.
+ * Legacy conflicting memberships never grant a second school access.
+ */
+function sf_staff_counsellor_school(array $s,int $userId):?int{
+    foreach($s['memberships'] as $m)
+        if((int)$m['user_id']===$userId&&($m['role']??'')==='Counsellor'&&sf_staff_enabled($m))
+            return (int)$m['school_id'];
+    return null;
+}
+function sf_staff_has_active_other_school(array $s,int $userId,int $schoolId):bool{
+    foreach($s['memberships'] as $m)
+        if((int)$m['user_id']===$userId&&(int)$m['school_id']!==$schoolId&&sf_staff_enabled($m))
+            return true;
+    return false;
+}
+/**
+ * Candidate identity can be reused only from a school the acting admin ALSO
+ * administers. No global email/account lookup or cross-tenant staff discovery.
+ */
+function sf_staff_link_candidates(array $s,int $targetSchool,int $actor):array{
+    sf_membership($s,$targetSchool,$actor,['Admin']);
+    $adminSchools=[];
+    foreach($s['memberships'] as $m)
+        if((int)$m['user_id']===$actor&&($m['role']??'')==='Admin'&&sf_staff_enabled($m))
+            $adminSchools[(int)$m['school_id']]=true;
+    $already=[];
+    foreach($s['memberships'] as $m)
+        if((int)$m['school_id']===$targetSchool)$already[(int)$m['user_id']]=true;
+    $candidates=[];
+    foreach($s['memberships'] as $m){
+        $uid=(int)$m['user_id'];$sid=(int)$m['school_id'];
+        if($sid===$targetSchool||!isset($adminSchools[$sid])||isset($already[$uid])||
+            !in_array($m['role'],['Counsellor','Admissions'],true))continue;
+        $user=sf_user($s,$uid);
+        if(!$user||empty($user['active']))continue;
+        $canCounsellor=!sf_staff_has_active_other_school($s,$uid,$targetSchool);
+        $canAdmissions=sf_staff_counsellor_school($s,$uid)===null;
+        if(!$canCounsellor&&!$canAdmissions)continue;
+        if(!isset($candidates[$uid]))$candidates[$uid]=[
+            'id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],
+            'source_schools'=>[],'can_link_counsellor'=>$canCounsellor,'can_link_admissions'=>$canAdmissions
+        ];
+        $src=sf_find($s['schools'],$sid);
+        if($src)$candidates[$uid]['source_schools'][]=$src['name'];
+    }
+    $out=array_values($candidates);
+    usort($out,static fn(array $a,array $b):int=>strnatcasecmp($a['name'],$b['name']));
+    return $out;
+}
+function sf_staff_link_existing(array &$s,int $targetSchool,int $actor,array $payload):array{
+    sf_membership($s,$targetSchool,$actor,['Admin']);
+    if(array_keys($payload)!==['user_id','role']&&
+       (count($payload)!==2||!array_key_exists('user_id',$payload)||!array_key_exists('role',$payload)))
+        sf_fail(422,'Select an existing staff account and role');
+    $uid=$payload['user_id']??null;
+    if(!is_int($uid)||$uid<=0)sf_fail(422,'Invalid staff selection');
+    $role=$payload['role']??null;
+    if(!is_string($role)||!in_array($role,['Counsellor','Admissions'],true))
+        sf_fail(422,'Linked staff may only be Counsellor or Admissions');
+    foreach($s['memberships'] as $m)if((int)$m['school_id']===$targetSchool&&(int)$m['user_id']===$uid)
+        sf_fail(409,'Staff member already belongs to this school; edit or reactivate their existing membership');
+    $candidate=null;
+    foreach(sf_staff_link_candidates($s,$targetSchool,$actor) as $item)
+        if($item['id']===$uid){$candidate=$item;break;}
+    if(!$candidate)sf_fail(403,'Staff member is not eligible for school assignment');
+    if($role==='Counsellor'&&!$candidate['can_link_counsellor'])
+        sf_fail(409,'Counsellor must have no other active school assignment. Disable the old assignment before transferring.');
+    if($role==='Admissions'&&!$candidate['can_link_admissions'])
+        sf_fail(409,'Transfer an existing Counsellor before adding an Admissions assignment');
+    $s['memberships'][]=['guid'=>sf_uuid(),'school_id'=>$targetSchool,'user_id'=>$uid,
+        'role'=>$role,'enabled'=>true,'created_at'=>sf_time()];
+    sf_staff_revoke_sessions($s,$uid);
+    sf_event($s,$targetSchool,null,$actor,'staff_school_assigned','Existing staff #'.$uid.' linked as '.$role);
+    foreach(sf_staff_view($s,$targetSchool) as $row)if($row['id']===$uid)return $row;
+    sf_fail(500,'Unable to read linked school member');
+}
+
 function sf_staff_admin_count(array $s,int $sid):int{
     $n=0;foreach($s['memberships'] as $m)if($m['school_id']===$sid&&$m['role']==='Admin'&&sf_staff_enabled($m)&&
         (sf_user($s,$m['user_id'])['active']??false))$n++;
@@ -32,6 +111,8 @@ function sf_staff_update(array &$s,int $sid,int $actor,int $target,array $p):arr
     if(!is_bool($enabled))sf_fail(422,'enabled must be a boolean');
     $role=array_key_exists('role',$p)?sf_text($p,'role',30,3):$membership['role'];
     if(!in_array($role,SF_ROLES,true))sf_fail(422,'Invalid staff role');
+    if($enabled&&$role==='Counsellor'&&sf_staff_has_active_other_school($s,$target,$sid))
+        sf_fail(409,'Counsellors may have only one active school assignment');
     if($actor===$target && (!$enabled||$role!=='Admin'))sf_fail(409,'Cannot remove your own administrator access');
     if($membership['role']==='Admin' && sf_staff_enabled($membership) && (!$enabled||$role!=='Admin') &&
         sf_staff_admin_count($s,$sid)<=1)sf_fail(409,'Appoint another active administrator first');
