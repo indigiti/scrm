@@ -607,6 +607,102 @@ function campaignCsvExport(){
  const link=document.createElement('a');link.href=url;link.download='schoolflow-campaign-'+state.schoolId+'-'+day()+'.csv';link.click();URL.revokeObjectURL(url);
  toast('Aggregated campaign CSV exported');
 }
+
+/** Server-side, school-scoped register. The inbox cache is intentionally NOT used. */
+async function loadAdmissionRegister(){
+ const request=++ext.registerRequest,sid=state.schoolId,view=ext.registerView;
+ if(!sid)return;
+ const query=new URLSearchParams({view,page:String(ext.registerPage),per_page:'50'});
+ for(const [key,value] of Object.entries(ext.registerFilters))
+  if(value!==''&&value!==undefined&&value!==null)query.set(key,String(value));
+ ext.registerLoading=true;if(state.page==='Admission Register')render();
+ try{
+  const data=await api('/api/schools/'+sid+'/admission-register?'+query.toString());
+  if(request!==ext.registerRequest||state.schoolId!==sid||view!==ext.registerView)return;
+  ext.registerReport=data;
+ }finally{
+  if(request===ext.registerRequest){ext.registerLoading=false;if(state.page==='Admission Register')render();}
+ }
+}
+function admissionRegisterPage(){
+ const d=ext.registerReport,f=ext.registerFilters,view=ext.registerView,tot=d?.summary||{};
+ const tabs=[['enquiries','Enquiry Register'],['history','Calling & Follow-up History'],['performance','Counsellor Performance']];
+ const stamp=v=>v?esc(auditStamp(v)):'—';
+ const open=(id,name)=>'<button type="button" class="sf-register-open" data-action="view-lead" data-id="'+Number(id)+'" aria-label="Open '+esc(name)+'">Open</button>';
+ const th=(name,key)=>'<button type="button" data-action="register-sort" data-sort="'+key+'" class="sf-register-sort">'+esc(name)+
+    (f.sort===key?(f.direction==='asc'?' ↑':' ↓'):'')+'</button>';
+ let table='';
+ if(view==='enquiries'){
+  table='<table class="sf-register-table"><thead><tr><th>'+th('Timestamp','created')+'</th><th>'+th('Name','name')+
+   '</th><th>Email</th><th>Phone</th><th>City</th><th>State</th><th>Class</th><th>Campus</th><th>'+
+   th('Assigned To','assigned')+'</th><th>Latest Calling Remark</th><th>Call outcome</th><th>'+
+   th('Follow-up','followup')+'</th><th>Stage</th><th>Open</th></tr></thead><tbody>'+
+   (d?.rows||[]).map(r=>'<tr><td class="sf-register-nowrap">'+stamp(r.timestamp)+'</td>'+
+     '<td><strong>'+esc(r.student||'Student pending')+'</strong><small>'+esc(r.guardian||'')+'</small></td>'+
+     '<td>'+esc(r.email||'—')+'</td><td class="sf-register-nowrap">'+esc(r.phone||'—')+'</td>'+
+     '<td>'+esc(r.city||'—')+'</td><td>'+esc(r.state||'—')+'</td><td>'+esc(r.grade||'—')+
+     '</td><td>'+esc(r.campus)+'</td><td>'+esc(r.assigned_name)+'</td>'+
+     '<td class="sf-register-remark">'+esc(r.last_remark||'No calling remarks recorded')+
+       (r.last_remark_at?'<small>'+stamp(r.last_remark_at)+'</small>':'')+'</td>'+
+     '<td>'+esc(r.last_call_outcome||'Pending')+'</td><td class="sf-register-nowrap">'+esc(r.followup_date||'—')+
+     '</td><td>'+stageBadge(r.status||'New')+'</td><td>'+open(r.id,r.student||'enquiry')+'</td></tr>').join('')+
+     (d&&!d.rows.length?'<tr><td colspan="14" class="sf-register-empty">No enquiries match your filters.</td></tr>':'')+
+     '</tbody></table>';
+ }else if(view==='history'){
+  table='<table class="sf-register-table"><thead><tr><th>Recorded (IST)</th><th>Student</th><th>Class</th><th>Phone</th><th>Action</th><th>Outcome</th><th>Calling remarks</th><th>Recorded By</th><th>Next Follow-up</th><th>Open</th></tr></thead><tbody>'+
+  (d?.rows||[]).map(r=>'<tr><td class="sf-register-nowrap">'+stamp(r.at)+'</td><td>'+esc(r.student)+
+   '</td><td>'+esc(r.grade||'—')+'</td><td>'+esc(r.phone||'—')+'</td><td>'+esc(r.type)+
+   '</td><td>'+esc(r.outcome||'—')+'</td><td class="sf-register-remark">'+esc(r.note||'—')+
+   '</td><td>'+esc(r.actor_name)+'</td><td>'+esc(r.followup_date||'—')+'</td><td>'+
+   open(r.lead_id,r.student)+'</td></tr>').join('')+
+  (d&&!d.rows.length?'<tr><td colspan="10" class="sf-register-empty">No recorded calls or notes match your filters.</td></tr>':'')+'</tbody></table>';
+ }else{
+  table='<table class="sf-register-table"><thead><tr><th>Staff member</th><th>Assigned enquiries</th><th>Parents contacted</th><th>Calls recorded *</th><th>Follow-ups due</th><th>Enrolled</th></tr></thead><tbody>'+
+  (d?.rows||[]).map(r=>'<tr><td><strong>'+esc(r.name)+'</strong></td><td>'+Number(r.assigned)+
+   '</td><td>'+Number(r.contacted)+'</td><td>'+Number(r.call_attempts)+'</td><td>'+Number(r.followups_due)+
+   '</td><td>'+Number(r.enrolled)+'</td></tr>').join('')+
+  (d&&!d.rows.length?'<tr><td colspan="6" class="sf-register-empty">No matching staff.</td></tr>':'')+'</tbody></table>';
+ }
+ const members=d?.staff||state.members.filter(m=>m.enabled!==false);
+ return pageHead('Admission Enquiry Register','Live admissions register with Google Sheets-style columns and complete school-scoped calling history.',
+  btn('↻ Refresh','register-refresh','small')+btn('⇩ Export Excel','register-export','primary'))+
+  '<div class="sf-register">'+
+  '<div class="sf-register-summary">'+
+  [['Enquiries',tot.enquiries],['Parents contacted',tot.contacted],['Follow-ups due',tot.followups_due],['Unassigned',tot.unassigned]].map(([title,value])=>
+   '<div><small>'+esc(title)+'</small><strong>'+Number(value??0)+'</strong></div>').join('')+'</div>'+
+  '<div class="sf-register-tabs" role="group" aria-label="Report type">'+tabs.map(([key,label])=>
+   '<button type="button" class="'+(view===key?'active':'')+'" data-action="register-view" data-view="'+key+
+   '" aria-pressed="'+(view===key?'true':'false')+'">'+esc(label)+'</button>').join('')+'</div>'+
+  '<div class="sf-register-presets" aria-label="Quick report filters">'+
+   [['all','All enquiries'],['unassigned','Unassigned'],['due','Follow-ups due'],['no-answer','No response'],['today','New today']].map(([key,label])=>
+   '<button type="button" data-action="register-preset" data-preset="'+key+'">'+esc(label)+'</button>').join('')+'</div>'+
+  '<form id="admissionRegisterFilters" class="sf-register-filters">'+
+  input('Enquiry from','from','date',f.from||'')+input('Enquiry to','to','date',f.to||'')+
+  input('Name, phone or remarks','search','search',f.search||'')+
+  input('Class','grade','text',f.grade||'')+
+  select('Assigned To','assigned','<option value="">All permitted staff</option>'+
+   (role()==='Counsellor'?'':'<option value="unassigned" '+(f.assigned==='unassigned'?'selected':'')+'>Unassigned</option>')+
+   members.map(m=>option(m.id,m.name,f.assigned||'')).join(''))+
+  select('Lead stage','status','<option value="">All stages</option>'+STAGES.map(v=>option(v,v,f.status||'')).join(''))+
+  select('Last call outcome','outcome','<option value="">All outcomes</option>'+
+   ['Pending','Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'].map(v=>option(v,v,f.outcome||'')).join(''))+
+  select('Follow-up','due','<option value="">Any schedule</option>'+
+   [['today','Today'],['overdue','Overdue'],['upcoming','Upcoming'],['unscheduled','Unscheduled']].map(([v,name])=>option(v,name,f.due||'')).join(''))+
+  '<div class="sf-register-filter-actions"><button type="submit" class="btn primary">Apply filters</button>'+
+   btn('Clear filters','register-clear','small')+'</div></form>'+
+  '<div class="sf-register-heading"><strong>'+esc(tabs.find(t=>t[0]===view)?.[1]||'Register')+'</strong>'+
+  '<small>'+Number(d?.total??0)+' matching rows · '+(d?.as_of?stamp(d.as_of):'Loading…')+
+  ' · '+(d?.scope==='assigned_only'?'Only your assigned enquiries':'Selected campus')+
+  ' · Automatic refresh: 60 seconds</small></div>'+
+  '<div class="sf-register-scroll" role="region" aria-label="Admission register records" tabindex="0">'+
+    (ext.registerLoading&&!d?'<div class="sf-register-wait" role="status">Loading school register…</div>':
+    !d?'<div class="sf-register-wait">Refresh to load the register.</div>':table)+'</div>'+
+  (d?'<div class="sf-register-pager"><span>Page '+Number(d.page)+' / '+Number(d.pages)+'</span>'+
+    '<div class="button-row"><button type="button" class="btn small" data-action="register-prev" '+(d.page<=1?'disabled':'')+'>Previous</button>'+
+    '<button type="button" class="btn small" data-action="register-next" '+(d.has_more?'':'disabled')+'>Next</button></div></div>':'')+
+  '<p class="sf-register-help">Report data is read-only and scoped to the selected school. Call remarks come from actual saved call entries and conversation notes. * Calls are counted by the employee who logged them when they are present in the assigned-staff group. Excel exports contain the full authorized filtered result and follow-up history, not just this page.</p></div>';
+}
+
 function reportsPage(){const total=ext.campaignReport?.totals?.enquiries??state.leads.length, enrolled=ext.campaignReport?.totals?.enrolled??state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
  return `${pageHead('Admissions reports','Live server-side campaign attribution for the selected campus. Other operational analytics follow.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<details class="audit-school sf-drawer-panel" data-panel="school-audit" ${ext.schoolAuditOpen?'open':''}><summary>School activity log · Admin only</summary><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Expand to load school activity history.</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></details>`:''}`;}
 
