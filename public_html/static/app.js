@@ -28,7 +28,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,enquirySettingsTab:'communication',detailTab:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -345,22 +345,63 @@ const PANEL_NAMES={
  family:'Parent & sibling profile',application:'Application progress',
  documents:'Admission document checklist',consent:'Messaging consent',audit:'Audit log'
 };
+const ENQUIRY_ACTION_NAMES={
+ call:['Call parent','Show the tap-to-call button'],
+ whatsapp:['WhatsApp','Allow opening a WhatsApp draft, subject to consent'],
+ email:['Email draft','Allow opening an email draft, subject to consent'],
+ api_whatsapp:['WhatsApp API send','Allow provider sends only when Meta integration and consent are ready'],
+ api_email:['Email API send','Allow provider sends only when email integration and consent are ready']
+};
+const ENQUIRY_TAB_NAMES={
+ followup:'Follow-up',admission:'Admission',family:'Family',history:'History',more:'More'
+};
 function enquiryInterfacePage(){
  if(!isAdmin())return pageHead('Enquiry interface','Administrator permission required');
- const config=ext.enquiryPanels?.sections||{};
- return pageHead('Enquiry interface','Set which detail sections are visible and expanded by default for this school.')+
- '<section class="panel sf-panel-admin"><form id="enquiryPanelsForm">'+
- '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. School staff can see the audit for enquiries they are already permitted to access unless you disable the section.</p>'+
- '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
- Object.entries(PANEL_NAMES).map(([key,label])=>{
-  const item=config[key]||{visible:true,expanded:key==='communication'};
-  return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
-   '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
-   '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
- }).join('')+
- '<div class="button-row" style="margin-top:20px">'+
- '<button type="submit" class="btn primary">Save enquiry interface</button></div></form></section>';
+ const sections=ext.enquiryPanels?.sections||{},actions=ext.enquiryPanels?.actions||{};
+ const tabs=ext.enquiryPanels?.tabs||{},prefs=ext.enquiryPanels?.preferences||{};
+ const current=ext.enquirySettingsTab||'communication';
+ const nav=[['communication','Communication'],['tabs','Drawer tabs'],['settings','Settings']];
+ const subnav='<nav class="sf-interface-tabs" role="tablist" aria-label="Enquiry interface configuration">'+
+   nav.map(([key,label])=>'<button type="button" id="sf-settings-tab-'+key+
+    '" role="tab" aria-controls="sf-settings-panel-'+key+'" data-action="enquiry-settings-tab" data-tab="'+key+
+    '" aria-selected="'+(current===key)+'" tabindex="'+(current===key?'0':'-1')+'" class="'+(current===key?'active':'')+'">'+esc(label)+'</button>').join('')+'</nav>';
+ const wrap=(key,body)=>'<section role="tabpanel" id="sf-settings-panel-'+key+
+  '" aria-labelledby="sf-settings-tab-'+key+'" data-settings-panel="'+key+'" '+(current===key?'':'hidden')+'>'+body+'</section>';
+ const actionContent='<div class="sf-setting-intro"><h3>Parent communication actions</h3>'+
+  '<p>Show or hide each communication button for this school. Sending also requires valid parent consent and the corresponding provider setup.</p></div>'+
+  Object.entries(ENQUIRY_ACTION_NAMES).map(([key,[label,description]])=>
+   '<label class="sf-interface-toggle"><span><strong>'+esc(label)+'</strong><small>'+esc(description)+'</small></span>'+
+   '<input type="checkbox" name="action_'+key+'" '+(actions[key]!==false?'checked':'')+' aria-label="Enable '+esc(label)+'"></label>').join('');
+ const tabContent='<div class="sf-setting-intro"><h3>Enquiry workspace tabs</h3>'+
+  '<p>Choose which tabs your school team sees. Keep at least one enabled; disabled tabs do not delete admission or audit data.</p></div>'+
+  Object.entries(ENQUIRY_TAB_NAMES).map(([key,label])=>
+   '<label class="sf-interface-toggle"><span><strong>'+esc(label)+'</strong><small>'+esc(key==='followup'?'Calling and follow-up tools':key==='admission'?'Enquiry stage, application and checklist':key==='family'?'Student, sibling and consent details':key==='history'?'Call, visit, note and stage activity':'Lead attribution and audit history')+'</small></span>'+
+   '<input type="checkbox" name="tab_'+key+'" '+(tabs[key]!==false?'checked':'')+' aria-label="Show '+esc(label)+' tab"></label>').join('');
+ const settingsContent='<div class="sf-setting-intro"><h3>Workspace behavior</h3>'+
+  '<p>Keep the drawer usable for counsellors while controlling visibility of advanced detail sections.</p></div>'+
+  select('Default opening tab','default_tab',Object.entries(ENQUIRY_TAB_NAMES).map(([key,label])=>
+   option(key,label,prefs.default_tab||'followup')).join(''))+
+  '<label class="sf-interface-toggle"><span><strong>Remember selected tab</strong><small>Keep the selected tab when moving between enquiries in the same session</small></span>'+
+   '<input type="checkbox" name="remember_tab" '+(prefs.remember_tab!==false?'checked':'')+'></label>'+
+  '<label class="sf-interface-toggle"><span><strong>Show admin Settings shortcut</strong><small>Only Admin staff can see the shortcut in an enquiry drawer</small></span>'+
+   '<input type="checkbox" name="admin_shortcut" '+(prefs.admin_shortcut!==false?'checked':'')+'></label>'+
+  '<h3 class="sf-setting-subtitle">Advanced section visibility</h3>'+
+  '<p class="muted-note">Existing section controls are preserved. Disabling a section hides its interface, not its historical records or audit logging.</p>'+
+  '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
+  Object.entries(PANEL_NAMES).map(([key,label])=>{
+   const item=sections[key]||{visible:true,expanded:key==='communication'};
+   return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
+    '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
+    '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
+  }).join('');
+ return pageHead('Enquiry interface','Manage communication buttons, workspace tabs and display preferences for the selected school.')+
+  '<section class="panel sf-panel-admin sf-interface-admin"><form id="enquiryPanelsForm">'+
+  '<p class="muted-note">Changes apply only to '+esc(school()?.name||'this school')+'. Permission checks, consent requirements and audit records remain enforced by the server.</p>'+
+  subnav+wrap('communication',actionContent)+wrap('tabs',tabContent)+wrap('settings',settingsContent)+
+  '<div class="sf-interface-save"><button type="submit" class="btn primary">Save enquiry interface</button></div>'+
+  '</form></section>';
 }
+
 function submissionSettingsModal(group){
  const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
  const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
