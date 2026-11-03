@@ -162,6 +162,14 @@ function sf_register_report(array $s,int $schoolId,int $uid,string $role,string 
     foreach($timeline as $event){
         if(!isset($selected[$event['lead_id']])||$event['type']!=='Call')continue;
         $actorKey=(string)$event['actor_id'];
+        if($role==='Counsellor' && (int)$event['actor_id']!==$uid)continue;
+        if(!isset($performance[$actorKey]) && isset($staffNames[(int)$event['actor_id']])){
+            $performance[$actorKey]=[
+                'user_id'=>(int)$event['actor_id'],
+                'name'=>$staffNames[(int)$event['actor_id']],
+                'assigned'=>0,'contacted'=>0,'enrolled'=>0,'followups_due'=>0,'call_attempts'=>0
+            ];
+        }
         if(isset($performance[$actorKey]))$performance[$actorKey]['call_attempts']++;
     }
     $rows=[];
