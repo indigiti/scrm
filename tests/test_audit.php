@@ -30,8 +30,8 @@ try {
     aud_assert(aud_call('POST',"/api/schools/1/leads/$id/notes",['text'=>'Private family note: DO NOT COPY INTO AUDIT'],$staff)[0]===201,'note created');
     [$code,$detail]=aud_call('GET',"/api/schools/1/leads/$id",[],$staff);
     aud_assert($code===200 && ($detail['audit']??null)===null,'enquiry detail does not eagerly transmit audit records');
-    aud_assert(aud_call('GET',"/api/schools/1/leads/$id/audit",[],$staff)[0]===403,
-      'staff cannot read administrator audit history');
+    aud_assert(aud_call('GET',"/api/schools/1/leads/$id/audit",[],$staff)[0]===200,
+      'assigned staff can access their own lead audit when the admin has not disabled it');
     [$auditCode,$audit]=aud_call('GET',"/api/schools/1/leads/$id/audit",[],$admin);
     aud_assert($auditCode===200&&count($audit['events'])>=6,'admin can load per-lead audit on demand');
     $actionNames=array_column($audit['events'],'action');
