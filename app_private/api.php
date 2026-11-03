@@ -1425,7 +1425,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'documents'=>sf_doc_list($s,$schoolId,$itemId),
                         'audit'=>null]];
                 }
-                if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                if ($sub==='audit' && $method==='GET') {sf_membership($s,$schoolId,$uid,['Admin']);return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];}
                 if ($sub==='view' && $method==='POST') {
                     sf_event($s,$schoolId,$itemId,$uid,'enquiry_viewed','Opened enquiry details');
                     return [200,['ok'=>true]];
