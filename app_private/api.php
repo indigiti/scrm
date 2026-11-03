@@ -87,6 +87,9 @@ function sf_find(array $rows, int $id): ?array {
     return null;
 }
 function sf_membership(array $s, int $schoolId, int $userId, array $roles = []): string {
+    $home=sf_staff_counsellor_school($s,$userId);
+    if($home!==null&&$home!==$schoolId)
+        sf_fail(403,'Counsellor access is restricted to their assigned school');
     foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['user_id'] === $userId) {
         if(!sf_staff_enabled($m) || !(sf_user($s,$userId)['active']??false))sf_fail(403,'This school account is disabled');
         if ($roles && !in_array($m['role'], $roles, true)) sf_fail(403, 'Your role does not permit this action');
@@ -303,7 +306,7 @@ function sf_validate_assignment(array $s, int $schoolId, mixed $id): ?int {
 }
 function sf_auto_owner(array $s, int $schoolId): ?int {
     $loads = [];
-    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false)) $loads[$m['user_id']] = 0;
+    foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['role'] === 'Counsellor' && sf_staff_enabled($m) && (sf_user($s,$m['user_id'])['active']??false) && sf_staff_counsellor_school($s,(int)$m['user_id'])===$schoolId) $loads[$m['user_id']] = 0;
     foreach ($s['leads'] as $lead) if ($lead['school_id'] === $schoolId && isset($loads[$lead['assigned_to'] ?? -1]) && !in_array($lead['status'], ['Enrolled','Lost'], true)) $loads[$lead['assigned_to']]++;
     if (!$loads) return null;
     asort($loads, SORT_NUMERIC);
@@ -315,7 +318,7 @@ function sf_assignment_owner(array &$s, int $schoolId): ?int {
     if ($policy === 'manual') return null;
     if ($policy !== 'round_robin') return sf_auto_owner($s,$schoolId);
     $people=[];
-    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor' && sf_staff_enabled($m)) {
+    foreach ($s['memberships'] as $m) if ($m['school_id']===$schoolId && $m['role']==='Counsellor' && sf_staff_enabled($m) && sf_staff_counsellor_school($s,(int)$m['user_id'])===$schoolId) {
         $user=sf_user($s,$m['user_id']);if ($user && $user['active']) $people[]=$user['id'];
     }
     sort($people,SORT_NUMERIC);
@@ -784,6 +787,14 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
+        if(preg_match('#^/api/schools/(\d+)/members/(link-candidates|link)$#D',$path,$staffLink)){
+            $sid=(int)$staffLink[1];
+            if($staffLink[2]==='link-candidates'&&$method==='GET')
+                return [200,sf_staff_link_candidates($s,$sid,$uid)];
+            if($staffLink[2]==='link'&&$method==='POST')
+                return [201,sf_staff_link_existing($s,$sid,$uid,$payload)];
+            sf_fail(405,'Staff assignment method not allowed');
+        }
         if(preg_match('#^/api/schools/(\d+)/members/(\d+)(?:/(reset-password))?$#D',$path,$staffMatch)){
             $sid=(int)$staffMatch[1];$target=(int)$staffMatch[2];
             if($method==='PATCH' && empty($staffMatch[3]))return [200,sf_staff_update($s,$sid,$uid,$target,$payload)];
@@ -853,6 +864,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         if ($path==='/api/me' && $method==='GET') {
             $schools=[];
             foreach ($s['memberships'] as $m) if ($m['user_id']===$uid && sf_staff_enabled($m)) {
+                $home=sf_staff_counsellor_school($s,$uid);
+                if($home!==null&&(int)$m['school_id']!==$home)continue;
                 $school=sf_find($s['schools'],$m['school_id']);
                 if ($school) $schools[]=['id'=>$school['id'],'name'=>$school['name'],'role'=>$m['role']];
             }
@@ -1260,7 +1273,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 $newRole=sf_text($payload,'role',30,3);
                 if(!in_array($newRole,SF_ROLES,true))sf_fail(422,'Invalid staff role');
                 foreach($s['users'] as $existing)if(strcasecmp($existing['email'],$email)===0)
-                    sf_fail(409,'Email already registered. Linking accounts across schools requires separate verification');
+                    sf_fail(409,'Email already registered. Use Assign existing staff to link an eligible account.');
                 $pass=sf_text($payload,'password',1024,12);
                 $new=['id'=>sf_id($s,'users'),'guid'=>sf_uuid(),'name'=>$name,'email'=>$email,
                     'password_hash'=>password_hash($pass,PASSWORD_DEFAULT),'active'=>true,'created_at'=>sf_time()];
