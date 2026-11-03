@@ -2,8 +2,8 @@
 'use strict';
 const root=document.getElementById('root');
 const APP_BASE=(window.SCHOOLFLOW_BASE_PATH||'/scrm').replace(/\/$/,'');
-const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Schools & Routing','Team','Import Enquiries','Seat Planning'];
-const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦'};
+const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Schools & Routing','Team','Import Enquiries','Seat Planning','Enquiry Interface'];
+const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦','Enquiry Interface':'⚙'};
 const STAGES=['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 
 const PHASES=['Enquiry','Engagement','Application','Admission','Exceptions'];
@@ -21,14 +21,14 @@ const NAV_SECTIONS=[
  ['LEAD CAPTURE',['Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads']],
  ['ENGAGEMENT',['Communications','Email Templates','Admissions AI','Automations']],
  ['INSIGHTS',['Reports']],
- ['ADMINISTRATION',['Schools & Routing','Team','Seat Planning','Import Enquiries']]
+ ['ADMINISTRATION',['Schools & Routing','Team','Enquiry Interface','Seat Planning','Import Enquiries']]
 ];
 
 const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,campaignReport:null,campaignFilters:{},detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -75,7 +75,8 @@ async function initialize(){
  if(!canSeePage(state.page))state.page='Dashboard';
  await reload();
  if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
- if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
+ if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();
+ if(state.page==='Reports')await loadCampaignReport();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
  if(!state.schoolId){render();return;}
@@ -83,10 +84,11 @@ async function reload(){
  [state.leads,state.sites,state.members,state.demo,state.audit]=await Promise.all([
    api(path+'/leads'),api(path+'/sites'),api(path+'/members'),
    isAdmin()?api(path+'/demo-data'):Promise.resolve(null),
-   isAdmin() && state.page==='Reports'?api(path+'/audit'):Promise.resolve(null)
+   Promise.resolve(null)
  ]);
  [ext.visits,ext.families,ext.templates,ext.analytics,ext.assignment,ext.messaging,ext.tasks,ext.applications,ext.workQueue]=await Promise.all([
    api(path+'/visits'),api(path+'/families'),api(path+'/templates'),api(path+'/analytics'),api(path+'/assignment'),api(path+'/communications'),api(path+'/tasks'),api(path+'/applications'),api(path+'/work-queue?limit=100')]);
+ ext.enquiryPanels=await api(path+'/enquiry-panels');
  if(isAdmin()){
   [ext.autoPolicy,ext.autoQueue,ext.followupPolicy,ext.seatPlans,ext.responseSla]=await Promise.all([api(path+'/automation'),api(path+'/automation/queue'),api(path+'/followup-policy'),api(path+'/seat-plans'),api(path+'/response-sla')]);
  }else{ext.autoPolicy={enabled:false};ext.autoQueue=[];}
@@ -102,12 +104,12 @@ function loginPage(){const isSetup=state.setup?.needs_setup;
  `<h2>Welcome back</h2><p>Sign in to your school admissions workspace.</p>${state.error?`<div class="error" role="alert">${esc(state.error)}</div>`:''}<form id="loginForm">${input('Work email','email','email','',true)}${input('Password','password','password','',true)}<button type="submit" class="btn primary full-btn">Sign in →</button></form>`;
  return `<div class="login-wrap"><div class="login-brand"><div class="logo" style="padding:0"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>Admissions CRM</small></div></div><div class="eyebrow" style="margin-top:48px">MULTI-SCHOOL ADMISSIONS PLATFORM</div><h1>Every school enquiry. One clear journey.</h1><p>Capture enquiries from WordPress and other websites, assign counsellors, schedule follow-ups and convert more families into admissions.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:23px"><span class="pill">Multiple schools</span><span class="pill">Private website APIs</span><span class="pill">Staff roles</span><span class="pill">Live shared records</span></div></div><div class="login-panel"><div class="hero-icon" style="height:55px;width:55px;margin-bottom:22px;color:#fff;background:linear-gradient(135deg,#787ae9,#5db2f5)">✦</div>${form}</div></div>`;
 }
-const NAV_SVG={"Dashboard":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"1\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"1\"/>","My Work":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h8M8 12h4m-4 4 2 2 4-4\"/>","Enquiries":"<path d=\"M5 21h14M7 17v-3a5 5 0 0 1 10 0v3M9 7a3 3 0 0 1 6 0\"/>","Chatbot Leads":"<rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"3\"/><path d=\"M12 3v4M8 13h.01M16 13h.01M8 17h8\"/>","Pipeline":"<rect x=\"2\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"9.5\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"17\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/>","Follow-ups":"<path d=\"M21 12a9 9 0 1 1-3-6.7M21 4v6h-6M12 7v5l3 2\"/>","Tasks":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8M14 9h3m-9 7 1.5 1.5L12 15m2 1h3\"/>","Websites & Forms":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18\"/>","Landing Pages":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 9h8M8 13h5M9 17h6\"/>","Popup Campaigns":"<path d=\"M3 11l15-6v14L3 13zM3 11v2M7 14l2 6h3l-2-5\"/>","Sign out":"<path d=\"M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6\"/>","Schools & Routing":"<path d=\"m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8\"/>","School Visits":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18M8 15h3m-3 3h3\"/>","Families":"<path d=\"M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 20v-2a4 4 0 0 0-3-3.9M16 4.2a3 3 0 0 1 0 5.6\"/>","Email Templates":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 7 9 7 9-7\"/>","Communications":"<path d=\"M21 11a8 8 0 0 1-8 8H8l-5 3v-6a8 8 0 1 1 18-5z\"/>","Automations":"<path d=\"m4 4 4 0 0 4M20 20h-4v-4M7 17a8 8 0 0 0 13-4M17 7A8 8 0 0 0 4 11M12 8v4l3 2\"/>","Team":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6M20 20v-2a5 5 0 0 0-3-4.6\"/>","Reports":"<path d=\"M4 20V10M10 20V4M16 20v-8M22 20v-5M2 20h21\"/>","Import Enquiries":"<path d=\"M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4\"/>","Seat Planning":"<path d=\"M4 21v-7m16 7v-7M4 18h16M6 14V7a3 3 0 0 1 6 0v7M12 14V7a3 3 0 0 1 6 0v7\"/>","Admissions AI":"<path d=\"m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z\"/>"};
+const NAV_SVG={"Dashboard":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"1\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"1\"/>","My Work":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h8M8 12h4m-4 4 2 2 4-4\"/>","Enquiries":"<path d=\"M5 21h14M7 17v-3a5 5 0 0 1 10 0v3M9 7a3 3 0 0 1 6 0\"/>","Chatbot Leads":"<rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"3\"/><path d=\"M12 3v4M8 13h.01M16 13h.01M8 17h8\"/>","Pipeline":"<rect x=\"2\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"9.5\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"17\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/>","Follow-ups":"<path d=\"M21 12a9 9 0 1 1-3-6.7M21 4v6h-6M12 7v5l3 2\"/>","Tasks":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8M14 9h3m-9 7 1.5 1.5L12 15m2 1h3\"/>","Websites & Forms":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18\"/>","Landing Pages":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 9h8M8 13h5M9 17h6\"/>","Popup Campaigns":"<path d=\"M3 11l15-6v14L3 13zM3 11v2M7 14l2 6h3l-2-5\"/>","Sign out":"<path d=\"M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6\"/>","Schools & Routing":"<path d=\"m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8\"/>","School Visits":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18M8 15h3m-3 3h3\"/>","Families":"<path d=\"M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 20v-2a4 4 0 0 0-3-3.9M16 4.2a3 3 0 0 1 0 5.6\"/>","Email Templates":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 7 9 7 9-7\"/>","Communications":"<path d=\"M21 11a8 8 0 0 1-8 8H8l-5 3v-6a8 8 0 1 1 18-5z\"/>","Automations":"<path d=\"m4 4 4 0 0 4M20 20h-4v-4M7 17a8 8 0 0 0 13-4M17 7A8 8 0 0 0 4 11M12 8v4l3 2\"/>","Team":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6M20 20v-2a5 5 0 0 0-3-4.6\"/>","Reports":"<path d=\"M4 20V10M10 20V4M16 20v-8M22 20v-5M2 20h21\"/>","Import Enquiries":"<path d=\"M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4\"/>","Seat Planning":"<path d=\"M4 21v-7m16 7v-7M4 18h16M6 14V7a3 3 0 0 1 6 0v7M12 14V7a3 3 0 0 1 6 0v7\"/>","Admissions AI":"<path d=\"m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z\"/>","Enquiry Interface":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/><path d=\"M8 9h8m-8 4h8m-8 4h5\"/>"};
 function navIcon(page){return `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_SVG[page]||NAV_SVG.Dashboard}</svg>`;}
 function canSeePage(p){
  return !((['Schools & Routing','Landing Pages','Popup Campaigns'].includes(p)&&!canManageSchools())||
   (['Automations','Seat Planning','Admissions AI'].includes(p)&&!isAdmin())||
-  (p==='Import Enquiries'&&!canImport()));
+  (p==='Import Enquiries'&&!canImport())||(p==='Enquiry Interface'&&!isAdmin()));
 }
 function nav(){
  const due=state.leads.filter(l=>l.followup_date&&l.followup_date<=day()&&!CLOSED_STAGES.includes(l.status)&&l.status!=='Admission Confirmed').length;
@@ -335,6 +337,51 @@ function popupSettingsModal(group){
 }
 
 
+
+const PANEL_NAMES={
+ attribution:'Lead attribution',communication:'Parent communication',
+ family:'Parent & sibling profile',application:'Application progress',
+ documents:'Admission document checklist',consent:'Messaging consent',audit:'Audit log'
+};
+function enquiryInterfacePage(){
+ if(!isAdmin())return pageHead('Enquiry interface','Administrator permission required');
+ const config=ext.enquiryPanels?.sections||{};
+ return pageHead('Enquiry interface','Set which detail sections are visible and expanded by default for this school.')+
+ '<section class="panel sf-panel-admin"><form id="enquiryPanelsForm">'+
+ '<p class="muted-note">These settings affect the selected school only. Hidden sections do not disable backend workflows, historical records or audit logging. School staff can see the audit for enquiries they are already permitted to access unless you disable the section.</p>'+
+ '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
+ Object.entries(PANEL_NAMES).map(([key,label])=>{
+  const item=config[key]||{visible:true,expanded:key==='communication'};
+  return '<div class="sf-panel-pref-row"><label for="panel-'+key+'">'+esc(label)+'</label>'+
+   '<input id="panel-'+key+'" aria-label="'+esc(label)+' visible" type="checkbox" name="visible_'+key+'" '+(item.visible?'checked':'')+'>'+
+   '<input aria-label="'+esc(label)+' expanded by default" type="checkbox" name="expanded_'+key+'" '+(item.expanded?'checked':'')+'></div>';
+ }).join('')+
+ '<div class="button-row" style="margin-top:20px">'+
+ '<button type="submit" class="btn primary">Save enquiry interface</button></div></form></section>';
+}
+function submissionSettingsModal(group){
+ const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
+ const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
+ return modalFrame('Submission & tracking · '+group.name,
+   'Approved same-website success redirects and privacy-safe tracking for lead forms.',
+   '<form id="submissionSettingsForm" data-id="'+Number(group.id)+'">'+
+   '<div class="form-field"><label>Approved thank-you URLs (one HTTPS URL per website origin)</label>'+
+   '<textarea name="thank_you_urls" rows="6" spellcheck="false" placeholder="https://school.example/thank-you/">'+
+   esc(links.join('\n'))+'</textarea>'+
+   '<small>Each destination must belong to the registered website or an approved additional form domain. Redirects never cross website origins.</small></div>'+
+   '<label class="sf-check-row"><input type="checkbox" name="inline_redirect" '+(settings.inline_redirect!==false?'checked':'')+'>'+
+   '<span><strong>Redirect short inline form after success</strong><small>Requires a matching approved thank-you URL. Otherwise keep the success message.</small></span></label>'+
+   '<label class="sf-check-row"><input type="checkbox" name="popup_redirect" '+(settings.popup_redirect?'checked':'')+'>'+
+   '<span><strong>Redirect short popup after success</strong><small>Default is to display confirmation in the popup.</small></span></label>'+
+   '<label class="sf-check-row"><input type="checkbox" name="detailed_redirect" '+(settings.detailed_redirect?'checked':'')+'>'+
+   '<span><strong>Use approved destination for detailed form</strong><small>When disabled, preserve the original detailed form redirect.</small></span></label>'+
+   '<div class="sf-help-panel"><strong>Required on every approved thank-you page</strong><p>Install this tracking snippet to create one GTM event only after an accepted form submission. No parent or student information is included.</p>'+
+   '<code class="sf-code-snippet">'+esc(code)+'</code>'+
+   '<p>Configure Google Ads and Meta Lead conversions inside your own GTM workspace using the <code>schoolflow_lead</code> custom event. Ad-platform connection and consent setup are separate.</p></div>'+
+   '<div class="button-row">'+btn('Cancel','close-modal')+
+   '<button type="submit" class="btn primary">Save submission settings</button></div></form>');
+}
+
 function landingPagesPage(){
  if(!canManageSchools())return pageHead('Landing page approvals','Administrator access required.');
  const groups=ext.groupSites||[];
@@ -353,7 +400,8 @@ function landingPagesPage(){
    (urls.length?'<div class="sf-approved-list">'+urls.map(u=>'<div><span aria-hidden="true">✓</span><code>'+esc(u)+'</code></div>').join('')+'</div>':
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
-   btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+   btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
   (!groups.length?'<div class="sf-management-card"><h3>No group forms connected</h3><p>Connect a group website from Schools & Routing first.</p>'+btn('Go to Schools & Routing','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -403,7 +451,7 @@ function routingPage(){
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
@@ -495,26 +543,70 @@ function importPage(){
  ${isAdmin()?`<button class="btn small" data-action="import-rollback" data-guid="${esc(result.batch_guid)}">Roll back this batch</button>`:''}</div>`:''}`;
 }
 
-function attributionReport(){
- const names={group_website:'Group website',individual_website:'Individual school website',chatbot:'AI chatbot',manual:'Manual enquiry',import:'Imported',other:'Other'};
- const bySource=new Map(),bySurface=new Map(),byPage=new Map(),byCampaign=new Map();
- const countInto=(map,key,lead)=>{const old=map.get(key)||{name:key,total:0,admitted:0,applied:0};old.total++;
-  if(lead.status==='Enrolled')old.admitted++;
-  if(['Applied','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled'].includes(lead.status))old.applied++;
-  map.set(key,old);};
- state.leads.forEach(l=>{countInto(bySource,names[l.source_type]||'Other',l);
-  countInto(bySurface,l.form_type||'unknown',l);
-  countInto(byPage,l.landing_page_version||'Unknown / other',l);
-  countInto(byCampaign,(l.utm_source||'Unattributed')+' · '+(l.utm_campaign||'No campaign'),l);});
- const section=(title,map)=>'<div class="panel" style="padding:20px"><h3>'+esc(title)+'</h3>'+
-  '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Channel</th><th>Leads</th><th>Applied*</th><th>Enrolled</th><th>Enrollment rate</th></tr></thead><tbody>'+
-  [...map.values()].sort((a,b)=>b.total-a.total).map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+row.total+'</td><td>'+row.applied+'</td><td>'+row.admitted+'</td><td>'+Math.round(100*row.admitted/Math.max(1,row.total))+'%</td></tr>').join('')+
-  '</tbody></table></div></div>';
- return '<section style="margin:20px 0"><h2>Lead attribution & conversion</h2><p class="muted-note">Counts are enquiries, not unique families. Applied* means currently at an application-or-later stage, not verified application submissions. Group routes and manually submitted API leads are identified from CRM source records; unknown historical form surfaces remain unknown.</p>'+
-  '<div class="two-cols">'+section('By origin',bySource)+section('By form surface',bySurface)+'</div><div style="margin-top:16px">'+section('By landing page version',byPage)+'</div><div style="margin-top:16px">'+section('By campaign',byCampaign)+'</div></section>';
+
+async function loadCampaignReport(){
+ if(!state.schoolId||!state.token)return;
+ const query=new URLSearchParams();
+ for(const [key,value] of Object.entries(ext.campaignFilters||{}))if(value)query.set(key,value);
+ const sid=state.schoolId;
+ const results=await api('/api/schools/'+sid+'/campaign-report'+(query.size?'?'+query.toString():''));
+ if(sid!==state.schoolId)return;
+ ext.campaignReport=results;render();
 }
-function reportsPage(){const total=state.leads.length, enrolled=state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
- return `${pageHead('Admissions reports','Source attribution and live funnel performance.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<section class="audit-school aria-label="School activity log"><div class="section-head"><div><h2>School activity log</h2><p>Admin-only history of important account, website and enquiry actions.</p></div></div><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Loading audit history…</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></section>`:''}`;}
+function attributionReport(){
+ const r=ext.campaignReport,filters=ext.campaignFilters||{};
+ const values=(key)=>[...(r?.by?.[key]||[]).map(x=>x.name),...(filters[key]?[filters[key]]:[])].filter((x,i,a)=>x!=='Unattributed'&&a.indexOf(x)===i).sort();
+ const choice=(key,label)=>select(label,key,'<option value="">All '+esc(label.toLowerCase())+'</option>'+
+  values(key).map(v=>option(v,v,filters[key]||'')).join(''));
+ const summary=r?.totals||{};
+ const table=(dimension,title)=>{
+  const rows=r?.by?.[dimension]||[];
+  return '<section class="panel sf-campaign-breakdown"><h3>'+esc(title)+'</h3>'+
+   '<div class="table-scroll"><table class="lead-table"><thead><tr><th>Value</th><th>Enquiries</th><th>Applied*</th><th>Confirmed*</th><th>Enrolled</th></tr></thead><tbody>'+
+    (rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+Number(x.enquiries)+'</td><td>'+Number(x.applied)+'</td><td>'+Number(x.confirmed)+'</td><td>'+Number(x.enrolled)+'</td></tr>').join('')||
+    '<tr><td colspan="5">No matching campaign data</td></tr>')+'</tbody></table></div></section>';
+ };
+ return '<section class="sf-campaign-report"><div class="section-head"><div><h2>Campaign performance</h2>'+
+  '<p>Server-side totals for this school, including older enquiries outside the inbox window. Updated '+esc(r?.as_of?auditStamp(r.as_of):'when refreshed')+'.</p></div>'+
+  '<div class="button-row">'+btn('↻ Refresh','refresh-campaign-report','small')+
+  btn('⇩ Campaign CSV','export-campaign-report','small')+'</div></div>'+
+  '<form id="campaignFilterForm" class="sf-campaign-filters">'+
+   input('From date','from','date',filters.from||'')+input('To date','to','date',filters.to||'')+
+   choice('utm_source','UTM source')+choice('utm_medium','UTM medium')+
+   choice('utm_campaign','UTM campaign')+choice('utm_content','UTM content')+
+   choice('utm_term','UTM term')+
+   select('Form surface','form_type','<option value="">All forms</option>'+
+    ['inline','popup','chat','api','manual','unknown'].map(v=>option(v,v,filters.form_type||'')).join(''))+
+   select('Current stage','status','<option value="">All stages</option>'+STAGES.map(v=>option(v,v,filters.status||'')).join(''))+
+   '<div class="button-row sf-filter-actions"><button type="submit" class="btn primary">Apply filters</button>'+
+   btn('Clear','clear-campaign-report','small')+'</div></form>'+
+  '<div class="sf-campaign-kpis">'+
+   stat('Enquiries',summary.enquiries??'—','Matching enquiry records','♧')+
+   stat('Applied or later',summary.applied_or_later??'—','Current stage only','▤')+
+   stat('Confirmed',summary.confirmed_or_enrolled??'—','Confirmed or enrolled','✓','green')+
+   stat('Enrolled',summary.enrolled??'—','Enrolled status','▣','blue')+
+   '</div>'+
+   '<p class="sf-report-disclaimer">Application and admission figures reflect current stage, not event-date conversions. Potential duplicates: '+Number(summary.potential_duplicates||0)+
+    '. Hot/Warm classified leads: '+Number(summary.hot_or_warm||0)+'. No ad spend or verified Google/Meta conversions are implied.</p>'+
+   table('utm_campaign','By UTM campaign')+
+   '<div class="two-cols">'+table('utm_source','By source')+table('utm_medium','By medium')+'</div>'+
+   '<details class="sf-campaign-additional"><summary>More attribution breakdowns · content, term, form and page</summary><div class="two-cols">'+
+   table('utm_content','By UTM content')+table('utm_term','By UTM term')+
+   table('form_type','By form surface')+table('landing_page_version','By landing version')+
+   '</div></details></section>';
+}
+function campaignCsvExport(){
+ const r=ext.campaignReport;if(!r)return toast('Refresh the campaign report first',true);
+ const headers=['Dimension','Value','Enquiries','Applied (current stage)','Confirmed (current stage)','Enrolled (current stage)'];
+ const rows=[headers,...Object.entries(r.by||{}).flatMap(([dimension,values])=>values.map(v=>[
+   dimension,v.name,v.enquiries,v.applied,v.confirmed,v.enrolled]))];
+ const csv='\ufeff'+rows.map(row=>row.map(val=>'"'+( /^[\s]*[=+\-@]/.test(String(val??''))?"'"+String(val??''):String(val??'')).replaceAll('"','""')+'"').join(',')).join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');link.href=url;link.download='schoolflow-campaign-'+state.schoolId+'-'+day()+'.csv';link.click();URL.revokeObjectURL(url);
+ toast('Aggregated campaign CSV exported');
+}
+function reportsPage(){const total=ext.campaignReport?.totals?.enquiries??state.leads.length, enrolled=ext.campaignReport?.totals?.enrolled??state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
+ return `${pageHead('Admissions reports','Live server-side campaign attribution for the selected campus. Other operational analytics follow.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<details class="audit-school sf-drawer-panel" data-panel="school-audit" ${ext.schoolAuditOpen?'open':''}><summary>School activity log · Admin only</summary><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Expand to load school activity history.</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></details>`:''}`;}
 
 function schoolVisits(){
  const v=ext.visits.filter(x=>!ext.visitMonth||x.starts_at.startsWith(ext.visitMonth));
@@ -592,6 +684,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
  if(state.modal==='new-group'||state.modal==='edit-group'){
@@ -615,9 +708,19 @@ function modal(){if(!state.modal)return '';
  if(state.modal==='new-school')return modalFrame('Add school workspace','Create another separate school with the current admin as its administrator.',`<form id="schoolForm">${input('New school name','name','text','',true)}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Create school</button></div></form>`);
  return '';
 }
+
+function drawerPanelStart(key,title){
+ const pref=ext.enquiryPanels?.sections?.[key]||{visible:true,expanded:key==='communication'};
+ const visible=pref.visible!==false;
+ const opened=ext.detailOpen[key]??!!pref.expanded;
+ return '<details class="sf-drawer-panel" data-panel="'+key+'" '+(visible?'':'hidden')+' '+
+  (opened?'open':'')+'><summary><span>'+esc(title)+'</span><span class="sf-panel-chevron" aria-hidden="true">⌄</span></summary>'+
+  '<div class="sf-drawer-panel-body">';
+}
+function drawerPanelEnd(){return '</div></details>';}
+
 function detailDrawer(){const d=state.detail;if(!d)return '';const l=d.lead;
- return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name)}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(l.source_name||'Manual entry')}</p></div><button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body"><div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="detail-jump" aria-label="Enquiry sections"><a href="#sf-contact">Contact</a><a href="#sf-admission">Admission</a><a href="#sf-history">History</a></nav><div class="detail-meta" id="sf-contact"><div><small>Guardian</small><strong>${esc(l.guardian)}</strong></div><div><small>Contact</small><strong>${esc(l.phone)}</strong></div><div><small>Email</small><strong>${esc(l.email||'Not provided')}</strong></div><div><small>Received</small><strong>${esc(l.created_at.slice(0,16).replace('T',' '))} UTC</strong></div>${l.duplicate_of?`<div style="grid-column:1/-1"><small>Potential duplicate</small><strong>Same contact as enquiry #${l.duplicate_of}</strong></div>`:''}${l.message?`<div style="grid-column:1/-1"><small>Message</small><strong>${esc(l.message)}</strong></div>`:''}</div><section class="panel" style="padding:16px;margin:14px 0">
- <h3 style="margin:0 0 10px">Lead attribution</h3>
+ return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name)}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(l.source_name||'Manual entry')}</p></div><button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body"><div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="detail-jump" aria-label="Enquiry sections"><a href="#sf-contact">Contact</a><a href="#sf-admission">Admission</a><a href="#sf-history">History</a></nav><div class="detail-meta" id="sf-contact"><div><small>Guardian</small><strong>${esc(l.guardian)}</strong></div><div><small>Contact</small><strong>${esc(l.phone)}</strong></div><div><small>Email</small><strong>${esc(l.email||'Not provided')}</strong></div><div><small>Received</small><strong>${esc(l.created_at.slice(0,16).replace('T',' '))} UTC</strong></div>${l.duplicate_of?`<div style="grid-column:1/-1"><small>Potential duplicate</small><strong>Same contact as enquiry #${l.duplicate_of}</strong></div>`:''}${l.message?`<div style="grid-column:1/-1"><small>Message</small><strong>${esc(l.message)}</strong></div>`:''}</div>${drawerPanelStart('attribution','Lead attribution')}<section class="panel" style="padding:16px;margin:14px 0">
  <div class="detail-meta"><div><small>Origin</small><strong>${esc((l.source_type||'other').replaceAll('_',' '))}</strong></div>
  <div><small>Form surface</small><strong>${esc(l.form_type||'unknown')} ${esc(l.form_variant||'')}</strong></div>
  <div><small>Source website</small><strong>${esc(l.source_name||'Manual entry')}</strong></div>
@@ -630,14 +733,14 @@ function detailDrawer(){const d=state.detail;if(!d)return '';const l=d.lead;
  <div><small>First touch</small><strong>${esc(l.first_touch?.source_type||'Not recorded')} ${esc(l.first_touch?.captured_at||'')}</strong></div>
  <div><small>Latest touch</small><strong>${esc(l.latest_touch?.source_type||'Not recorded')} ${esc(l.latest_touch?.captured_at||'')}</strong></div></div>
  <p class="muted-note">Historic source categories are inferred from saved routing; unavailable first-touch evidence is not reconstructed. Page and form labels can be client-reported and are not verified ad-platform conversions.</p>
- </section>${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${familyDetails(d)}${callVisitDetails(d)}<h3 class="section-title" id="sf-admission">Application progress</h3><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div><h3 class="section-title">Admission document checklist</h3>
+ </section>${drawerPanelEnd()}${drawerPanelStart('communication','Parent communication')}${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${drawerPanelEnd()}${drawerPanelStart('family','Parent & sibling profile')}${familyDetails(d)}${drawerPanelEnd()}${callVisitDetails(d)}${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
 <div class="page-card"><p class="muted-note">Record documents received or verified. No student document files are uploaded to this CRM.</p>
 ${(d.documents||[]).map(doc=>`<div class="doc-status-row"><strong>${esc(doc.type)}</strong><span>${esc(doc.status)}</span>
 ${doc.status==='Verified'&&role()==='Counsellor'?'':`<form class="documentStatusForm">
 <input type="hidden" name="type" value="${esc(doc.type)}">
 ${select('Status','status',['Pending','Received','Verified','Rejected'].filter(v=>v!=='Verified'||role()!=='Counsellor').map(v=>option(v,v,doc.status)).join(''))}
 ${input('Internal checklist note','note','text',doc.note||'')}
-<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div><h3 class="section-title">Parent messaging consent</h3><form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form><h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}<section class="drawer-audit" aria-label="Enquiry audit log"><h3 class="section-title">Audit log</h3><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${auditEntries(d.audit?.events||[])}${d.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section></div></div></div>`;
+<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div>${drawerPanelEnd()}${drawerPanelStart('consent','Parent messaging consent')}<form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form>${drawerPanelEnd()}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<button class="btn primary full-btn" type="submit">Save changes</button></form><h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}${drawerPanelStart('audit','Audit log')}<section class="drawer-audit" aria-label="Enquiry audit log"><p class="muted-note">Who changed or viewed this enquiry, with timestamps. Older history is retained.</p>${ext.detailAudit?.forLeadId===l.id?auditEntries(ext.detailAudit.events):'<p class="muted-note">Expand to load audit history.</p>'}${ext.detailAudit?.forLeadId===l.id&&ext.detailAudit.has_more?'<div class="audit-more"><button class="btn small" data-action="more-enquiry-audit">Load older activity</button></div>':''}</section>${drawerPanelEnd()}</div></div></div>`;
 }
 
 async function loadPublicChat(){
@@ -887,7 +990,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
@@ -1150,7 +1253,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
   if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';sessionStorage.setItem('schoolflow_last_page',state.page);state.search='';state.status='All';state.modal='';state.detail=null;
-   if(state.page==='Reports' && isAdmin()){state.audit=null;perform(async()=>{state.audit=await api(`/api/schools/${state.schoolId}/audit`);render();});}
+   if(state.page==='Reports'){ext.campaignReport=null;perform(loadCampaignReport);}
+   if(state.page==='Reports' && isAdmin()){state.audit=null;ext.schoolAuditOpen=false;}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
    const parent=NAV_SECTIONS.find(([,pages])=>pages.includes(state.page));
@@ -1163,6 +1267,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';sessionStorage.setItem('schoolflow_last_page',state.page);
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
+ }
+ if(action==='edit-submission-settings'){
+  if(!canManageSchools())return;
+  ext.editGroupId=Number(el.dataset.id);state.modal='submission-settings';render();return;
  }
  if(action==='edit-landing-pages'){
    if(!canManageSchools())return;
@@ -1217,8 +1325,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });return;
  }
  if(['new-lead','new-site','new-member','new-school'].includes(action)){state.modal=action;state.detail=null;render();return;}
- if(action==='open-task-lead'){perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
- if(action==='view-lead'){perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
+ if(action==='open-task-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
+ if(action==='view-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
    await api(url+'/view','POST',{});state.detail=await api(url);render();});return;}
  if(action==='done-followup'){perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`,'PATCH',{followup_date:''});await reload();toast('Follow-up marked complete');});return;}
  if(action==='preview-web-stage-reset'){
@@ -1241,11 +1349,14 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const next=await api(`/api/schools/${state.schoolId}/audit?before=${state.audit.next_before}`);
    state.audit={events:[...state.audit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
- if(action==='more-enquiry-audit' && state.detail?.audit?.next_before){perform(async()=>{
+ if(action==='more-enquiry-audit' && ext.detailAudit?.next_before && state.detail){perform(async()=>{
    const leadId=state.detail.lead.id;
-   const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${state.detail.audit.next_before}`);
-   state.detail.audit={events:[...state.detail.audit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
+   const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${ext.detailAudit.next_before}`);
+   ext.detailAudit={forLeadId:leadId,events:[...ext.detailAudit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
+ if(action==='refresh-campaign-report'){perform(loadCampaignReport);return;}
+ if(action==='clear-campaign-report'){ext.campaignFilters={};perform(loadCampaignReport);return;}
+ if(action==='export-campaign-report'){campaignCsvExport();return;}
  if(action==='export-xlsx'){perform(xlsxExport);return;}
  if(action==='export-csv'){perform(csvExport);return;}
  if(action==='dismiss-key'){state.key='';render();return;}
@@ -1302,6 +1413,28 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='edit-template'){state.modal='edit-template';state.editTemplateId=Number(el.dataset.id);render();return;}
  if(action==='logout'){perform(async()=>{try{await api('/api/auth/logout','POST');}catch{}ext.resetResult=null;state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();});return;}
 });
+root.addEventListener('toggle',e=>{
+ const details=e.target;
+ if(!details.matches?.('details[data-panel]'))return;
+ if(details.dataset.panel==='school-audit'){
+  ext.schoolAuditOpen=details.open;
+  if(details.open&&isAdmin()&&!state.audit)perform(async()=>{
+   state.audit=await api('/api/schools/'+state.schoolId+'/audit');
+   render();
+  });
+  return;
+ }
+ if(!state.detail)return;
+ const key=details.dataset.panel;ext.detailOpen[key]=details.open;
+ if(key==='audit'&&details.open&&ext.enquiryPanels?.sections?.audit?.visible!==false&&ext.detailAudit?.forLeadId!==state.detail.lead.id){
+  const id=state.detail.lead.id;
+  perform(async()=>{
+   const audit=await api('/api/schools/'+state.schoolId+'/leads/'+id+'/audit');
+   if(state.detail?.lead?.id!==id)return;
+   ext.detailAudit={...audit,forLeadId:id};render();
+  });
+ }
+},true);
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
  if(e.target.id==='schoolSelect'){ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
@@ -1474,6 +1607,36 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
  if(f.id==='templateForm'){perform(async()=>{const edit=state.modal==='edit-template';await api(`/api/schools/${state.schoolId}/templates${edit?'/'+state.editTemplateId:''}`,edit?'PATCH':'POST',fd);state.modal='';await reload();toast('Email template saved');});return;}
  if(f.id==='leadForm'){perform(async()=>{let body={...fd,consent:fd.consent==='true',site_id:fd.site_id?Number(fd.site_id):null,assigned_to:fd.assigned_to?Number(fd.assigned_to):null};if(!body.site_id)delete body.site_id;if(!body.assigned_to)delete body.assigned_to;let newLead=await api(`/api/schools/${state.schoolId}/leads`,'POST',body);state.modal='';await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${newLead.id}`);render();toast('Enquiry saved');});return;}
+ if(f.id==='campaignFilterForm'){
+  const names=['from','to','utm_source','utm_medium','utm_campaign','utm_content','utm_term','form_type','status'];
+  ext.campaignFilters=Object.fromEntries(names.map(k=>[k,String(fd[k]||'').trim()]));
+  perform(loadCampaignReport);return;
+ }
+ if(f.id==='submissionSettingsForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const links=String(fd.thank_you_urls||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  perform(async()=>{
+   const settings=await api('/api/group-sites/'+id+'/submission-settings','PATCH',{
+    thank_you_urls:links,inline_redirect:!!f.elements.inline_redirect.checked,
+    popup_redirect:!!f.elements.popup_redirect.checked,
+    detailed_redirect:!!f.elements.detailed_redirect.checked
+   });
+   const group=ext.groupSites.find(g=>g.id===id);if(group)group.submission_settings=settings;
+   state.modal='';render();toast('Approved submission and conversion settings saved');
+  });return;
+ }
+ if(f.id==='enquiryPanelsForm'){
+  if(!isAdmin())return;
+  const sections={};
+  Object.keys(PANEL_NAMES).forEach(key=>{sections[key]={
+   visible:!!f.elements['visible_'+key]?.checked,expanded:!!f.elements['expanded_'+key]?.checked
+  };});
+  perform(async()=>{
+   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{sections});
+   render();toast('Enquiry panel display updated for this school');
+  });return;
+ }
  if(f.id==='landingPagesForm'){
   if(!canManageSchools())return;
   const id=Number(f.dataset.id);
@@ -1578,4 +1741,8 @@ document.addEventListener('keydown',e=>{
  else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus();}
 });
 initialize();
+if(typeof setInterval==='function')setInterval(function(){
+ if(state.token&&state.me&&state.page==='Reports'&&document.visibilityState==='visible'&&!state.modal)
+  loadCampaignReport().catch(function(){/* next explicit refresh can retry */});
+},60000);
 })();

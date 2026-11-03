@@ -31,7 +31,9 @@ async function runCase(config,options={}){
  };
  const ctx={
   document,window:{__schoolflowAdmissionsChatMounted:!!options.mounted},
-  URL,console,
+  URL,URLSearchParams,console,
+  location:{href:'https://school.example/admissions?utm_source=test',origin:'https://school.example',pathname:'/admissions',search:'?utm_source=test'},
+  sessionStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},
   fetch:async (url,settings)=>{
    requests.push({url,settings});
    if(options.failure)throw new Error('CRM offline');

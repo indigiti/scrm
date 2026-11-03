@@ -13,15 +13,23 @@ const data={
   utm_source:'google',utm_campaign:'nursery-pune',site_id:1,created_at:'2026-10-30T10:00:00Z'}],'/api/schools/1/sites':[],'/api/schools/1/members':[],
  '/api/schools/1/demo-data':{leads:0,sites:0,has_demo_data:false},'/api/schools/1/visits':[],'/api/schools/1/tasks':[],'/api/schools/1/automation':{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},'/api/schools/1/automation/queue':[],'/api/schools/1/work-queue?limit=100':{items:[],summary:{},total:0},'/api/schools/1/public-chat/quality':{topics:[],groups_needing_review:0,observed_questions:0},'/api/schools/1/followup-policy':{retry_days:[1,2,4]},'/api/schools/1/seat-plans':[],'/api/schools/1/response-sla':{first_contact_minutes:120},'/api/schools/1/applications':[],
  '/api/schools/1/families':[],'/api/schools/1/templates':[],'/api/schools/1/analytics':{},'/api/schools/1/assignment':{mode:'least_loaded'},
+ '/api/schools/1/enquiry-panels':{sections:{
+ attribution:{visible:true,expanded:false},communication:{visible:true,expanded:true},
+ family:{visible:true,expanded:false},application:{visible:true,expanded:false},
+ documents:{visible:true,expanded:false},consent:{visible:true,expanded:false},
+ audit:{visible:true,expanded:false}},audit_admin_only:true},
  '/api/schools/1/communications':{email:{provider:'off',connected:false},whatsapp:{provider:'off',connected:false}},
  '/api/schools/overview':schools.map(s=>({id:s.id,name:s.name,leads:0,new_leads:0,unassigned:0,sites:[],assignment_mode:'least_loaded'})),
  '/api/schools/1/members/link-candidates':[{id:12,name:'Admissions Colleague',email:'admissions@example.org',source_schools:['ABC Baner'],can_link_counsellor:false,can_link_admissions:true}],
+ '/api/schools/1/campaign-report':{totals:{enquiries:1,applied_or_later:0,confirmed_or_enrolled:0,enrolled:0,potential_duplicates:0,hot_or_warm:0},
+  as_of:'2026-11-03T07:00:00+00:00',by:{utm_campaign:[{name:'nursery-pune',enquiries:1,applied:0,confirmed:0,enrolled:0}],utm_source:[{name:'google',enquiries:1,applied:0,confirmed:0,enrolled:0}]},
+  filters:{},school_id:1},
  '/api/group-sites':routes,
 };
 const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
  fetch:async path=>{const route=path.replace('/scrm','');if(!(route in data))throw Error('Unexpected API '+route);return {status:200,ok:true,json:async()=>data[route]};},
- setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
+ setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},URLSearchParams,window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
 vm.runInNewContext(js,ctx);
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
@@ -43,8 +51,8 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/group website/);assert.match(html,/inline/);assert.match(html,/v2/);
  handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Reports'}})}});
  await sleep(120);
- assert.match(html,/Lead attribution & conversion/);
- assert.match(html,/By origin/);assert.match(html,/By campaign/);
+ assert.match(html,/Campaign performance/);
+ assert.match(html,/By source/);assert.match(html,/By UTM campaign/);
  assert.match(html,/nursery-pune/);
 
  handlers.click({target:{closest:()=>({dataset:{action:'toggle-nav-group',group:'LEAD CAPTURE'}})}});

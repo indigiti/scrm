@@ -5,6 +5,7 @@ require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/popup_settings.php';
 require_once __DIR__ . '/landing_pages.php';
+require_once __DIR__ . '/marketing_controls.php';
 require_once __DIR__ . '/public_chat_knowledge.php';
 require_once __DIR__ . '/public_chat_callback.php';
 require_once __DIR__ . '/public_chat_session.php';
@@ -153,6 +154,7 @@ function sf_group_public_view(array $s, array $group): array {
     return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'popup_settings'=>sf_popup_settings($group),
         'landing_pages'=>sf_landing_settings($group),
+        'submission_settings'=>sf_submission_settings($group),
         'schools'=>array_map(static fn($r)=>['code'=>$r['code'],'school_id'=>$r['school_id'],
             'name'=>(sf_find($s['schools'],(int)$r['school_id'])['name']??'Unknown school')], $group['routes'])];
 }
@@ -393,7 +395,14 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         'academic_year'=>sf_text($p,'academic_year',7),'assigned_to'=>$assigned,'followup_date'=>sf_date($p['followup_date'] ?? null),
         'consent'=>!empty($p['consent']) ? 1:0,'duplicate_of'=>$duplicate,'created_at'=>sf_time(),'updated_at'=>sf_time()];
     $lead['first_touch']=sf_lead_touch($lead,$sourceType,$formType,$formVariant);
-    $lead['latest_touch']=$lead['first_touch'];
+    $clientFirst=sf_marketing_first_touch($p);
+    if($clientFirst!==null && ($clientFirst['utm_source']!==''||$clientFirst['utm_campaign']!==''||
+        $clientFirst['referrer']!==''||$clientFirst['landing_page']!=='')){
+        foreach($clientFirst as $field=>$value)$lead['first_touch'][$field]=$value;
+        $lead['first_touch']['client_reported']=true;
+        $lead['first_touch']['captured_at']=''; // arrival timestamp is not verifiable from an untrusted browser
+    }
+    $lead['latest_touch']=sf_lead_touch($lead,$sourceType,$formType,$formVariant);
     if($duplicate!==null){
         foreach($s['leads'] as $previous)if($previous['id']===$duplicate && $previous['school_id']===$schoolId){
             // Carry forward recorded first-touch evidence without rewriting the earlier enquiry.
@@ -787,7 +796,24 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
-        if(preg_match('#^/api/schools/(\d+)/members/(link-candidates|link)$#D',$path,$staffLink)){
+        if(preg_match('#^/api/schools/(\d+)/campaign-report$#D',$path,$campaignMatch)){
+            if($method!=='GET')sf_fail(405,'Unsupported campaign report method');
+            $sid=(int)$campaignMatch[1];$schoolRole=sf_membership($s,$sid,$uid);
+            return [200,sf_campaign_report($s,$sid,$uid,$schoolRole,$uri)];
+        }
+        if(preg_match('#^/api/schools/(\d+)/enquiry-panels$#D',$path,$panelMatch)){
+            $sid=(int)$panelMatch[1];$schoolRole=sf_membership($s,$sid,$uid);
+            if($method==='GET')return [200,sf_enquiry_panel_settings($s,$sid,$schoolRole)];
+            if($method==='PATCH'){
+                sf_membership($s,$sid,$uid,['Admin']);
+                $settings=sf_enquiry_panel_validate($payload);
+                $s['enquiry_panels'][(string)$sid]=$settings;
+                sf_event($s,$sid,null,$uid,'enquiry_panels_updated','Enquiry panel visibility and defaults updated');
+                return [200,sf_enquiry_panel_settings($s,$sid,'Admin')];
+            }
+            sf_fail(405,'Unsupported enquiry panel operation');
+        }
+        if(preg_match('#^/api/schools/(\\d+)/members/(link-candidates|link)$#D',$path,$staffLink)){
             $sid=(int)$staffLink[1];
             if($staffLink[2]==='link-candidates'&&$method==='GET')
                 return [200,sf_staff_link_candidates($s,$sid,$uid)];
@@ -873,7 +899,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -922,6 +948,21 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,$settings];
                 }
                 sf_fail(405,'Unsupported landing-page settings operation');
+            }
+            if($operation==='submission-settings'){
+                foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if($method==='GET')return [200,sf_submission_settings($group)];
+                if($method==='PATCH'){
+                    $settings=sf_submission_validate($payload,$group);
+                    foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                        $row['submission_settings']=$settings;break;
+                    }
+                    unset($row);
+                    foreach($group['routes'] as $route)sf_event($s,(int)$route['school_id'],null,$uid,
+                        'submission_settings_updated','Conversion destinations updated for group #'.$groupId);
+                    return [200,$settings];
+                }
+                sf_fail(405,'Unsupported submission settings method');
             }
             if($operation==='popup-settings') {
                 // Ownership alone is insufficient after membership changes. Every
@@ -1382,9 +1423,16 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'activities'=>array_slice($activities,0,100),
                         'stage_history'=>array_values(array_filter($s['stage_history']??[],fn($h)=>$h['school_id']===$schoolId&&$h['lead_id']===$itemId)),
                         'documents'=>sf_doc_list($s,$schoolId,$itemId),
-                        'audit'=>sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))]];
+                        'audit'=>null]];
                 }
-                if ($sub==='audit' && $method==='GET') return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                if ($sub==='audit' && $method==='GET') {
+                    // sf_lead_allowed has already enforced this user's school and
+                    // specific enquiry permissions, including counsellor assignment.
+                    $panelSettings=sf_enquiry_panel_settings($s,$schoolId,$role);
+                    if($role!=='Admin' && !$panelSettings['sections']['audit']['visible'])
+                        sf_fail(403,'Audit section disabled for school staff');
+                    return [200,sf_audit_page($s,$schoolId,$itemId,sf_audit_cursor($uri))];
+                }
                 if ($sub==='view' && $method==='POST') {
                     sf_event($s,$schoolId,$itemId,$uid,'enquiry_viewed','Opened enquiry details');
                     return [200,['ok'=>true]];

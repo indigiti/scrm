@@ -46,7 +46,8 @@ function fixture(opts={}){
   dispatchEvent(event){(listeners[event.type]||[]).forEach(fn=>fn(event));}
  };
  const context={
-  document,window:{},URL,console,
+  document,window:{},URL,URLSearchParams,console,
+  location:{href:'https://school.example/admissions',origin:'https://school.example',pathname:'/admissions',search:''},
   sessionStorage:{getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)},
   Option:function(label,value){return {label,value};},
   Date:class extends Date{static now(){return now;}},

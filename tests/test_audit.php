@@ -29,12 +29,16 @@ try {
     aud_assert(aud_call('POST',"/api/schools/1/leads/$id/view",[],$staff)[0]===200,'assigned staff can view');
     aud_assert(aud_call('POST',"/api/schools/1/leads/$id/notes",['text'=>'Private family note: DO NOT COPY INTO AUDIT'],$staff)[0]===201,'note created');
     [$code,$detail]=aud_call('GET',"/api/schools/1/leads/$id",[],$staff);
-    aud_assert($code===200 && count($detail['audit']['events'])>=6,'per-lead audit returned in detail');
-    $actionNames=array_column($detail['audit']['events'],'action');
+    aud_assert($code===200 && ($detail['audit']??null)===null,'enquiry detail does not eagerly transmit audit records');
+    aud_assert(aud_call('GET',"/api/schools/1/leads/$id/audit",[],$staff)[0]===200,
+      'assigned staff can access their own lead audit when the admin has not disabled it');
+    [$auditCode,$audit]=aud_call('GET',"/api/schools/1/leads/$id/audit",[],$admin);
+    aud_assert($auditCode===200&&count($audit['events'])>=6,'admin can load per-lead audit on demand');
+    $actionNames=array_column($audit['events'],'action');
     foreach (['manual_create','enquiry_viewed','update_status','update_assigned_to','update_followup_date','note'] as $action) {
        aud_assert(in_array($action,$actionNames,true),'recorded '.$action);
     }
-    aud_assert(!str_contains(json_encode($detail['audit']), 'DO NOT COPY INTO AUDIT'),'notes are masked in audit (full note stays in conversation history)');
+    aud_assert(!str_contains(json_encode($audit), 'DO NOT COPY INTO AUDIT'),'notes are masked in audit (full note stays in conversation history)');
     aud_assert(count(array_filter($detail['activities'],fn($a)=>$a['action']==='note'))===1,'note content retained in activity');
     aud_assert(aud_call('GET','/api/schools/1/audit',[],$staff)[0]===403,'schoolwide audit restricted to admin');
     aud_assert(aud_call('GET','/api/schools/1/audit',[],$other)[0]===403,'schoolwide audit isolated');

@@ -11,6 +11,21 @@ window.__schoolflowLexiconFormLoaded=true;
 var url=new URL(loader.src),base=url.href.replace(/\/static\/lexicon-form\.js(?:\?.*)?$/,'');
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
 var thankYou=loader.dataset.thankYou||'https://lexiconedu.in/thank-you/';
+var submissionSettings=null;
+var firstTouchKey='schoolflow_first_touch_'+guid;
+function firstTouch(){
+ try{var saved=JSON.parse(sessionStorage.getItem(firstTouchKey)||'null');
+  if(saved&&saved.value&&Date.now()-saved.time<86400000)return saved.value;}catch(e){}
+ var q=new URLSearchParams(location.search);
+ var touch={landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
+    referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),
+  utm_source:(q.get('utm_source')||'').slice(0,140),utm_medium:(q.get('utm_medium')||'').slice(0,140),
+  utm_campaign:(q.get('utm_campaign')||'').slice(0,140),utm_term:(q.get('utm_term')||'').slice(0,140),
+  utm_content:(q.get('utm_content')||'').slice(0,140)};
+ try{sessionStorage.setItem(firstTouchKey,JSON.stringify({time:Date.now(),value:touch}));}catch(e){}
+ return touch;
+}
+firstTouch();
 var logo=loader.dataset.logo||'https://lexiconedu.in/wp-content/uploads/2025/10/The-Lexicon-Schools-Logo.png';
 var css=document.createElement('link');css.rel='stylesheet';css.href=base+'/static/lexicon-form.css?v='+encodeURIComponent(loader.getAttribute('data-schoolflow-form-css-version')||'1');document.head.appendChild(css);
 
@@ -169,6 +184,7 @@ function init(){
   var selected=campus.value;campus.disabled=true;
   campus.replaceChildren(campusPlaceholder('Loading campuses...'));
   return get('/config').then(function(data){
+   submissionSettings=data.submission_settings||null;
    campus.replaceChildren(campusPlaceholder('Select Campus'));
    var seen=new Set();
    (Array.isArray(data.schools)?data.schools:[]).forEach(function(item){
@@ -257,16 +273,30 @@ function init(){
    student_name:value('lf_name'),parent_name:value('lf_parent'),email:value('lf_email'),phone:tel,
    pincode:value('lf_pincode'),state:value('lf_state'),city:value('lf_city'),grade:value('lf_class'),
    school_code:campus.value,consent:true,captcha_token:token,captcha_answer:value('lf_captcha'),
-   website:value('lf_website'),landing_page:location.href.slice(0,500),referrer:document.referrer.slice(0,500),
+   website:value('lf_website'),landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
+    referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),first_touch_data:firstTouch(),
    utm_source:params.get('utm_source')||'',utm_medium:params.get('utm_medium')||'',
    utm_campaign:params.get('utm_campaign')||'',utm_term:params.get('utm_term')||'',
    utm_content:params.get('utm_content')||''
   };
   blocked=true;submit.disabled=true;submit.textContent='Submitting...';feedback('');
   try{
-   await fetch(api+'/enquiries',{method:'POST',credentials:'omit',cache:'no-store',
+   var saved=await fetch(api+'/enquiries',{method:'POST',credentials:'omit',cache:'no-store',
     headers:{'Content-Type':'application/json','Idempotency-Key':attemptId},body:JSON.stringify(data)}).then(decode);
-   remember();attemptId='';feedback('Enquiry submitted successfully.',true);window.location.assign(thankYou);
+   remember();
+   var destination=thankYou;
+   if(submissionSettings&&submissionSettings.detailed_redirect&&submissionSettings.thank_you_url)
+    destination=submissionSettings.thank_you_url;
+   if(!saved.duplicate_submission && submissionSettings&&submissionSettings.detailed_redirect){
+    try{var approved=new URL(destination);
+     if(approved.origin===location.origin&&approved.protocol==='https:'){
+      sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
+       time:Date.now(),event_id:saved.guid||attemptId,form_surface:'detailed',school_code:campus.value
+      }));
+     }
+    }catch(e){}
+   }
+   attemptId='';feedback('Enquiry submitted successfully.',true);window.location.assign(destination);
   }catch(error){feedback(error.message||'Submission failed. Please try again.');resetCaptcha();}
   finally{blocked=false;submit.disabled=false;submit.textContent='SUBMIT';}
  });
