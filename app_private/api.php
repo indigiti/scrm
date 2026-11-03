@@ -626,6 +626,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
+    if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions-register\.csv$#iD',$path,$registerCsv))
+        return [200,sf_export_register_csv($store,(string)($headers['authorization']??''),$registerCsv[1],$payload)];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/(preview|commit)$#iD',$path,$importMatch))
         return sf_import_process($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2],$payload);
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/([a-f0-9-]{36})/rollback$#iD',$path,$importMatch))
