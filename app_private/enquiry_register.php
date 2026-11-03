@@ -36,7 +36,7 @@ function sf_register_filters(string $uri):array {
     if($assigned!==''&&$assigned!=='unassigned'&&!preg_match('/^[1-9][0-9]*$/D',$assigned))
         sf_fail(422,'Invalid staff filter');
     $due=$raw['due']??'';
-    if(!in_array($due,['','today','overdue','upcoming','unscheduled'],true))sf_fail(422,'Invalid follow-up filter');
+    if(!in_array($due,['','due','today','overdue','upcoming','unscheduled'],true))sf_fail(422,'Invalid follow-up filter');
     $sort=$raw['sort']??'created';
     if(!in_array($sort,['created','name','assigned','latest','followup'],true))sf_fail(422,'Invalid report sort');
     $direction=$raw['direction']??'desc';
@@ -118,6 +118,7 @@ function sf_register_report(array $s,int $schoolId,int $uid,string $role,string 
         $outcome=$lastCall[$id]['outcome']??'Pending';
         if($f['outcome']!==''&&$f['outcome']!==$outcome)continue;
         $due=(string)($lead['followup_date']??'');
+        if($f['due']==='due'&&($due===''||$due>$today))continue;
         if($f['due']==='today'&&$due!==$today)continue;
         if($f['due']==='overdue'&&($due===''||$due>=$today))continue;
         if($f['due']==='upcoming'&&($due===''||$due<=$today))continue;
