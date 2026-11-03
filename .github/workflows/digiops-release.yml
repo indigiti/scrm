@@ -51,6 +51,7 @@ jobs:
           php tests/test_admissions_post_audit.php
           php tests/test_admissions_schedule_revision.php
           php tests/test_admissions_export_xlsx.php
+          php tests/test_admission_register.php
           php tests/test_historical_import.php
           php tests/test_admissions_operations.php
           php tests/test_staff_management.php
