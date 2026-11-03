@@ -543,3 +543,49 @@ body{background:#f4f7fb;color:#182b43}
  .sf-drawer-panel-body{padding:10px}
 }
 @media(prefers-reduced-motion:reduce){.sf-panel-chevron{transition:none}}
+
+
+/* Admissions register: dense desktop spreadsheet, responsive secure read-only view. */
+.sf-register{background:#fff;border:1px solid #e0e8f2;border-radius:18px;padding:20px;box-shadow:0 8px 27px #223c5c0b;min-width:0}
+.sf-register-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:19px}
+.sf-register-summary>div{padding:16px 18px;border:1px solid #e5edf6;border-radius:13px;background:linear-gradient(140deg,#f9fbff,#f0f6ff)}
+.sf-register-summary small{color:#68809a;font-size:11px;font-weight:650;display:block;margin-bottom:6px}
+.sf-register-summary strong{font-size:27px;color:#173961;font-weight:850}
+.sf-register-tabs{display:flex;flex-wrap:wrap;gap:5px;padding:4px;background:#f1f5fa;border-radius:12px;margin-bottom:13px}
+.sf-register-tabs button{font:inherit;font-size:12px;font-weight:750;cursor:pointer;border:0;color:#56708e;border-radius:9px;background:none;padding:11px 14px}
+.sf-register-tabs button.active{background:white;color:#245fac;box-shadow:0 1px 6px #1b36591a}
+.sf-register-presets{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 16px}
+.sf-register-presets button{background:#f7faff;border:1px solid #dce7f6;color:#345b86;border-radius:30px;padding:6px 12px;font:inherit;font-size:11px;font-weight:750;cursor:pointer}
+.sf-register-presets button:hover{background:#e9f2ff}
+.sf-register-filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px 13px;padding:17px;background:#f7faff;border:1px solid #e5edf7;border-radius:14px;margin-bottom:17px}
+.sf-register-filters .form-field{margin:0;min-width:0}
+.sf-register-filters .form-field label{font-size:11px;color:#607896}
+.sf-register-filters input,.sf-register-filters select{min-height:40px;padding:8px 10px;margin-top:6px;width:100%;max-width:100%;border:1px solid #dbe5f2;border-radius:9px;background:#fff}
+.sf-register-filter-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+.sf-register-filter-actions .btn{min-height:39px}
+.sf-register-heading{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.sf-register-heading strong{color:#223c5a;font-size:15px}
+.sf-register-heading small{color:#71859a;font-size:11px}
+.sf-register-scroll{max-width:100%;overflow:auto;max-height:min(65vh,680px);border:1px solid #dce6f2;border-radius:13px;scrollbar-width:thin}
+.sf-register-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:12px;text-align:left;color:#29425c;line-height:1.55}
+.sf-register-table th{position:sticky;top:0;background:#293a82;color:#fff;z-index:4;font-size:11px;text-transform:none;letter-spacing:.01em;white-space:nowrap;padding:12px 13px;border-right:1px solid #ffffff20}
+.sf-register-table thead th:first-child{left:0;z-index:6}
+.sf-register-table td{padding:11px 13px;border-bottom:1px solid #e9edf4;border-right:1px solid #eef1f7;vertical-align:top;max-width:350px}
+.sf-register-table tbody tr:nth-child(even){background:#f9fbfe}
+.sf-register-table tbody tr:hover{background:#eff6ff}
+.sf-register-table tbody td:first-child{position:sticky;left:0;z-index:2;background:inherit}
+.sf-register-table td strong{font-size:12px;color:#243d5a}
+.sf-register-table td small{display:block;color:#71849b;font-size:10px;margin-top:3px}
+.sf-register-table .sf-register-nowrap{white-space:nowrap}
+.sf-register-table .sf-register-remark{min-width:270px;max-width:460px;white-space:pre-line;overflow-wrap:anywhere}
+.sf-register-table .sf-register-empty{text-align:center;padding:45px 20px;color:#697d96;background:white}
+.sf-register-sort{font:inherit;font-size:inherit;color:inherit;font-weight:800;background:none;border:0;cursor:pointer;white-space:nowrap;padding:0}
+.sf-register-sort:hover{text-decoration:underline}
+.sf-register-open{font:inherit;font-weight:750;font-size:11px;border:1px solid #c9def5;border-radius:8px;background:#eef5ff;color:#215ca7;padding:6px 11px;cursor:pointer}
+.sf-register-open:hover{background:#dbeeff}
+.sf-register-wait{min-height:130px;padding:45px 20px;text-align:center;color:#6a7f98}
+.sf-register-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0;color:#5c7190;font-size:12px}
+.sf-register-help{margin:13px 0 0;font-size:11px;color:#73869d;line-height:1.6}
+.sf-register :is(button,input,select):focus-visible,.sf-register-scroll:focus-visible{outline:3px solid #75aaff;outline-offset:2px}
+@media(max-width:1100px){.sf-register-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.sf-register{padding:12px}.sf-register-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.sf-register-summary>div{padding:13px}.sf-register-filters{grid-template-columns:1fr}.sf-register-tabs button{flex:1}.sf-register-table{font-size:11px}.sf-register-table td{padding:9px}}

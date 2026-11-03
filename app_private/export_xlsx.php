@@ -141,7 +141,7 @@ function sf_xlsx_build(array $leads,array $history):string {
             [23,25,20,26,23,24,78,27,39],0,2,6),
     ]);
 }
-function sf_export_matches(array $lead,array $filters):bool{
+function sf_export_matches(array $lead,array $filters,string $lastCall='Pending',string $remarks=''):bool{
     if(($filters['status']??'All')!=='All' && ($lead['status']??'')!==$filters['status'])return false;
     if(($filters['temperature']??'All')!=='All' && ($lead['temperature']??'Unrated')!==$filters['temperature'])return false;
     if(($filters['site']??'All')!=='All' && (string)($lead['site_id']??'')!==(string)$filters['site'])return false;
@@ -152,11 +152,17 @@ function sf_export_matches(array $lead,array $filters):bool{
         if($assigned==='Unassigned' && !empty($lead['assigned_to']))return false;
         if($assigned!=='Unassigned' && (string)($lead['assigned_to']??'')!==(string)$assigned)return false;
     }
+    if(($filters['grade']??'')!==''&&strcasecmp((string)($lead['grade']??''),$filters['grade'])!==0)return false;
+    if(($filters['call_outcome']??'')!==''&&$filters['call_outcome']!==$lastCall)return false;
+    if(($filters['source']??'')!==''&&
+       stripos((string)($lead['utm_source']??''),$filters['source'])===false&&
+       stripos((string)($lead['source_type']??''),$filters['source'])===false)return false;
     $connected=!empty($lead['last_successful_contact_at']);
     if(($filters['contact']??'All')==='Pending' && $connected)return false;
     if(($filters['contact']??'All')==='Contacted' && !$connected)return false;
     $day=sf_admission_today();$due=$lead['followup_date']??'';
     switch($filters['due']??'All'){
+        case 'Due': if(!$due||$due>$day)return false;break;
         case 'Overdue': if(!$due||$due>=$day)return false;break;
         case 'Today': if($due!==$day)return false;break;
         case 'Upcoming': if(!$due||$due<=$day)return false;break;
@@ -172,14 +178,14 @@ function sf_export_matches(array $lead,array $filters):bool{
     $search=strtolower($filters['search']??'');
     if($search!==''){
         $haystack=strtolower(implode(' ',array_map('strval',[
-            $lead['name']??'',$lead['guardian']??'',$lead['phone']??'',$lead['email']??'',$lead['grade']??''
+            $lead['name']??'',$lead['guardian']??'',$lead['phone']??'',$lead['email']??'',$lead['grade']??'',$remarks
         ])));
         if(!str_contains($haystack,$search))return false;
     }
     return true;
 }
-function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):array{
-    foreach(['status','temperature','site','assigned','contact','due','search','from','to','source_type','form_type'] as $name){
+function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters,string $kind='xlsx'):array{
+    foreach(['status','temperature','site','assigned','contact','due','search','from','to','source_type','form_type','grade','call_outcome','source'] as $name){
         if(!is_string($filters[$name]??''))sf_fail(422,'Invalid report filter');
     }
     foreach(['from','to'] as $d)if(($filters[$d]??'')!=='')sf_date($filters[$d]);
@@ -187,7 +193,7 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
         'status'=>array_merge(['All'],SF_STAGES),
         'temperature'=>array_merge(['All'],SF_TEMPERATURES),
         'contact'=>['All','Pending','Contacted'],
-        'due'=>['All','Overdue','Today','Upcoming','Unscheduled'],
+        'due'=>['All','Due','Overdue','Today','Upcoming','Unscheduled'],
         'source_type'=>['All','group_website','individual_website','chatbot','manual','import','other'],
         'form_type'=>['All','inline','popup','chat','api','manual','import','unknown'],
     ];
@@ -199,15 +205,33 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
     if(($filters['from']??'')!==''&&($filters['to']??'')!==''&&$filters['from']>$filters['to'])
         sf_fail(422,'Report start date must precede end date');
     if(strlen((string)($filters['search']??''))>100)sf_fail(422,'Report search too long');
-    return $store->transaction(static function(array &$s) use($auth,$schoolRef,$filters):array {
+    if(strlen((string)($filters['grade']??''))>80||strlen((string)($filters['source']??''))>130)
+        sf_fail(422,'Invalid register export filter');
+    if(($filters['call_outcome']??'')!==''&&
+       !in_array($filters['call_outcome'],['Pending','Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'],true))
+        sf_fail(422,'Invalid call outcome filter');
+    return $store->transaction(static function(array &$s) use($auth,$schoolRef,$filters,$kind):array {
         $user=sf_session($s,$auth);$uid=$user['id'];
         $schoolId=sf_record_id($s,'schools',$schoolRef);$role=sf_membership($s,$schoolId,$uid);
         $school=sf_find($s['schools'],$schoolId);
         $selected=[];
+        $lastCall=[];$reportRemarks=[];
+        foreach($s['calls']??[] as $call){
+            if((int)($call['school_id']??0)!==$schoolId)continue;
+            $lid=(int)($call['lead_id']??0);
+            if(!isset($lastCall[$lid])||strcmp((string)($call['created_at']??''),$lastCall[$lid]['at'])>=0)
+                $lastCall[$lid]=['at'=>(string)($call['created_at']??''),'outcome'=>(string)($call['outcome']??'')];
+            $reportRemarks[$lid]=trim(($reportRemarks[$lid]??'').' '.(string)($call['note']??''));
+        }
+        foreach($s['activities']??[] as $activity)
+            if((int)($activity['school_id']??0)===$schoolId&&($activity['action']??'')==='note'){
+                $lid=(int)($activity['lead_id']??0);
+                $reportRemarks[$lid]=trim(($reportRemarks[$lid]??'').' '.(string)($activity['details']??''));
+            }
         foreach($s['leads'] as $lead){
             if($lead['school_id']!==$schoolId || ($role==='Counsellor'&&$lead['assigned_to']!==$uid))continue;
             $leadView=sf_lead_view($s,$lead);
-            if(sf_export_matches($leadView,$filters))$selected[]=$leadView;
+            if(sf_export_matches($leadView,$filters,$lastCall[(int)$lead['id']]['outcome']??'Pending',$reportRemarks[(int)$lead['id']]??''))$selected[]=$leadView;
         }
         if(count($selected)>10000)sf_fail(413,'Please narrow your filters: Excel export is limited to 10,000 enquiries');
         usort($selected,static fn($a,$b)=>strcmp($b['created_at']??'',$a['created_at']??''));
@@ -264,10 +288,48 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
                 (string)($lead['latest_touch']['utm_source']??'')];
         }
         usort($historyRows,static fn($a,$b)=>strcmp($b[0],$a[0]));
-        sf_event($s,$schoolId,null,$uid,'admissions_xlsx_exported','Exported '.count($leadRows).' enquiries and '.count($historyRows).' activity rows');
+        sf_event($s,$schoolId,null,$uid,'admissions_'.$kind.'_exported','Exported '.count($leadRows).' enquiries and '.count($historyRows).' activity rows');
         return [$leadRows,$historyRows];
     },true);
 }
+
+/** CSV follows the ten operational columns used by the admissions Google Sheet. */
+function sf_export_register_csv(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):string {
+    [$rows]=sf_export_snapshot($store,$auth,$schoolRef,$filters,'register_csv');
+    $stream=fopen('php://temp/maxmemory:2097152','w+');
+    if($stream===false)throw new RuntimeException('CSV stream unavailable');
+    fwrite($stream,"\xEF\xBB\xBF");
+    fputcsv($stream,['Timestamp','Name','Email','Phone','City','State','Class','Campus',
+        'Assigned To','Remarks / Follow-up Notes','Stage','Next Follow-up','Academic Year',
+        'Source','UTM Campaign'],',','"','');
+    foreach($rows as $row){
+        $localStamp=(string)($row[0]??'');
+        try{$localStamp=(new DateTimeImmutable($localStamp))
+            ->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('d/m/Y h:i:s A');}
+        catch(Throwable){/* preserve unusual legacy timestamps */ }
+        $values=[
+            $localStamp,$row[1]??'',$row[2]??'',$row[3]??'',
+            $row[4]??'',$row[5]??'',$row[6]??'',$row[7]??'',
+            $row[14]??'',$row[8]??'',$row[10]??'',$row[13]??'',
+            $row[15]??'',$row[16]??'',$row[18]??''
+        ];
+        // CSV has no text cell type: quote leading-zero phone values as text for
+        // spreadsheet readers; native XLSX is the stronger typed alternative.
+        if(preg_match('/^0[0-9]+$/D',(string)$values[3]))
+            $values[3]="'".(string)$values[3];
+        $clean=array_map(static function($value):string{
+            $text=(string)$value;
+            // Spreadsheet viewers may execute cells beginning with formula tokens.
+            if(preg_match('/^\s*[=+\-@\t\r]/u',$text))return "'".$text;
+            return $text;
+        },$values);
+        fputcsv($stream,$clean,',','"','');
+    }
+    rewind($stream);$csv=stream_get_contents($stream);fclose($stream);
+    if(!is_string($csv))throw new RuntimeException('CSV export failed');
+    return $csv;
+}
+
 function sf_export_admissions(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):string{
     [$leads,$events]=sf_export_snapshot($store,$auth,$schoolRef,$filters);
     return sf_xlsx_build($leads,$events);

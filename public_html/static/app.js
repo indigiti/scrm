@@ -2,8 +2,8 @@
 'use strict';
 const root=document.getElementById('root');
 const APP_BASE=(window.SCHOOLFLOW_BASE_PATH||'/scrm').replace(/\/$/,'');
-const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Schools & Routing','Team','Import Enquiries','Seat Planning','Enquiry Interface'];
-const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦','Enquiry Interface':'⚙'};
+const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Admission Register','Schools & Routing','Team','Import Enquiries','Seat Planning','Enquiry Interface'];
+const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Admission Register':'▦','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦','Enquiry Interface':'⚙'};
 const STAGES=['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 
 const PHASES=['Enquiry','Engagement','Application','Admission','Exceptions'];
@@ -20,7 +20,7 @@ const NAV_SECTIONS=[
  ['ADMISSIONS',['Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families']],
  ['LEAD CAPTURE',['Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads']],
  ['ENGAGEMENT',['Communications','Email Templates','Admissions AI','Automations']],
- ['INSIGHTS',['Reports']],
+ ['INSIGHTS',['Reports','Admission Register']],
  ['ADMINISTRATION',['Schools & Routing','Team','Enquiry Interface','Seat Planning','Import Enquiries']]
 ];
 
@@ -28,7 +28,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,campaignReport:null,campaignFilters:{},detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -76,7 +76,8 @@ async function initialize(){
  await reload();
  if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
  if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();
- if(state.page==='Reports')await loadCampaignReport();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
+ if(state.page==='Reports')await loadCampaignReport();
+ if(state.page==='Admission Register')await loadAdmissionRegister();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
  if(!state.schoolId){render();return;}
@@ -105,6 +106,7 @@ function loginPage(){const isSetup=state.setup?.needs_setup;
  return `<div class="login-wrap"><div class="login-brand"><div class="logo" style="padding:0"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>Admissions CRM</small></div></div><div class="eyebrow" style="margin-top:48px">MULTI-SCHOOL ADMISSIONS PLATFORM</div><h1>Every school enquiry. One clear journey.</h1><p>Capture enquiries from WordPress and other websites, assign counsellors, schedule follow-ups and convert more families into admissions.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:23px"><span class="pill">Multiple schools</span><span class="pill">Private website APIs</span><span class="pill">Staff roles</span><span class="pill">Live shared records</span></div></div><div class="login-panel"><div class="hero-icon" style="height:55px;width:55px;margin-bottom:22px;color:#fff;background:linear-gradient(135deg,#787ae9,#5db2f5)">✦</div>${form}</div></div>`;
 }
 const NAV_SVG={"Dashboard":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"1\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"1\"/>","My Work":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h8M8 12h4m-4 4 2 2 4-4\"/>","Enquiries":"<path d=\"M5 21h14M7 17v-3a5 5 0 0 1 10 0v3M9 7a3 3 0 0 1 6 0\"/>","Chatbot Leads":"<rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"3\"/><path d=\"M12 3v4M8 13h.01M16 13h.01M8 17h8\"/>","Pipeline":"<rect x=\"2\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"9.5\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"17\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/>","Follow-ups":"<path d=\"M21 12a9 9 0 1 1-3-6.7M21 4v6h-6M12 7v5l3 2\"/>","Tasks":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8M14 9h3m-9 7 1.5 1.5L12 15m2 1h3\"/>","Websites & Forms":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18\"/>","Landing Pages":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 9h8M8 13h5M9 17h6\"/>","Popup Campaigns":"<path d=\"M3 11l15-6v14L3 13zM3 11v2M7 14l2 6h3l-2-5\"/>","Sign out":"<path d=\"M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6\"/>","Schools & Routing":"<path d=\"m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8\"/>","School Visits":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18M8 15h3m-3 3h3\"/>","Families":"<path d=\"M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 20v-2a4 4 0 0 0-3-3.9M16 4.2a3 3 0 0 1 0 5.6\"/>","Email Templates":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 7 9 7 9-7\"/>","Communications":"<path d=\"M21 11a8 8 0 0 1-8 8H8l-5 3v-6a8 8 0 1 1 18-5z\"/>","Automations":"<path d=\"m4 4 4 0 0 4M20 20h-4v-4M7 17a8 8 0 0 0 13-4M17 7A8 8 0 0 0 4 11M12 8v4l3 2\"/>","Team":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6M20 20v-2a5 5 0 0 0-3-4.6\"/>","Reports":"<path d=\"M4 20V10M10 20V4M16 20v-8M22 20v-5M2 20h21\"/>","Import Enquiries":"<path d=\"M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4\"/>","Seat Planning":"<path d=\"M4 21v-7m16 7v-7M4 18h16M6 14V7a3 3 0 0 1 6 0v7M12 14V7a3 3 0 0 1 6 0v7\"/>","Admissions AI":"<path d=\"m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z\"/>","Enquiry Interface":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/><path d=\"M8 9h8m-8 4h8m-8 4h5\"/>"};
+NAV_SVG['Admission Register']=NAV_SVG['Enquiries'];
 function navIcon(page){return `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_SVG[page]||NAV_SVG.Dashboard}</svg>`;}
 function canSeePage(p){
  return !((['Schools & Routing','Landing Pages','Popup Campaigns'].includes(p)&&!canManageSchools())||
@@ -496,7 +498,7 @@ function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_count
 const IMPORT_FIELDS=[
  ['timestamp','Timestamp'],['name','Student name'],['email','Email'],['phone','Phone'],
  ['city','City'],['state','State'],['grade','Class'],['campus','Campus'],
- ['remarks','Remarks / Follow-up Notes'],['guardian','Parent / Guardian'],['academic_year','Academic year']
+ ['remarks','Remarks / Follow-up Notes'],['assigned_to','Assigned To (school staff)'],['guardian','Parent / Guardian'],['academic_year','Academic year']
 ];
 
 function seatPlanning(){
@@ -605,8 +607,105 @@ function campaignCsvExport(){
  const link=document.createElement('a');link.href=url;link.download='schoolflow-campaign-'+state.schoolId+'-'+day()+'.csv';link.click();URL.revokeObjectURL(url);
  toast('Aggregated campaign CSV exported');
 }
+
+/** Server-side, school-scoped register. The inbox cache is intentionally NOT used. */
+async function loadAdmissionRegister(){
+ const request=++ext.registerRequest,sid=state.schoolId,view=ext.registerView;
+ if(!sid)return;
+ const query=new URLSearchParams({view,page:String(ext.registerPage),per_page:'50'});
+ for(const [key,value] of Object.entries(ext.registerFilters))
+  if(value!==''&&value!==undefined&&value!==null)query.set(key,String(value));
+ ext.registerLoading=true;if(state.page==='Admission Register')render();
+ try{
+  const data=await api('/api/schools/'+sid+'/admission-register?'+query.toString());
+  if(request!==ext.registerRequest||state.schoolId!==sid||view!==ext.registerView)return;
+  ext.registerReport=data;
+ }finally{
+  if(request===ext.registerRequest){ext.registerLoading=false;if(state.page==='Admission Register')render();}
+ }
+}
+function admissionRegisterPage(){
+ const d=ext.registerReport,f=ext.registerFilters,view=ext.registerView,tot=d?.summary||{};
+ const tabs=[['enquiries','Enquiry Register'],['history','Calling & Follow-up History'],['performance','Counsellor Performance']];
+ const stamp=v=>v?esc(auditStamp(v)):'—';
+ const open=(id,name)=>'<button type="button" class="sf-register-open" data-action="view-lead" data-id="'+Number(id)+'" aria-label="Open '+esc(name)+'">Open</button>';
+ const th=(name,key)=>'<button type="button" data-action="register-sort" data-sort="'+key+'" class="sf-register-sort">'+esc(name)+
+    (f.sort===key?(f.direction==='asc'?' ↑':' ↓'):'')+'</button>';
+ let table='';
+ if(view==='enquiries'){
+  table='<table class="sf-register-table"><thead><tr><th>'+th('Timestamp','created')+'</th><th>'+th('Name','name')+
+   '</th><th>Email</th><th>Phone</th><th>City</th><th>State</th><th>Class</th><th>Campus</th><th>'+
+   th('Assigned To','assigned')+'</th><th>Latest Calling Remark</th><th>Call outcome</th><th>'+
+   th('Follow-up','followup')+'</th><th>Stage</th><th>Open</th></tr></thead><tbody>'+
+   (d?.rows||[]).map(r=>'<tr><td class="sf-register-nowrap">'+stamp(r.timestamp)+'</td>'+
+     '<td><strong>'+esc(r.student||'Student pending')+'</strong><small>'+esc(r.guardian||'')+'</small></td>'+
+     '<td>'+esc(r.email||'—')+'</td><td class="sf-register-nowrap">'+esc(r.phone||'—')+'</td>'+
+     '<td>'+esc(r.city||'—')+'</td><td>'+esc(r.state||'—')+'</td><td>'+esc(r.grade||'—')+
+     '</td><td>'+esc(r.campus)+'</td><td>'+esc(r.assigned_name)+'</td>'+
+     '<td class="sf-register-remark">'+esc(r.last_remark||'No calling remarks recorded')+
+       (r.last_remark_at?'<small>'+stamp(r.last_remark_at)+'</small>':'')+'</td>'+
+     '<td>'+esc(r.last_call_outcome||'Pending')+'</td><td class="sf-register-nowrap">'+esc(r.followup_date||'—')+
+     '</td><td>'+stageBadge(r.status||'New')+'</td><td>'+open(r.id,r.student||'enquiry')+'</td></tr>').join('')+
+     (d&&!d.rows.length?'<tr><td colspan="14" class="sf-register-empty">No enquiries match your filters.</td></tr>':'')+
+     '</tbody></table>';
+ }else if(view==='history'){
+  table='<table class="sf-register-table"><thead><tr><th>Recorded (IST)</th><th>Student</th><th>Class</th><th>Phone</th><th>Action</th><th>Outcome</th><th>Calling remarks</th><th>Recorded By</th><th>Next Follow-up</th><th>Open</th></tr></thead><tbody>'+
+  (d?.rows||[]).map(r=>'<tr><td class="sf-register-nowrap">'+stamp(r.at)+'</td><td>'+esc(r.student)+
+   '</td><td>'+esc(r.grade||'—')+'</td><td>'+esc(r.phone||'—')+'</td><td>'+esc(r.type)+
+   '</td><td>'+esc(r.outcome||'—')+'</td><td class="sf-register-remark">'+esc(r.note||'—')+
+   '</td><td>'+esc(r.actor_name)+'</td><td>'+esc(r.followup_date||'—')+'</td><td>'+
+   open(r.lead_id,r.student)+'</td></tr>').join('')+
+  (d&&!d.rows.length?'<tr><td colspan="10" class="sf-register-empty">No recorded calls or notes match your filters.</td></tr>':'')+'</tbody></table>';
+ }else{
+  table='<table class="sf-register-table"><thead><tr><th>Staff member</th><th>Assigned enquiries</th><th>Parents contacted</th><th>Calls recorded *</th><th>Follow-ups due</th><th>Enrolled</th></tr></thead><tbody>'+
+  (d?.rows||[]).map(r=>'<tr><td><strong>'+esc(r.name)+'</strong></td><td>'+Number(r.assigned)+
+   '</td><td>'+Number(r.contacted)+'</td><td>'+Number(r.call_attempts)+'</td><td>'+Number(r.followups_due)+
+   '</td><td>'+Number(r.enrolled)+'</td></tr>').join('')+
+  (d&&!d.rows.length?'<tr><td colspan="6" class="sf-register-empty">No matching staff.</td></tr>':'')+'</tbody></table>';
+ }
+ const members=d?.staff||state.members.filter(m=>m.enabled!==false);
+ return pageHead('Admission Enquiry Register','Live admissions register with Google Sheets-style columns and complete school-scoped calling history.',
+  btn('↻ Refresh','register-refresh','small')+btn('⇩ Export Excel','register-export','primary')+btn('CSV','register-csv','small'))+
+  '<div class="sf-register">'+
+  '<div class="sf-register-summary">'+
+  [['Enquiries',tot.enquiries],['Parents contacted',tot.contacted],['Follow-ups due',tot.followups_due],['Unassigned',tot.unassigned]].map(([title,value])=>
+   '<div><small>'+esc(title)+'</small><strong>'+Number(value??0)+'</strong></div>').join('')+'</div>'+
+  '<div class="sf-register-tabs" role="group" aria-label="Report type">'+tabs.map(([key,label])=>
+   '<button type="button" class="'+(view===key?'active':'')+'" data-action="register-view" data-view="'+key+
+   '" aria-pressed="'+(view===key?'true':'false')+'">'+esc(label)+'</button>').join('')+'</div>'+
+  '<div class="sf-register-presets" aria-label="Quick report filters">'+
+   [['all','All enquiries'],['unassigned','Unassigned'],['due','Follow-ups due'],['no-answer','No response'],['today','New today']].map(([key,label])=>
+   '<button type="button" data-action="register-preset" data-preset="'+key+'">'+esc(label)+'</button>').join('')+'</div>'+
+  '<form id="admissionRegisterFilters" class="sf-register-filters">'+
+  input('Enquiry from','from','date',f.from||'')+input('Enquiry to','to','date',f.to||'')+
+  input('Name, phone or remarks','search','search',f.search||'')+
+  input('Class','grade','text',f.grade||'')+
+  input('Lead source','source','text',f.source||'')+
+  select('Assigned To','assigned','<option value="">All permitted staff</option>'+
+   (role()==='Counsellor'?'':'<option value="unassigned" '+(f.assigned==='unassigned'?'selected':'')+'>Unassigned</option>')+
+   members.map(m=>option(m.id,m.name,f.assigned||'')).join(''))+
+  select('Lead stage','status','<option value="">All stages</option>'+STAGES.map(v=>option(v,v,f.status||'')).join(''))+
+  select('Last call outcome','outcome','<option value="">All outcomes</option>'+
+   ['Pending','Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'].map(v=>option(v,v,f.outcome||'')).join(''))+
+  select('Follow-up','due','<option value="">Any schedule</option>'+
+   [['due','Due (today + overdue)'],['today','Today'],['overdue','Overdue'],['upcoming','Upcoming'],['unscheduled','Unscheduled']].map(([v,name])=>option(v,name,f.due||'')).join(''))+
+  '<div class="sf-register-filter-actions"><button type="submit" class="btn primary">Apply filters</button>'+
+   btn('Clear filters','register-clear','small')+'</div></form>'+
+  '<div class="sf-register-heading"><strong>'+esc(tabs.find(t=>t[0]===view)?.[1]||'Register')+'</strong>'+
+  '<small>'+Number(d?.total??0)+' matching rows · '+(d?.as_of?stamp(d.as_of):'Loading…')+
+  ' · '+(d?.scope==='assigned_only'?'Only your assigned enquiries':'Selected campus')+
+  ' · Automatic refresh: 60 seconds</small></div>'+
+  '<div class="sf-register-scroll" role="region" aria-label="Admission register records" tabindex="0">'+
+    (ext.registerLoading&&!d?'<div class="sf-register-wait" role="status">Loading school register…</div>':
+    !d?'<div class="sf-register-wait">Refresh to load the register.</div>':table)+'</div>'+
+  (d?'<div class="sf-register-pager"><span>Page '+Number(d.page)+' / '+Number(d.pages)+'</span>'+
+    '<div class="button-row"><button type="button" class="btn small" data-action="register-prev" '+(d.page<=1?'disabled':'')+'>Previous</button>'+
+    '<button type="button" class="btn small" data-action="register-next" '+(d.has_more?'':'disabled')+'>Next</button></div></div>':'')+
+  '<p class="sf-register-help">Report data is read-only and scoped to the selected school. Call remarks come from actual saved call entries and conversation notes. * Calls are counted by the employee who actually recorded them; a staff member may have calls but no currently assigned enquiries. Excel exports contain the full authorized filtered result and follow-up history, not just this page.</p></div>';
+}
+
 function reportsPage(){const total=ext.campaignReport?.totals?.enquiries??state.leads.length, enrolled=ext.campaignReport?.totals?.enrolled??state.leads.filter(l=>l.status==='Enrolled').length, byStage=STAGES.map(s=>({name:s,n:state.leads.filter(l=>l.status===s).length})), max=Math.max(1,...byStage.map(x=>x.n));
- return `${pageHead('Admissions reports','Live server-side campaign attribution for the selected campus. Other operational analytics follow.',btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<details class="audit-school sf-drawer-panel" data-panel="school-audit" ${ext.schoolAuditOpen?'open':''}><summary>School activity log · Admin only</summary><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Expand to load school activity history.</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></details>`:''}`;}
+ return `${pageHead('Admissions reports','Live server-side campaign attribution for the selected campus. Other operational analytics follow.',btn('▦ Admission Register','nav','primary','data-page="Admission Register"')+btn('⇩ Export Excel','export-xlsx','small')+btn('CSV','export-csv','small'))}${admissionInsights()}${attributionReport()}<div class="stats" style="margin:0 0 20px">${stat('Total enquiries',total,'All recorded enquiries','♧')}${stat('Enrolled',enrolled,'Successful admissions','✓','green')}${stat('Conversion rate',total?Math.round(enrolled/total*100)+'%':'0%','Enrolled / total enquiries','↗','blue')}${stat('Active sources',state.sites.filter(s=>s.enabled).length,'Connected intake channels','◉','orange')}</div><div class="two-cols"><div class="panel" style="padding:22px"><h3>Admissions funnel</h3><p class="muted-note">Enquiries currently in each stage</p>${byStage.map(x=>`<div class="bar-row"><span>${esc(x.name)}</span><div class="bar-track"><i style="width:${x.n/max*100}%"></i></div><b>${x.n}</b></div>`).join('')}</div><div class="panel" style="padding:22px"><h3>Lead sources</h3><p class="muted-note">Captured by connected website</p>${state.sites.map(s=>`<div class="site-list-card"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><div style="flex:1"><b>${esc(s.name)}</b><div class="muted-note">${esc(s.domain)}</div></div><b>${s.lead_count}</b></div>`).join('')||'<p class="muted">No website data yet.</p>'}</div></div><section class="panel" style="padding:19px;margin-top:18px"><h3>Performance by counsellor</h3><div class="report-staff-grid">${Object.entries(ext.analytics.by_staff||{}).map(([id,n])=>`<div class="v2-metric"><b>${n}</b><span>${esc(id==='unassigned'?'Unassigned':userName(Number(id)))} enquiries</span></div>`).join('')||'<p class="muted">No assignments yet</p>'}</div><p class="muted-note">First contact pending: ${ext.analytics.first_contact_pending||0} · Follow-ups due: ${ext.analytics.followups_due||0}</p></section>${isAdmin()?`<details class="audit-school sf-drawer-panel" data-panel="school-audit" ${ext.schoolAuditOpen?'open':''}><summary>School activity log · Admin only</summary><div class="panel" style="padding:18px 20px">${state.audit?auditEntries(state.audit.events):'<p class="muted">Expand to load school activity history.</p>'}${state.audit?.has_more?'<div class="audit-more"><button class="btn small" data-action="more-school-audit">Load older activity</button></div>':''}</div></details>`:''}`;}
 
 function schoolVisits(){
  const v=ext.visits.filter(x=>!ext.visitMonth||x.starts_at.startsWith(ext.visitMonth));
@@ -990,15 +1089,45 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Admission Register':admissionRegisterPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
 async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
 async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
 function closeDialog(){state.modal='';state.detail=null;render();}
+async function registerCsvExport(){
+ const f=ext.registerFilters||{};
+ const filters={status:f.status||'All',assigned:f.assigned||'All',grade:f.grade||'',
+  call_outcome:f.outcome||'',due:({today:'Today',overdue:'Overdue',upcoming:'Upcoming',
+   unscheduled:'Unscheduled'})[f.due]||'All',from:f.from||'',to:f.to||'',
+   search:f.search||'',source:f.source||''};
+ const res=await fetch(APP_BASE+'/api/schools/'+state.schoolId+'/exports/admissions-register.csv',{
+  method:'POST',headers:{Authorization:'Bearer '+state.token,'Content-Type':'application/json'},
+  body:JSON.stringify(filters),cache:'no-store',credentials:'same-origin'
+ });
+ if(res.status===401){state.token='';state.me=null;sessionStorage.removeItem('schoolflow_session');render();
+  throw new Error('Session expired. Sign in again to export.');}
+ if(!res.ok){const err=await res.json().catch(()=>({}));
+  throw new Error(err.detail||'CSV report unavailable');}
+ const payload=await res.blob();
+ if(!payload.size)throw new Error('Empty CSV report');
+ const url=URL.createObjectURL(payload),a=document.createElement('a');
+ a.href=url;a.download='SchoolFlow-Admission-Register-'+state.schoolId+'-'+day()+'.csv';
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ toast('Filtered school register CSV downloaded');
+}
 async function xlsxExport(){
  const filtering=state.page==='Enquiries';
- const filters=filtering?{
+ const filters=state.page==='Admission Register'?{
+   status:ext.registerFilters.status||'All',
+   assigned:ext.registerFilters.assigned||'All',
+   grade:ext.registerFilters.grade||'',
+   call_outcome:ext.registerFilters.outcome||'',
+   due:({due:'Due',today:'Today',overdue:'Overdue',upcoming:'Upcoming',unscheduled:'Unscheduled'})[ext.registerFilters.due]||'All',
+   from:ext.registerFilters.from||'',to:ext.registerFilters.to||'',
+   search:ext.registerFilters.search||'',source:ext.registerFilters.source||''
+  }:filtering?{
    status:state.status,temperature:ext.temperatureFilter,site:state.siteFilter,
     source_type:ext.sourceTypeFilter,form_type:ext.formTypeFilter,
    assigned:ext.assignedFilter,contact:ext.contactFilter,due:ext.dueFilter,search:state.search
@@ -1254,6 +1383,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
   if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';sessionStorage.setItem('schoolflow_last_page',state.page);state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports'){ext.campaignReport=null;perform(loadCampaignReport);}
+   if(state.page==='Admission Register'){ext.registerReport=null;ext.registerPage=1;perform(loadAdmissionRegister);}
    if(state.page==='Reports' && isAdmin()){state.audit=null;ext.schoolAuditOpen=false;}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
@@ -1354,6 +1484,37 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${ext.detailAudit.next_before}`);
    ext.detailAudit={forLeadId:leadId,events:[...ext.detailAudit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
+ if(action==='register-refresh'){perform(loadAdmissionRegister);return;}
+ if(action==='register-view'){
+  const v=el.dataset.view;if(!['enquiries','history','performance'].includes(v))return;
+  ext.registerView=v;ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-prev'||action==='register-next'){
+  if(!ext.registerReport||ext.registerLoading)return;
+  const next=ext.registerPage+(action==='register-next'?1:-1);
+  if(next<1||next>ext.registerReport.pages)return;
+  ext.registerPage=next;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-sort'){
+  if(!['created','name','assigned','latest','followup'].includes(el.dataset.sort))return;
+  const old=ext.registerFilters;
+  ext.registerFilters={...old,sort:el.dataset.sort,direction:old.sort===el.dataset.sort&&old.direction==='asc'?'desc':'asc'};
+  ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-clear'){
+  ext.registerFilters={};ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-preset'){
+  const p=el.dataset.preset,filters={};
+  if(p==='unassigned'&&role()!=='Counsellor')filters.assigned='unassigned';
+  else if(p==='due')filters.due='due';
+  else if(p==='no-answer')filters.outcome='No Answer';
+  else if(p==='today'){filters.from=today();filters.to=today();}
+  else if(p!=='all')return;
+  ext.registerFilters=filters;ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
+ if(action==='register-export'){perform(xlsxExport);return;}
+ if(action==='register-csv'){perform(registerCsvExport);return;}
  if(action==='refresh-campaign-report'){perform(loadCampaignReport);return;}
  if(action==='clear-campaign-report'){ext.campaignFilters={};perform(loadCampaignReport);return;}
  if(action==='export-campaign-report'){campaignCsvExport();return;}
@@ -1437,7 +1598,7 @@ root.addEventListener('toggle',e=>{
 },true);
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
@@ -1450,6 +1611,10 @@ root.addEventListener('input',e=>{
  if(e.target.id==='q'){const p=e.target.selectionStart;state.search=e.target.value;render();const q=root.querySelector('#q');q?.focus();q?.setSelectionRange(p,p);}
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
+ if(f.id==='admissionRegisterFilters'){
+  ext.registerFilters=Object.fromEntries(Object.entries(fd).filter(([,v])=>String(v).trim()!==''));
+  ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;
+ }
  if(f.id==='webStageResetForm'){
    if(!canWebStageReset()||!state.stagingResetPreview)return;
    if(fd.confirmation!=='RESET STAGING KEEP IN.STG.ADM')return toast('Type the complete confirmation phrase',true);
@@ -1744,5 +1909,7 @@ initialize();
 if(typeof setInterval==='function')setInterval(function(){
  if(state.token&&state.me&&state.page==='Reports'&&document.visibilityState==='visible'&&!state.modal)
   loadCampaignReport().catch(function(){/* next explicit refresh can retry */});
+ if(state.token&&state.me&&state.page==='Admission Register'&&document.visibilityState==='visible'&&!state.modal&&!ext.registerLoading)
+  loadAdmissionRegister().catch(function(){/* manual refresh available */});
 },60000);
 })();

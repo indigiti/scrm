@@ -6,6 +6,7 @@ require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/popup_settings.php';
 require_once __DIR__ . '/landing_pages.php';
 require_once __DIR__ . '/marketing_controls.php';
+require_once __DIR__ . '/enquiry_register.php';
 require_once __DIR__ . '/public_chat_knowledge.php';
 require_once __DIR__ . '/public_chat_callback.php';
 require_once __DIR__ . '/public_chat_session.php';
@@ -625,6 +626,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     if ($path === '/health' && $method === 'GET') return [200, ['ok'=>true]];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions\.xlsx$#iD',$path,$exportMatch))
         return [200,sf_export_admissions($store,(string)($headers['authorization']??''),$exportMatch[1],$payload)];
+    if($method==='POST' && preg_match('#^/api/schools/(\d+|[0-9a-f-]{36})/exports/admissions-register\.csv$#iD',$path,$registerCsv))
+        return [200,sf_export_register_csv($store,(string)($headers['authorization']??''),$registerCsv[1],$payload)];
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/(preview|commit)$#iD',$path,$importMatch))
         return sf_import_process($store,(string)($headers['authorization']??''),$importMatch[1],$importMatch[2],$payload);
     if($method==='POST' && preg_match('#^/api/schools/(\d+|[a-f0-9-]{36})/imports/([a-f0-9-]{36})/rollback$#iD',$path,$importMatch))
@@ -796,6 +799,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
+        if(preg_match('#^/api/schools/(\d+)/admission-register$#D',$path,$registerMatch)){
+            if($method!=='GET')sf_fail(405,'Read-only admission register');
+            $registerSchool=(int)$registerMatch[1];
+            $registerRole=sf_membership($s,$registerSchool,$uid);
+            return [200,sf_register_report($s,$registerSchool,$uid,$registerRole,$uri)];
+        }
         if(preg_match('#^/api/schools/(\d+)/campaign-report$#D',$path,$campaignMatch)){
             if($method!=='GET')sf_fail(405,'Unsupported campaign report method');
             $sid=(int)$campaignMatch[1];$schoolRole=sf_membership($s,$sid,$uid);

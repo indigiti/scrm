@@ -5,7 +5,7 @@ declare(strict_types=1);
  * confirmed import is a single school-scoped JSON transaction.
  * Uploaded spreadsheet bytes are never persisted in SchoolFlow storage.
  */
-const SF_IMPORT_FIELDS=['timestamp','name','email','phone','city','state','grade','campus','remarks','guardian','academic_year'];
+const SF_IMPORT_FIELDS=['timestamp','name','email','phone','city','state','grade','campus','remarks','guardian','academic_year','assigned_to'];
 function sf_import_zip_entries(string $zip):array {
     $end=strrpos($zip,"PK\x05\x06");
     if($end===false || $end+22>strlen($zip) || strlen($zip)>2500000)sf_fail(422,'Invalid or oversized Excel workbook');
@@ -120,6 +120,7 @@ function sf_import_header_map(array $headers,mixed $provided):array{
       'grade'=>['class','grade','applying for','grade applying for'],
       'campus'=>['campus','branch','school'],
       'remarks'=>['remarks','follow up','follow-up','notes','remarks / follow-up notes'],
+      'assigned_to'=>['assigned to','assigned counsellor','assigned counselor','assigned staff','counsellor','counselor'],
       'guardian'=>['parent','parent name','guardian','parent / guardian'],
       'academic_year'=>['academic year','year']
     ];
@@ -157,7 +158,24 @@ function sf_import_timestamp(string $text):?string{
     }
     return null;
 }
-function sf_import_rows(array $table,array $map,string $schoolName):array{
+/** Active identities from the selected school only; ambiguous names require manual correction. */
+function sf_import_staff_directory(array $s,int $sid):array {
+    $staff=[];
+    foreach($s['memberships']??[] as $member){
+        if((int)$member['school_id']!==$sid||!sf_staff_enabled($member))continue;
+        $uid=(int)$member['user_id'];
+        if(($member['role']??'')==='Counsellor'&&sf_staff_counsellor_school($s,$uid)!==$sid)continue;
+        $user=sf_user($s,$uid);
+        if(!$user||empty($user['active']))continue;
+        foreach([(string)($user['name']??''),(string)($user['email']??'')] as $text){
+            $key=strtolower(trim($text));
+            if($key==='')continue;
+            $staff[$key][$uid]=true;
+        }
+    }
+    return $staff;
+}
+function sf_import_rows(array $table,array $map,string $schoolName,array $staff=[]):array{
     $rows=[];$valid=0;$invalid=0;
     foreach(array_slice($table,1) as $lineIndex=>$line){
         $r=[];foreach($map as $field=>$position)$r[$field]=trim((string)($line[$position]??''));
@@ -168,6 +186,14 @@ function sf_import_rows(array $table,array $map,string $schoolName):array{
         if(strlen($phone)<10||strlen($phone)>15)$issues[]='Valid phone number required';
         if(!empty($r['email'])&&!filter_var($r['email'],FILTER_VALIDATE_EMAIL))$issues[]='Invalid email';
         if(strlen($r['remarks']??'')>2000)$issues[]='Remarks must be under 2,000 characters';
+        $assignment=strtolower(trim($r['assigned_to']??''));
+        $r['assigned_staff_id']=null;
+        if($assignment!==''){
+            $matches=array_keys($staff[$assignment]??[]);
+            if(count($matches)===1)$r['assigned_staff_id']=(int)$matches[0];
+            elseif(count($matches)>1)$issues[]='Assigned To matches more than one active school employee';
+            else $issues[]='Assigned To does not match an active employee at this school';
+        }
         $campus=$r['campus']??'';
         if($campus!==''&&!str_contains(strtolower($schoolName),strtolower($campus))&&!str_contains(strtolower($campus),strtolower($schoolName)))
             $issues[]='Campus does not match selected school';
@@ -208,7 +234,7 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
             $user=sf_session($s,$auth);$sid=sf_record_id($s,'schools',$schoolRef);
             sf_membership($s,$sid,$user['id'],['Admin','Admissions']);
             $school=sf_find($s['schools'],$sid);
-            [$rows,$valid,$invalid]=sf_import_rows($sheet,$mapping,$school['name']);
+            [$rows,$valid,$invalid]=sf_import_rows($sheet,$mapping,$school['name'],sf_import_staff_directory($s,$sid));
             $duplicates=0;$seen=[];
             foreach($rows as &$r)if(!$r['issues']){
                 $key=strtolower($r['name']).'|'.$r['normalized_phone'].'|'.strtolower($r['grade']??'');
@@ -226,7 +252,8 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
                 'total'=>count($rows),'valid'=>$valid,'invalid'=>$invalid,'possible_duplicates'=>$duplicates,
                 'samples'=>array_map(fn($r)=>[
                     'row_number'=>$r['row_number'],'name'=>$r['name']??'','phone'=>$r['phone']??'',
-                    'campus'=>$r['campus']??'','remarks'=>$r['remarks']??'','issues'=>$r['issues'],
+                    'campus'=>$r['campus']??'','assigned_to'=>$r['assigned_to']??'',
+                    'remarks'=>$r['remarks']??'','issues'=>$r['issues'],
                     'existing'=>!empty($r['existing'])
                 ],array_slice($rows,0,25))]];
         },true);
@@ -243,7 +270,7 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
             $p['digest']===$digest && $p['map_hash']===$mapDigest && $p['expires_at']>time()){$preview=$p;break;}
         if(!$preview)sf_fail(409,'Import preview expired or file/mapping changed; preview again');
         $school=sf_find($s['schools'],$sid);
-        [$rows,$valid,$invalid]=sf_import_rows($sheet,$mapping,$school['name']);
+        [$rows,$valid,$invalid]=sf_import_rows($sheet,$mapping,$school['name'],sf_import_staff_directory($s,$sid));
         if($invalid>0)sf_fail(422,'Fix invalid rows before importing; no records changed');
         $s['import_previews']=array_values(array_filter($s['import_previews'],fn($p)=>$p['guid']!==$receipt));
         $batch=sf_uuid();$added=[];$skipped=0;$notes=0;
@@ -254,7 +281,7 @@ function sf_import_process(SchoolFlowStore $store,string $auth,int|string $schoo
                 'phone'=>$r['phone'],'email'=>$r['email']??'','grade'=>$r['grade']??'',
                 'city'=>$r['city']??'','state'=>$r['state']??'','academic_year'=>$r['academic_year']??'',
                 'consent'=>false,'message'=>'Historical spreadsheet import'
-            ],null,$uid,null,'historical_import');
+            ],null,$uid,$r['assigned_staff_id']??null,'historical_import');
             $leadId=$lead['id'];$added[]=$leadId;
             foreach($s['leads'] as &$row)if($row['id']===$leadId){
                 $row['created_at']=$r['created_at_import']??sf_time();
