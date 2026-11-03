@@ -18,6 +18,9 @@ const data={
  audit:{visible:true,expanded:false}},audit_admin_only:true},
 '/api/schools/1/communications':{email:{provider:'off',connected:false},whatsapp:{provider:'off',connected:false}},
 '/api/schools/1/leads/1':{lead,family:{guardian:lead.guardian,phone:lead.phone,email:lead.email,count:1,children:[{id:1,name:lead.name,grade:lead.grade,status:'New'}]},calls:[],visits:[],activities:[],audit:{events:[]}},
+'/api/schools/1/admission-register?view=enquiries&page=1&per_page=50':{school_id:1,school_name:'Test School',total:1,page:1,per_page:50,pages:1,has_more:false,scope:'school',as_of:'2026-11-03T10:00:00Z',staff:[{id:1,name:'Demo Admin'}],summary:{enquiries:1,contacted:0,followups_due:0,unassigned:0},rows:[{id:1,student:'Test Student',guardian:'Test Parent',email:'parent@example.org',phone:'09999999876',city:'Pune',state:'Maharashtra',grade:'III',campus:'Test School',assigned_name:'Demo Admin',last_remark:'Called parent today',last_remark_at:'2026-11-03T10:00:00Z',last_call_outcome:'Answered',followup_date:'',status:'New',timestamp:'2026-11-03T08:00:00Z'}]},
+'/api/schools/1/admission-register?view=history&page=1&per_page=50':{school_id:1,school_name:'Test School',total:1,page:1,per_page:50,pages:1,has_more:false,scope:'school',as_of:'2026-11-03T10:00:00Z',staff:[{id:1,name:'Demo Admin'}],summary:{enquiries:1,contacted:0,followups_due:0,unassigned:0},rows:[{lead_id:1,student:'Test Student',phone:'09999999876',grade:'III',type:'Call',outcome:'Answered',note:'Called parent today',actor_name:'Demo Admin',followup_date:'',at:'2026-11-03T10:00:00Z'}]},
+'/api/schools/1/admission-register?view=performance&page=1&per_page=50':{school_id:1,school_name:'Test School',total:1,page:1,per_page:50,pages:1,has_more:false,scope:'school',as_of:'2026-11-03T10:00:00Z',staff:[{id:1,name:'Demo Admin'}],summary:{enquiries:1,contacted:0,followups_due:0,unassigned:0},rows:[{name:'Demo Admin',assigned:1,contacted:1,call_attempts:1,followups_due:0,enrolled:0}]},
 '/api/schools/1/leads/1/view':{ok:true}
 };
 const ctx={document:{getElementById:()=>root,addEventListener:()=>{},body:{append:()=>{}}},sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
@@ -38,6 +41,16 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  click('nav','Families');assert.match(html,/Parent &amp; sibling profiles/);
  click('nav','Email Templates');assert.match(html,/Email templates/);
  click('nav','Enquiries');assert.match(html,/assignedFilter/);assert.match(html,/contactFilter/);
+ click('nav','Admission Register');await sleep(150);
+ assert.match(html,/Admission Enquiry Register/);
+ assert.match(html,/Latest Calling Remark/);
+ assert.match(html,/Called parent today/);
+ assert.match(html,/09999999876/);
+ handlers.click({target:{closest:()=>({dataset:{action:'register-view',view:'history'}})}});
+ await sleep(150);assert.match(html,/Calling &amp; Follow-up History|Calling & Follow-up History/);assert.match(html,/Recorded By/);
+ handlers.click({target:{closest:()=>({dataset:{action:'register-view',view:'performance'}})}});
+ await sleep(150);assert.match(html,/Counsellor Performance/);assert.match(html,/Calls recorded/);
+ click('nav','Enquiries');await sleep(30);
  click('view-lead','',1);await sleep(150);assert.match(html,/Record a call/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
  console.log('PASS: JavaScript renders School Visits, Families, Email Templates, filters, call manager, communications and audit drawer');
 })().catch(e=>{console.error(e);process.exitCode=1;});
