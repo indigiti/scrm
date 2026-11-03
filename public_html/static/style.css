@@ -484,3 +484,8 @@ body{background:#f4f7fb;color:#182b43}
 .sf-form-route-panel strong{font-size:14px;color:#214e82}
 .sf-form-route-panel p{font-size:12px;color:#587592;line-height:1.5;margin:5px 0 0;max-width:600px}
 .sf-form-route-panel .button-row{gap:7px}
+
+/* Cross-campus staff assignment: preserve visible role scope and transfer warning. */
+.sf-admin-notice{margin:13px 0 19px;border:1px solid #d6e4f3;border-radius:12px;padding:13px 15px;background:#f2f7ff;color:#3f6288;font-size:12px;line-height:1.65}
+#staffSchoolLinkForm select{width:100%;max-width:100%}
+#staffSchoolLinkForm .form-field{margin-bottom:14px}
