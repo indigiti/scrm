@@ -6,6 +6,7 @@ require_once __DIR__ . '/public_forms.php';
 require_once __DIR__ . '/popup_settings.php';
 require_once __DIR__ . '/landing_pages.php';
 require_once __DIR__ . '/marketing_controls.php';
+require_once __DIR__ . '/enquiry_register.php';
 require_once __DIR__ . '/public_chat_knowledge.php';
 require_once __DIR__ . '/public_chat_callback.php';
 require_once __DIR__ . '/public_chat_session.php';
@@ -796,6 +797,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $path='/api/schools/'.$canonical.($sr[2]??'');
         }
 
+        if(preg_match('#^/api/schools/(\d+)/admission-register$#D',$path,$registerMatch)){
+            if($method!=='GET')sf_fail(405,'Read-only admission register');
+            $registerSchool=(int)$registerMatch[1];
+            $registerRole=sf_membership($s,$registerSchool,$uid);
+            return [200,sf_register_report($s,$registerSchool,$uid,$registerRole,$uri)];
+        }
         if(preg_match('#^/api/schools/(\d+)/campaign-report$#D',$path,$campaignMatch)){
             if($method!=='GET')sf_fail(405,'Unsupported campaign report method');
             $sid=(int)$campaignMatch[1];$schoolRole=sf_membership($s,$sid,$uid);
