@@ -57,7 +57,9 @@ try {
  ar(callRelease('POST','/api/schools/1/communications/whatsapp/send',['lead_id'=>$none[1]['guid'],'request_id'=>SchoolFlowStore::guid()],'t1',$mock)[0]===403,'unconsented send rejected');
  $detail=callRelease('GET','/api/schools/1/leads/'.$lead['guid'])[1];
  ar(count($detail['messages'])===2,'outbound history visible in enquiry sidebar');
- ar(count(array_filter($detail['audit']['events'],fn($a)=>$a['action']==='message_accepted'))===2,'accepted sends audited');
+ ar(($detail['audit']??null)===null,'audit history stays lazy in lead detail response');
+ $audit=callRelease('GET','/api/schools/1/leads/'.$lead['guid'].'/audit')[1];
+ ar(count(array_filter($audit['events']??[],fn($a)=>$a['action']==='message_accepted'))===2,'accepted sends audited on demand');
  // Regression: existing real contacts (including another campus) must never become demo contacts.
  $realContacts=$db->transaction(fn($s)=>array_values(array_map(
     fn($l)=>$l['normalized_phone'],array_filter($s['leads'],fn($l)=>empty($l['is_demo']))
