@@ -1419,6 +1419,16 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
   root.querySelector('[data-action="toggle-nav-group"][data-group="'+key+'"]')?.focus();return;
  }
  if(action==='menu'){root.querySelector('.sidebar')?.classList.toggle('open');return;}
+ if(action==='enquiry-settings-tab'){
+   const key=el.dataset.tab;
+   if(!['communication','tabs','settings'].includes(key))return;
+   ext.enquirySettingsTab=key;
+   root.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==key);
+   root.querySelectorAll('[data-action="enquiry-settings-tab"]').forEach(button=>{
+    const active=button.dataset.tab===key;button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;button.classList.toggle('active',active);
+   });el.focus();return;
+ }
  if(action==='close-menu'){root.querySelector('.sidebar')?.classList.remove('open');return;}
  if(action==='open-search'){state.page='Enquiries';state.status='All';render();root.querySelector('#q')?.focus();return;}
  if(action==='nav'||action==='go-enquiries'){if(!canSeePage(el.dataset.page||'Enquiries'))return;
@@ -1834,13 +1844,25 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  }
  if(f.id==='enquiryPanelsForm'){
   if(!isAdmin())return;
-  const sections={};
+  const sections={},actions={},tabs={};
   Object.keys(PANEL_NAMES).forEach(key=>{sections[key]={
    visible:!!f.elements['visible_'+key]?.checked,expanded:!!f.elements['expanded_'+key]?.checked
   };});
+  Object.keys(ENQUIRY_ACTION_NAMES).forEach(key=>{actions[key]=!!f.elements['action_'+key]?.checked;});
+  Object.keys(ENQUIRY_TAB_NAMES).forEach(key=>{tabs[key]=!!f.elements['tab_'+key]?.checked;});
+  if(!Object.values(tabs).some(Boolean))return toast('Enable at least one enquiry tab',true);
+  const pref=String(f.elements.default_tab?.value||'followup');
+  const preferences={
+   default_tab:tabs[pref]?pref:Object.keys(tabs).find(key=>tabs[key]),
+   remember_tab:!!f.elements.remember_tab?.checked,
+   admin_shortcut:!!f.elements.admin_shortcut?.checked
+  };
   perform(async()=>{
-   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{sections});
-   render();toast('Enquiry panel display updated for this school');
+   ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{
+    sections,actions,tabs,preferences
+   });
+   if(state.detail&&!tabs[ext.detailTab])ext.detailTab=preferences.default_tab;
+   render();toast('Enquiry interface settings saved for this school');
   });return;
  }
  if(f.id==='landingPagesForm'){
