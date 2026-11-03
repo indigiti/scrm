@@ -183,7 +183,7 @@ function sf_export_matches(array $lead,array $filters,string $lastCall='Pending'
     }
     return true;
 }
-function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):array{
+function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters,string $kind='xlsx'):array{
     foreach(['status','temperature','site','assigned','contact','due','search','from','to','source_type','form_type','grade','call_outcome','source'] as $name){
         if(!is_string($filters[$name]??''))sf_fail(422,'Invalid report filter');
     }
@@ -209,7 +209,7 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
     if(($filters['call_outcome']??'')!==''&&
        !in_array($filters['call_outcome'],['Pending','Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'],true))
         sf_fail(422,'Invalid call outcome filter');
-    return $store->transaction(static function(array &$s) use($auth,$schoolRef,$filters):array {
+    return $store->transaction(static function(array &$s) use($auth,$schoolRef,$filters,$kind):array {
         $user=sf_session($s,$auth);$uid=$user['id'];
         $schoolId=sf_record_id($s,'schools',$schoolRef);$role=sf_membership($s,$schoolId,$uid);
         $school=sf_find($s['schools'],$schoolId);
@@ -287,10 +287,40 @@ function sf_export_snapshot(SchoolFlowStore $store,string $auth,int|string $scho
                 (string)($lead['latest_touch']['utm_source']??'')];
         }
         usort($historyRows,static fn($a,$b)=>strcmp($b[0],$a[0]));
-        sf_event($s,$schoolId,null,$uid,'admissions_xlsx_exported','Exported '.count($leadRows).' enquiries and '.count($historyRows).' activity rows');
+        sf_event($s,$schoolId,null,$uid,'admissions_'.$kind.'_exported','Exported '.count($leadRows).' enquiries and '.count($historyRows).' activity rows');
         return [$leadRows,$historyRows];
     },true);
 }
+
+/** CSV follows the ten operational columns used by the admissions Google Sheet. */
+function sf_export_register_csv(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):string {
+    [$rows]=sf_export_snapshot($store,$auth,$schoolRef,$filters,'register_csv');
+    $stream=fopen('php://temp/maxmemory:2097152','w+');
+    if($stream===false)throw new RuntimeException('CSV stream unavailable');
+    fwrite($stream,"\xEF\xBB\xBF");
+    fputcsv($stream,['Timestamp','Name','Email','Phone','City','State','Class','Campus',
+        'Assigned To','Remarks / Follow-up Notes','Stage','Next Follow-up','Academic Year',
+        'Source','UTM Campaign'],',','"','');
+    foreach($rows as $row){
+        $values=[
+            $row[0]??'',$row[1]??'',$row[2]??'',$row[3]??'',
+            $row[4]??'',$row[5]??'',$row[6]??'',$row[7]??'',
+            $row[14]??'',$row[8]??'',$row[10]??'',$row[13]??'',
+            $row[15]??'',$row[16]??'',$row[18]??''
+        ];
+        $clean=array_map(static function($value):string{
+            $text=(string)$value;
+            // Spreadsheet viewers may execute cells beginning with formula tokens.
+            if(preg_match('/^\s*[=+\-@\t\r]/u',$text))return "'".$text;
+            return $text;
+        },$values);
+        fputcsv($stream,$clean,',','"','');
+    }
+    rewind($stream);$csv=stream_get_contents($stream);fclose($stream);
+    if(!is_string($csv))throw new RuntimeException('CSV export failed');
+    return $csv;
+}
+
 function sf_export_admissions(SchoolFlowStore $store,string $auth,int|string $schoolRef,array $filters):string{
     [$leads,$events]=sf_export_snapshot($store,$auth,$schoolRef,$filters);
     return sf_xlsx_build($leads,$events);
