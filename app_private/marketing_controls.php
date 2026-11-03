@@ -145,17 +145,20 @@ function sf_enquiry_panel_settings(array $s,int $sid,string $role):array{
    foreach(['visible','expanded'] as $prop)
     if(is_bool($oldSections[$key][$prop]??null))$defaults[$key][$prop]=$oldSections[$key][$prop];
  }
- if(is_array($saved))foreach(['actions'=>&$actions,'tabs'=>&$tabs,'preferences'=>&$prefs] as $key=>&$target){
+ if(is_array($saved))foreach(['actions','tabs','preferences'] as $key){
   $stored=$saved[$key]??null;
   if(!is_array($stored))continue;
+  $target=$key==='actions'?$actions:($key==='tabs'?$tabs:$prefs);
   foreach($target as $prop=>$default){
    $candidate=$stored[$prop]??null;
    if($prop==='default_tab'){
     if(is_string($candidate)&&array_key_exists($candidate,$tabs))$target[$prop]=$candidate;
    }elseif(is_bool($candidate))$target[$prop]=$candidate;
   }
+  if($key==='actions')$actions=$target;
+  elseif($key==='tabs')$tabs=$target;
+  else $prefs=$target;
  }
- unset($target);
  if(!in_array(true,$tabs,true))$tabs['followup']=true;
  if(!$tabs[$prefs['default_tab']])
   $prefs['default_tab']=array_key_first(array_filter($tabs));
