@@ -28,7 +28,7 @@ const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -415,7 +415,7 @@ function routingPage(){
 
 function teamPage(){
  const can=isAdmin();
- return `${pageHead('Team & permissions','Edit, suspend and restore school-scoped staff access.',can?btn('＋ Add staff member','new-member','primary'):'')}
+ return `${pageHead('Team & permissions','Manage access for the selected campus. Counsellors see only assigned enquiries from their home school.',can?btn('＋ Create staff account','new-member','primary')+btn('Assign existing staff','assign-existing-staff','small'):'')}
  ${ext.resetResult?`<div class="page-card" role="status"><h3>One-time temporary password</h3>
  <p>For ${esc(ext.resetResult.name)}. Share it through a secure channel. Staff must change it at next login.</p>
  <div class="staff-temp-secret">${esc(ext.resetResult.password)}</div>
@@ -441,7 +441,7 @@ function teamPage(){
  <p class="muted-note">Disabled counsellors are excluded and their open tasks become unassigned for reassignment.</p>
  <form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}
  <button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}
- <div class="footer-tip" style="margin-top:17px">Admin: school-wide access and staff administration. Admissions: all school leads. Counsellor: assigned leads only. Multi-school account credentials cannot be reset or edited by an individual campus administrator.</div>`;
+ <div class="footer-tip" style="margin-top:17px">Access is school-scoped: Counsellor = one home school and assigned enquiries only. Admissions = all enquiries in explicitly assigned schools. Admin = manage only schools they administer. Linking existing accounts never changes passwords; existing sessions are revoked. Multi-school account credentials cannot be reset or edited by an individual campus administrator.</div>`;
 }
 function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_counts||{},phases=a.by_phase||{},reasons=a.lost_reasons||{};return `<div class="stats" style="margin:0 0 18px">${stat("Hot Leads",temps.Hot||0,"Qualified high-priority enquiries","♨","orange")}${stat("Applications Submitted",a.applications_submitted||0,"Verified submissions","▣","blue")}${stat("Visits Scheduled",a.visits_scheduled||0,"Planned campus visits","▤")}${stat("Overdue Tasks",a.overdue_tasks||0,"Needs counsellor action","◷","orange")}</div><div class="panel" style="padding:16px;margin-bottom:18px"><h3>Lead temperature distribution</h3>${Object.entries(temps).map(([k,v])=>`<span class="badge" style="margin:4px">${esc(k)} · ${Number(v)}</span>`).join("")}<h3>Admissions phases</h3>${Object.entries(phases).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")}<h3>Lost reasons</h3>${Object.entries(reasons).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")||"<div class=muted-note>No recorded lost reasons</div>"}</div>`;} 
 
@@ -573,7 +573,20 @@ function modal(){if(!state.modal)return '';
    ${input('New password (12+ characters)','new_password','password','',true)}
    ${input('Confirm new password','confirm_password','password','',true)}
    <div class="button-row">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Change password</button></div></form>`);
- if(state.modal==='new-member')return modalFrame('Add staff account','Create access for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">If the email already has a SchoolFlow account, it is linked to this school without changing that user's password.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
+ if(state.modal==='assign-existing-staff'){
+   const people=ext.linkCandidates||[];
+   return modalFrame('Assign existing staff','Reuse a verified SchoolFlow login from another school you administer. This cannot expose unrelated staff accounts.',
+    people.length?'<form id="staffSchoolLinkForm">'+
+     '<div class="form-field"><label>Existing staff account<select name="user_id" required>'+
+       '<option value="">Select an employee</option>'+people.map(p=>option(p.id,p.name+' · '+p.email+' · '+p.source_schools.join(', '))).join('')+
+     '</select></label></div>'+
+     select('Role at this campus','role',[['Admissions','Admissions · All school enquiries'],['Counsellor','Counsellor · Only assigned enquiries']].map(([value,label])=>option(value,label,'Admissions')).join(''))+
+     '<div class="sf-admin-notice">Counsellors may have only one active school assignment. For a transfer, disable their access at the old school first. Admissions may be assigned to multiple schools. Only an administrator of both schools can link the account.</div>'+
+     '<div class="button-row">'+btn('Cancel','close-modal')+'<button class="btn primary" type="submit">Assign to this school</button></div></form>':
+     '<div class="sf-admin-notice">No eligible existing staff are available from your other administered schools. Create a new account, or disable an existing counsellor at their current school before transferring.</div>'+
+     '<div class="button-row">'+btn('Close','close-modal')+'</div>');
+ }
+ if(state.modal==='new-member')return modalFrame('Add staff account','Create a NEW login for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">Create a new login here. If the email already exists, use <strong>Assign existing staff</strong> instead. Counsellors are limited to one home campus.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
  if(state.modal==='book-visit')return modalFrame('Book school visit','Schedule a parent campus tour or admissions consultation.',`<form id="visitForm">${select('Student enquiry','lead_id',state.leads.map(l=>option(l.id,l.name+' · '+l.guardian,state.visitLeadId||state.detail?.lead?.id)).join(''))}${input('Visit date and time','starts_at','datetime-local','',true)}${input('Purpose','purpose','text','Campus tour',true)}${role()==='Counsellor'?'':select('Assigned staff','staff_id',memberOptions(state.detail?.lead?.assigned_to))}<button class="btn primary" type="submit">Book visit</button></form>`);
  if(state.modal==='new-template'||state.modal==='edit-template'){
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
@@ -1196,6 +1209,13 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    if(!confirm(`${g.enabled?'Disable':'Enable'} group website ${g.name}?`))return;
    perform(async()=>{await api(`/api/group-sites/${id}`,'PATCH',{name:g.name,domain:g.domain,school_ids:g.schools.map(x=>x.school_id),enabled:!g.enabled});await loadRouting();toast('Group website status updated');});return;
  }
+ if(action==='assign-existing-staff'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     ext.linkCandidates=await api('/api/schools/'+state.schoolId+'/members/link-candidates');
+     state.modal='assign-existing-staff';render();
+   });return;
+ }
  if(['new-lead','new-site','new-member','new-school'].includes(action)){state.modal=action;state.detail=null;render();return;}
  if(action==='open-task-lead'){perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
  if(action==='view-lead'){perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
@@ -1526,6 +1546,14 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    state.token='';state.me=null;state.modal='';sessionStorage.removeItem('schoolflow_session');
    render();toast('Password changed. Sign in again.');
   });return;
+ }
+ if(f.id==='staffSchoolLinkForm'){
+   if(!isAdmin())return;
+   perform(async()=>{
+     await api('/api/schools/'+state.schoolId+'/members/link','POST',{user_id:Number(fd.user_id),role:fd.role});
+     state.modal='';ext.linkCandidates=[];await reload();
+     toast('Existing employee assigned to this school. Their other permitted roles are unchanged.');
+   });return;
  }
  if(f.id==='memberForm'){perform(async()=>{await api(`/api/schools/${state.schoolId}/members`,'POST',fd);state.modal='';await reload();toast('Team member added');});return;}
  if(f.id==='schoolForm'){perform(async()=>{let result=await api('/api/schools','POST',fd);state.me=await api('/api/me');state.schoolId=result.id;sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.modal='';state.page='Dashboard';await reload();toast('School workspace created');});return;}

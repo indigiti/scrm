@@ -54,6 +54,7 @@ jobs:
           php tests/test_historical_import.php
           php tests/test_admissions_operations.php
           php tests/test_staff_management.php
+          php tests/test_school_staff_assignment.php
           php tests/test_public_forms.php
           php tests/test_landing_page_approvals.php
           php tests/test_lead_attribution.php
