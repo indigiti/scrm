@@ -23,9 +23,9 @@ const data={
 '/api/schools/1/admission-register?view=performance&page=1&per_page=50':{school_id:1,school_name:'Test School',total:1,page:1,per_page:50,pages:1,has_more:false,scope:'school',as_of:'2026-11-03T10:00:00Z',staff:[{id:1,name:'Demo Admin'}],summary:{enquiries:1,contacted:0,followups_due:0,unassigned:0},rows:[{name:'Demo Admin',assigned:1,contacted:1,call_attempts:1,followups_due:0,enrolled:0}]},
 '/api/schools/1/leads/1/view':{ok:true}
 };
-const ctx={document:{getElementById:()=>root,addEventListener:()=>{},body:{append:()=>{}}},sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
+const ctx={document:{getElementById:(id)=>id==='root'?root:null,addEventListener:()=>{},createElement:()=>({style:{},setAttribute(){},remove(){}}),body:{append:()=>{}}},sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
 fetch:async(path)=>({status:200,ok:true,json:async()=>{if(!(path.replace('/scrm','') in data))throw Error('unexpected path '+path);return data[path.replace('/scrm','')];}}),
-setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{},window:{location:{href:''},open:()=>{}},};
+setTimeout,Date,Intl,console,URL,URLSearchParams,Blob,confirm:()=>true,prompt:()=>null,navigator:{},window:{location:{href:''},open:()=>{}},};
 vm.runInNewContext(js,ctx);
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
