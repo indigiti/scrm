@@ -15,6 +15,7 @@ const data={
  '/api/schools/1/families':[],'/api/schools/1/templates':[],'/api/schools/1/analytics':{},'/api/schools/1/assignment':{mode:'least_loaded'},
  '/api/schools/1/communications':{email:{provider:'off',connected:false},whatsapp:{provider:'off',connected:false}},
  '/api/schools/overview':schools.map(s=>({id:s.id,name:s.name,leads:0,new_leads:0,unassigned:0,sites:[],assignment_mode:'least_loaded'})),
+ '/api/schools/1/members/link-candidates':[{id:12,name:'Admissions Colleague',email:'admissions@example.org',source_schools:['ABC Baner'],can_link_counsellor:false,can_link_admissions:true}],
  '/api/group-sites':routes,
 };
 const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
@@ -61,5 +62,14 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  await sleep(120);
  assert.match(html,/Configure campaign/);
  assert.match(html,/Popup campaigns/);
- console.log('PASS: Group Websites management, legacy popup and additional short inline\/popup snippets');
+ handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Team'}})}});
+ await sleep(120);
+ assert.match(html,/Assign existing staff/,'team offers school-scoped staff assignment');
+ assert.match(html,/assigned enquiries from their home school/,'counselor isolation visible in team screen');
+ handlers.click({target:{closest:()=>({dataset:{action:'assign-existing-staff'}})}});
+ await sleep(120);
+ assert.match(html,/staffSchoolLinkForm/,'link existing staff modal opens');
+ assert.match(html,/Admissions Colleague/,'candidate is listed without global user search');
+ assert.match(html,/Counsellors may have only one active school assignment/);
+  console.log('PASS: Group Websites management, legacy popup and additional short inline\/popup snippets');
 })().catch(e=>{console.error(e);process.exitCode=1;});
