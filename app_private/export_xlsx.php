@@ -303,12 +303,20 @@ function sf_export_register_csv(SchoolFlowStore $store,string $auth,int|string $
         'Assigned To','Remarks / Follow-up Notes','Stage','Next Follow-up','Academic Year',
         'Source','UTM Campaign'],',','"','');
     foreach($rows as $row){
+        $localStamp=(string)($row[0]??'');
+        try{$localStamp=(new DateTimeImmutable($localStamp))
+            ->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('d/m/Y h:i:s A');}
+        catch(Throwable){/* preserve unusual legacy timestamps */ }
         $values=[
-            $row[0]??'',$row[1]??'',$row[2]??'',$row[3]??'',
+            $localStamp,$row[1]??'',$row[2]??'',$row[3]??'',
             $row[4]??'',$row[5]??'',$row[6]??'',$row[7]??'',
             $row[14]??'',$row[8]??'',$row[10]??'',$row[13]??'',
             $row[15]??'',$row[16]??'',$row[18]??''
         ];
+        // CSV has no text cell type: quote leading-zero phone values as text for
+        // spreadsheet readers; native XLSX is the stronger typed alternative.
+        if(preg_match('/^0[0-9]+$/D',(string)$values[3]))
+            $values[3]="'".(string)$values[3];
         $clean=array_map(static function($value):string{
             $text=(string)$value;
             // Spreadsheet viewers may execute cells beginning with formula tokens.
