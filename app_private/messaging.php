@@ -76,6 +76,8 @@ function sf_provider_send(string $uri,array $p,array $headers,SchoolFlowStore $s
         $user=sf_session($s,$auth);$role=sf_membership($s,$sid,$user['id']);
         $leadId=sf_record_id($s,'leads',$leadRef,$sid);
         $lead=sf_lead_allowed($s,$sid,$leadId,$user['id'],$role);
+        if(!sf_enquiry_action_allowed($s,$sid,$channel==='email'?'api_email':'api_whatsapp'))
+            sf_fail(403,'Provider messaging disabled by the school administrator');
         foreach($s['message_attempts']??[] as $attempt)if($attempt['school_id']===$sid&&($attempt['request_id']??null)===$nonce)sf_fail(409,'This message request has already been processed');
         if(empty($lead['consent']))sf_fail(403,'Guardian messaging consent required');
         if(!empty($lead['is_demo']))sf_fail(403,'Demo contacts cannot receive real messages');
