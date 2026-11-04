@@ -38,7 +38,7 @@ const school=()=>state.me?.schools.find(s=>s.id===state.schoolId)||state.me?.sch
 const role=()=>school()?.role||'';
 const isAdmin=()=>role()==='Admin';
 const canImport=()=>['Admin','Admissions'].includes(role());
-const canManageSchools=()=>!!state.me?.schools.some(s=>s.role==='Admin');
+const canManageSchools=()=>isAdmin();
 const userName=id=>state.members.find(m=>m.id===id)?.name||'Unassigned';
 const siteName=id=>state.sites.find(s=>s.id===id)?.name||'Manual entry';
 const short=(s,n=42)=>String(s||'').length>n?String(s).slice(0,n-1)+'…':String(s||'');
@@ -1218,7 +1218,18 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
  const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Admission Register':admissionRegisterPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
-async function loadRouting(){[ext.schoolsOverview,ext.groupSites]=await Promise.all([api('/api/schools/overview'),api('/api/group-sites')]);render();}
+async function loadRouting(){
+ const sid=state.schoolId;
+ if(!sid||!isAdmin()){ext.schoolsOverview=[];ext.groupSites=[];render();return;}
+ const [overview,groups]=await Promise.all([
+  api('/api/schools/overview'),api('/api/group-sites?school_id='+encodeURIComponent(sid))
+ ]);
+ // Never paint an earlier campus's form controls after switching schools.
+ if(state.schoolId!==sid)return;
+ ext.schoolsOverview=overview.filter(s=>Number(s.id)===sid);
+ ext.groupSites=groups.filter(g=>(g.schools||[]).some(s=>Number(s.school_id)===sid));
+ render();
+}
 async function perform(task){try{await task();}catch(e){toast(e.message,true);}}
 function closeDialog(){state.modal='';state.detail=null;if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;render();}
 async function registerCsvExport(){
@@ -1766,7 +1777,10 @@ root.addEventListener('toggle',e=>{
 },true);
 root.addEventListener('change',e=>{
  if(e.target.matches?.('[data-import-map]')){const confirmButton=root.querySelector('[data-action="import-commit"]');if(confirmButton)confirmButton.disabled=true;}
- if(e.target.id==='schoolSelect'){ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.key='';state.detail=null;state.page='Dashboard';perform(reload);}
+ if(e.target.id==='schoolSelect'){ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));
+  ext.groupSites=[];ext.schoolsOverview=[];ext.editGroupId=null;ext.chatGroups=[];
+  state.key='';state.detail=null;state.modal='';
+  state.page='Dashboard';perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
