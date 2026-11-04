@@ -119,7 +119,7 @@ try{
         'phone'=>'9876543210','grade'=>'I','consent'=>true];
     [$sent,$lead]=wp_api('POST','/api/v1/inbound-leads',$leadBody,$site['api_key'],
         'school-connector-demo-0001');
-    wp_assert($sent===201,'private connected website receives admission lead');
+    wp_assert($sent===201,'private connected website receives admission lead; HTTP '.$sent.' '.json_encode($lead));
     [$removed,$removal]=wp_api('DELETE','/api/group-sites/'.$groupId,['confirm_guid'=>$groupGuid]);
     wp_assert($removed===200&&$removal['removed'],'form removed with consent');
     $state=$store->transaction(static fn(array $s):array=>$s);
