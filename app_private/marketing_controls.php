@@ -8,7 +8,12 @@ function sf_submission_defaults():array{
 function sf_submission_settings(array $group):array{
  $saved=$group['submission_settings']??[];
  if(!is_array($saved))$saved=[];
- return array_replace(sf_submission_defaults(),array_intersect_key($saved,sf_submission_defaults()));
+ $settings=array_replace(sf_submission_defaults(),array_intersect_key($saved,sf_submission_defaults()));
+ // Legacy persisted flags must never re-enable popup redirects in admin or
+ // public settings. Only the short inline LP can navigate on success.
+ $settings['popup_redirect']=false;
+ $settings['detailed_redirect']=false;
+ return $settings;
 }
 function sf_submission_validate(array $p,array $group):array{
  $defaults=sf_submission_defaults();
