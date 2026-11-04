@@ -114,6 +114,26 @@ function sf_public_fetch_pin(string $pin): ?array {
     if(!is_string($body)||$status!==200||strlen($body)>100000) return null;
     return sf_public_parse_pin($body);
 }
+/**
+ * Server authority for the surface that submitted the short enquiry.
+ * Inline LP approvals and popup website targeting are independent checks.
+ * A campaign GUID cannot be used to target an unrelated school or URL.
+ */
+function sf_short_surface_allowed(array $group,array $data,string $origin,
+    string $page,string $campus=''):bool {
+    $mode=$data['form_display']??'inline';
+    if(!is_string($mode)||!in_array($mode,['inline','popup'],true))return false;
+    $campaign=$data['popup_campaign_guid']??'';
+    if(!is_string($campaign)||strlen($campaign)>64)return false;
+    if($campaign!==''){
+        return $mode==='popup'&&sf_popup_campaign_match($group,$campaign,$origin,$page,
+            $campus!==''?$campus:null);
+    }
+    $surfaces=sf_form_surface_settings($group);
+    if($mode==='inline'&&!$surfaces['inline_enabled'])return false;
+    if($mode==='popup'&&!$surfaces['group_popup_enabled'])return false;
+    return sf_landing_page_approved($group,$origin,$page);
+}
 function sf_public_handle(string $method, string $path, array $p, array $headers, string $ip, SchoolFlowStore $store): array {
     if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|otp/request|otp/verify|chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD',$path,$m))
         sf_fail(404,'Public form not found');
@@ -180,13 +200,14 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);
         $referrer=sf_text($p,'referrer',500);
-        if(!sf_landing_page_approved($group,$origin,$page))sf_fail(422,'Landing page URL is not approved for this form');
+        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code))
+            sf_fail(403,'This form is not enabled for the selected website, school or page');
         $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
         $ipKey=substr(hash('sha256',$ip),0,20);
         $otpSecret=$store->publicFormKey();
         return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer,$otpSecret):array{
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
+            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_short_surface_allowed($g,$p,$origin,$page,$code))sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
@@ -213,7 +234,8 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['message']='Short admission enquiry — student details pending';
             $trigger=(string)($p['popup_trigger']??'');
             $details['popup_trigger']=in_array($trigger,['manual','delay','scroll','exit'],true)?$trigger:'';
-            $details['popup_campaign_id']='group-'.$g['id'];
+            $campaign=(string)($p['popup_campaign_guid']??'');
+            $details['popup_campaign_id']=$campaign!==''?$campaign:'group-'.$g['id'];
             $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_short_received',true);
             if($verified['verified']){
                 foreach($s['leads'] as &$savedLead)if($savedLead['id']===$lead['id']){
@@ -250,11 +272,12 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if(!sf_landing_page_approved($group,$origin,$page))sf_fail(422,'Landing page URL is not approved for this form');
+        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code))
+            sf_fail(403,'This form is not enabled for the selected website, school or page');
         $ipKey=substr(hash('sha256',$ip),0,20);
         return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
+            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_short_surface_allowed($g,$p,$origin,$page,$code))sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
