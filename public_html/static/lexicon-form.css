@@ -495,3 +495,14 @@ body.lf-popup-open {
 #leadPopup .lf-input[readonly] {cursor:default}
 #leadPopup button:focus-visible,.side-tab:focus-visible {outline:2px solid #0056b3;outline-offset:3px}
 #leadPopup .lf-success {color:#167c47}
+
+
+/* Detailed popup success stays in the current page, never navigates. */
+#lf_form[hidden],#lf_complete[hidden]{display:none!important}
+.lf-confirmation{max-width:430px;margin:0 auto;padding:32px 14px 28px;text-align:center}
+.lf-confirmation-icon{display:grid;place-items:center;margin:0 auto 20px;width:64px;height:64px;border-radius:50%;background:#e9f6ef;color:#148047;font-size:34px;font-weight:800}
+.lf-confirmation h3{margin:0 0 13px;font-size:clamp(20px,3vw,25px);line-height:1.25;color:#132b52}
+.lf-confirmation p{margin:0 auto 22px;max-width:350px;color:#657792;line-height:1.7;font-size:14px}
+#lf_done{display:inline-flex;justify-content:center;align-items:center;min-height:44px;min-width:140px;padding:12px 23px;background:#5054fb;color:#fff;border:none;border-radius:10px;font-weight:750;font:inherit;cursor:pointer}
+#lf_done:hover{background:#393bc4}
+#lf_done:focus-visible{outline:3px solid #86a5ff;outline-offset:3px}
