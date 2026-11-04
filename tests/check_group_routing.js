@@ -77,7 +77,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Popup Campaigns'}})}});
  await sleep(120);
  assert.match(html,/Configure campaign/);
- assert.match(html,/Popup campaigns/);
+ assert.match(html,/School website popups/);
  handlers.click({target:{closest:()=>({dataset:{action:'edit-popup-settings',id:'1'}})}});
  assert.match(html,/Website embed codes/,'embed guide appears inside popup settings');
  assert.match(html,/Short popup/);
