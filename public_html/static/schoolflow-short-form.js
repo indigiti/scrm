@@ -175,7 +175,8 @@ function init(){
  function completeSubmission(response){
   if(response.duplicate_submission)return;
   var settings=submissionSettings||{},url=settings.thank_you_url||'';
-  var redirect=(mode==='inline'&&settings.inline_redirect)||(mode==='popup'&&settings.popup_redirect);
+  // Popup confirmations never navigate; only accepted inline LP leads may redirect.
+  var redirect=mode==='inline'&&settings.inline_redirect===true;
   if(!redirect||!url)return;
   try{
    var destination=new URL(url);
