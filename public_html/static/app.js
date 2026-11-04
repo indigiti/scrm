@@ -459,7 +459,8 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
-   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
   (!groups.length?'<div class="sf-management-card"><h3>No group forms connected</h3><p>Connect a group website from Schools & Routing first.</p>'+btn('Go to Schools & Routing','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -861,6 +862,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='form-otp-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?formOtpSettingsModal(group):'';}
  if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
@@ -1523,6 +1525,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.page=action==='route-connect'?'Websites & Forms':'Dashboard';sessionStorage.setItem('schoolflow_last_page',state.page);
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
+ }
+ if(action==='edit-form-otp-settings'){
+  if(!canManageSchools())return;
+  ext.editGroupId=Number(el.dataset.id);state.modal='form-otp-settings';render();return;
  }
  if(action==='edit-submission-settings'){
   if(!canManageSchools())return;
