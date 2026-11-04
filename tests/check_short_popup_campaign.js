@@ -68,7 +68,7 @@ function fixture(options={}){
  const sMap=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v))});
  const config={...defaults,...options.config};
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
-   schools:[{code:'campus-1',name:'Campus One'}],popup:config,landing_pages:options.landingPages
+   schools:[{code:'campus-1',name:'Campus One'}],popup:config,otp:options.otp||{required:false},landing_pages:options.landingPages
   }: {token:'test',question:'1 + 1'}});
  class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
@@ -90,10 +90,15 @@ function fixture(options={}){
   advance:ms=>{now+=ms;for(const [id,t] of [...timers])if(t.due<=now){timers.delete(id);t.fn();}},
   scroll:percent=>{context.scrollY=percent*10;windowHandlers.scroll?.();},
   exit:()=>documentHandlers.mouseout?.({relatedTarget:null,clientY:0}),
-  storage,session,getConfig:()=>config,document,outer:()=>outer
+  storage,session,getConfig:()=>config,document,outer:()=>outer,otp:()=>otp,otpSend:()=>otpSend
  };
 }
 (async function(){
+ const otpRequired=fixture({otp:{required:true},config:{enabled:false}});
+ await otpRequired.ready();
+ assert.equal(otpRequired.otp().hidden,false,'public config reveals required short-form OTP control');
+ otpRequired.manual();await otpRequired.ready();
+ assert.equal(typeof otpRequired.otpSend().handlers.click,'function','OTP request action is bound in popup');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');
