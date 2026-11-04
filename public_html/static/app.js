@@ -1687,6 +1687,25 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    if(!canManageSchools())return;
    ext.editGroupId=Number(el.dataset.id);state.modal='landing-pages';render();return;
  }
+ if(action==='new-website-popup'){
+  if(!isAdmin())return;
+  // Always refresh the active school list before choosing a domain.
+  state.modal='website-popup-source';render();return;
+ }
+ if(action==='start-site-popup'){
+  if(!isAdmin())return;
+  const siteId=Number(el.dataset.id),sid=state.schoolId;
+  const site=state.sites.find(s=>Number(s.id)===siteId&&!s.is_group_route&&s.enabled&&!s.removed_at);
+  if(!site)return;
+  perform(async()=>{
+    const result=await api('/api/schools/'+sid+'/sites/'+siteId+'/public-form','POST',{});
+    if(state.schoolId!==sid)return;
+    await loadRouting();
+    ext.editGroupId=result.group.id;ext.editPagePopupGuid=null;
+    state.modal='page-popup';render();
+    if(result.created)toast('Public popup form provisioned for '+site.name+'. Configure and create its campaign.');
+  });return;
+ }
  if(action==='new-page-popup'||action==='edit-page-popup'){
    if(!isAdmin())return;
    const group=ext.groupSites.find(g=>Number(g.id)===Number(el.dataset.id));
@@ -2202,6 +2221,29 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    });
    const group=ext.groupSites.find(g=>g.id===id);if(group)group.landing_pages=settings;
    state.modal='';render();toast('Approved landing pages saved. Removed URLs are now blocked.');
+  });return;
+ }
+ if(f.id==='websitePopupSourceForm'){
+  if(!isAdmin())return;
+  const ref=String(fd.website_target||''),sid=state.schoolId;
+  const match=/^(site|group):([1-9][0-9]*)$/.exec(ref);
+  if(!match)return toast('Choose an authorized website.',true);
+  perform(async()=>{
+   let group;
+   if(match[1]==='site'){
+    const site=state.sites.find(s=>Number(s.id)===Number(match[2])&&!s.is_group_route&&s.enabled);
+    if(!site)throw new Error('Selected school website is not active');
+    const result=await api('/api/schools/'+sid+'/sites/'+site.id+'/public-form','POST',{});
+    group=result.group;
+    await loadRouting();
+   }else{
+    group=ext.groupSites.find(g=>Number(g.id)===Number(match[2])&&
+     g.schools.some(s=>Number(s.school_id)===sid));
+    if(!group)throw new Error('This form is not available for the selected school');
+   }
+   if(state.schoolId!==sid)return;
+   ext.editGroupId=Number(group.id);ext.editPagePopupGuid=null;
+   state.modal='page-popup';render();
   });return;
  }
  if(f.id==='pagePopupForm'){
