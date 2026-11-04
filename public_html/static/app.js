@@ -521,6 +521,7 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('Add popup to LP','new-page-popup','small','data-id="'+Number(g.id)+'"')+
    btn('Copy inline code','copy-group-inline','small','type="button" data-id="'+Number(g.id)+'"')+
    btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
    btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
@@ -533,12 +534,22 @@ function popupCampaignsPage(){
  return pageHead('Popup campaigns','Control timing, exit intent, scroll triggers and frequency independently for each group form.')+
   '<div class="sf-management-cards">'+groups.map(g=>{
    const p=g.popup_settings||{},enabled=!!p.enabled;
+   const pageCampaigns=Array.isArray(g.page_popup_campaigns)?g.page_popup_campaigns:[];
    const trigger={'either':'Time or scroll','delay':'Time delay','scroll':'Scroll depth','exit':'Exit intent','manual':'Button only'}[p.trigger]||'Manual';
    return '<section class="sf-management-card"><div class="sf-management-top"><div><span class="sf-eyebrow">CAMPAIGN · GROUP #'+Number(g.id)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.domain)+'</p></div>'+
     '<span class="sf-status-pill '+(enabled?'':'sf-muted')+'">'+(enabled?'Auto-popup enabled':'Manual only')+'</span></div>'+
     '<div class="sf-management-meta"><span>Trigger: '+esc(trigger)+'</span><span>Repeat: '+esc(p.repeat_after||'7')+' days / sessions</span></div>'+
-    '<p class="sf-management-empty">Manual enquiry button stays available even if automatic triggers are disabled.</p>'+
-    '<div class="button-row">'+btn('Configure campaign','edit-popup-settings','primary small','data-id="'+Number(g.id)+'"')+
+    '<p class="sf-management-empty">Group-wide popup: manual enquiry stays available unless the script is removed from the website. Use page popups for individual landing pages.</p>'+
+    '<div class="sf-page-popup-list"><div class="sf-page-popup-header"><strong>Landing-page popups</strong><span>'+pageCampaigns.length+' configured</span></div>'+
+    (pageCampaigns.length?pageCampaigns.map(c=>'<div class="sf-page-popup-row"><div class="sf-page-popup-about"><strong>'+esc(c.name)+'</strong><small>'+esc(c.landing_page)+'</small>'+
+    '<span class="sf-status-pill '+(c.settings?.enabled?'':'sf-muted')+'">'+(c.settings?.enabled?'Enabled':'Disabled')+'</span></div>'+
+    '<div class="button-row">'+btn('Copy code','copy-page-popup','small','type="button" data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
+    btn('Edit','edit-page-popup','small','data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
+    btn('Remove','delete-page-popup','small danger','type="button" data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
+    '</div></div>').join(''):'<p class="sf-management-empty">No page-specific popups created yet. Add one to target a single landing page.</p>')+
+    '</div>'+
+    '<div class="button-row">'+btn('Add landing-page popup','new-page-popup','primary small','data-id="'+Number(g.id)+'"')+
+    btn('Configure group popup','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
     btn('Copy popup code','copy-group-short-popup','small','type="button" data-id="'+Number(g.id)+'"')+
     btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
@@ -574,7 +585,7 @@ function routingPage(){
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
+ </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Add page popup','new-page-popup','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}<details class="sf-advanced-action"><summary>Dangerous actions ▾</summary>${btn('Refresh Form ID','refresh-group-form-id','small',`data-id="${Number(g.id)}"`)}</details><details class="sf-advanced-action"><summary>Advanced ▾</summary><div class="button-row">${btn('Rotate key','rotate-group-key','small',`data-id="${Number(g.id)}"`)}${btn(g.enabled?'Disable':'Enable','toggle-group','small',`data-id="${Number(g.id)}"`)}</div></details></div></div>`).join('')||'<p class="muted-note">No group websites configured. Add one to route parents from a single school selector.</p>'}</div>
  <p class="muted-note" style="margin-top:12px">WordPress: update the SchoolFlow Contact Form 7 connector to v1.2. Add <code>[select* school_code]</code> to the chosen form, and put the group key and form ID in <code>wp-config.php</code>. Campus options are fetched privately from SchoolFlow and may take up to 60 seconds to refresh.</p></section>
  <div class="section-head"><h2>Individual school websites</h2></div>
  <div class="route-school-grid">${rows.map(sc=>`<section class="route-school-card"><div class="route-school-head"><div><div class="eyebrow">SCHOOL #${Number(sc.id)}</div><h3>${esc(sc.name)}</h3></div><span class="role-label">${sc.sites.filter(s=>s.enabled).length} active source(s)</span></div>
