@@ -43,7 +43,8 @@ function fixture(options={}){
  let countDiv=0;
  const document={
   currentScript:{src:'https://crm.example.test/scrm/static/schoolflow-short-form.js?v=xyz',dataset:{
-   schoolflowGroup:guid,schoolflowMode:'popup',schoolflowShortCssVersion:'abc'
+   schoolflowGroup:guid,schoolflowMode:'popup',schoolflowShortCssVersion:'abc',
+   schoolflowPopupCampaign:options.pagePopupGuid||''
   }},
   head,body,readyState:'complete',visibilityState:'visible',documentElement:{scrollHeight:2000},
   referrer:'',activeElement:node('button'),
@@ -68,7 +69,8 @@ function fixture(options={}){
  const sMap=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v))});
  const config={...defaults,...options.config};
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
-   schools:[{code:'campus-1',name:'Campus One'}],popup:config,otp:options.otp||{required:false},landing_pages:options.landingPages
+   schools:[{code:'campus-1',name:'Campus One'}],popup:config,
+   page_popup_campaigns:options.campaigns||[],otp:options.otp||{required:false},landing_pages:options.landingPages
   }: {token:'test',question:'1 + 1'}});
  class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
@@ -90,7 +92,8 @@ function fixture(options={}){
   advance:ms=>{now+=ms;for(const [id,t] of [...timers])if(t.due<=now){timers.delete(id);t.fn();}},
   scroll:percent=>{context.scrollY=percent*10;windowHandlers.scroll?.();},
   exit:()=>documentHandlers.mouseout?.({relatedTarget:null,clientY:0}),
-  storage,session,getConfig:()=>config,document,outer:()=>outer,otp:()=>otp,otpSend:()=>otpSend
+  storage,session,getConfig:()=>config,document,outer:()=>outer,otp:()=>otp,otpSend:()=>otpSend,
+  trigger:()=>trigger
  };
 }
 (async function(){
@@ -99,6 +102,19 @@ function fixture(options={}){
  assert.equal(otpRequired.otp().hidden,false,'public config reveals required short-form OTP control');
  otpRequired.manual();await otpRequired.ready();
  assert.equal(typeof otpRequired.otpSend().handlers.click,'function','OTP request action is bound in popup');
+ const pageGuid='f47ac10a-5a49-4d2e-a5d2-58d254e0901f';
+ const specific={guid:pageGuid,landing_page:'https://school.test/admissions',
+   popup:{...defaults,enabled:true,trigger:'manual',school_codes:['campus-1']}};
+ const pagePopup=fixture({pagePopupGuid:pageGuid,campaigns:[specific]});await pagePopup.ready();
+ assert.equal(pagePopup.trigger().hidden,false,'matching page popup becomes visible');
+ pagePopup.manual();await pagePopup.ready();
+ assert.equal(pagePopup.isOpen(),true,'page-specific popup can open manually on matching URL');
+ const foreignPage=fixture({path:'/unrelated',pagePopupGuid:pageGuid,campaigns:[specific]});await foreignPage.ready();
+ assert.equal(foreignPage.trigger().hidden,true,'page popup hidden outside its target URL');
+ foreignPage.manual();assert.equal(foreignPage.isOpen(),false,'manual popup cannot bypass landing page target');
+ const deleted=fixture({pagePopupGuid:pageGuid,campaigns:[]});await deleted.ready();
+ assert.equal(deleted.trigger().hidden,true,'disabled or removed popup hides its button');
+ deleted.manual();assert.equal(deleted.isOpen(),false,'removed campaign cannot open manually');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');
