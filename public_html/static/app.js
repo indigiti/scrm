@@ -549,7 +549,7 @@ function popupCampaignsPage(){
     '</div></div>').join(''):'<p class="sf-management-empty">No page-specific popups created yet. Add one to target a single landing page.</p>')+
     '</div>'+
     '<div class="button-row">'+btn('Add landing-page popup','new-page-popup','primary small','data-id="'+Number(g.id)+'"')+
-    btn('Configure group popup','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+    btn('Configure campaign','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
     btn('Copy popup code','copy-group-short-popup','small','type="button" data-id="'+Number(g.id)+'"')+
     btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
