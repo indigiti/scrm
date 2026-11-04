@@ -259,8 +259,15 @@ function init(){
    if(mode==='inline')outer.style.display=pageAllowed?'':'none';
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
-   if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
-    return error('This landing page URL is not approved. Contact the school website administrator.');}
+   if(!pageAllowed){
+    campus.replaceChildren(new Option('Form unavailable on this page',''));
+    if(mode==='popup'){
+     outer.classList.remove('sf2-open');opened=false;
+     var existingButton=document.querySelector('[data-schoolflow-popup-guid="'+guid+'"]');
+     if(existingButton){/* Leave the mounted host intact for future authorised refreshes. */}
+    }
+    return error('This enquiry popup is not enabled for this website or page.');
+   }
    campus.replaceChildren(new Option('Select campus',''));
    var permitted=mode==='popup'&&config&&config.enabled&&Array.isArray(config.school_codes)?config.school_codes:null;
    (d.schools||[]).forEach(function(x){if(x&&x.code&&x.name&&(!permitted||permitted.includes(x.code)))campus.add(new Option(x.name,x.code));});
@@ -282,7 +289,7 @@ function init(){
   if(previousFocus&&typeof previousFocus.focus==='function')previousFocus.focus();
  }
  if(mode==='popup'){
-  var trigger=document.createElement('button');trigger.className='sf2-trigger';trigger.textContent=loader.dataset.schoolflowButton||'Enquire Now';
+  var trigger=document.createElement('button');trigger.className='sf2-trigger'+(loader.dataset.schoolflowButtonStyle==='rail'?' sf2-trigger-rail':'');trigger.type='button';trigger.textContent=loader.dataset.schoolflowButton||'Enquire Now';
   trigger.hidden=true;
   document.body.appendChild(trigger);trigger.addEventListener('click',function(){popupTrigger='manual';open();});
   outer.querySelector('.sf2-close').addEventListener('click',close);
@@ -299,7 +306,9 @@ function init(){
   });
   get('/config').then(function(d){
    configLoaded=true;
-   pageAllowed=approvedPage(d.landing_pages)&&allowedSurface(d)&&configurePagePopup(d);
+   // Campaign-specific school popups use registered-website authorization,
+   // not the separate inline LP page allowlist.
+   pageAllowed=(pagePopupGuid||approvedPage(d.landing_pages))&&allowedSurface(d)&&configurePagePopup(d);
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
    trigger.hidden=!pageAllowed;
