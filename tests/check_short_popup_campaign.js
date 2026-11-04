@@ -30,9 +30,10 @@ function fixture(options={}){
  campus.add=item=>campus.options.push(item);
  const form=node('form');form.elements={
   school_code:campus,parent_name:node('input'),phone:node('input'),
-  captcha_answer:node('input'),grade:node('select'),consent:node('input'),website:node('input')
+  captcha_answer:node('input'),otp_code:node('input'),grade:node('select'),consent:node('input'),website:node('input')
  };
  const status=node('p'),submit=node('button'),verify=node('div'),close=node('button'),question=node('label'),refresh=node('button');
+ const otp=node('div'),otpPin=node('div'),otpSend=node('button'),otpCheck=node('button'),otpStatus=node('p');
  status.textContent='';verify.hidden=true;
  let outer=null,trigger=null;
  const head={appendChild(){}},body={appendChild(el){
@@ -55,7 +56,9 @@ function fixture(options={}){
     outer=el;
     el.querySelector=selector=>({
      form, '.sf2-verify':verify,'.sf2-status':status,'.sf2-submit':submit,
-     '.sf2-close':close,'.sf2-question':question,'.sf2-refresh':refresh
+     '.sf2-close':close,'.sf2-question':question,'.sf2-refresh':refresh,
+     '.sf2-otp':otp,'.sf2-otp-pin':otpPin,'.sf2-otp-send':otpSend,
+     '.sf2-otp-check':otpCheck,'.sf2-otp-status':otpStatus
     })[selector]||null;
     el.querySelectorAll=()=>[close,form.elements.parent_name,submit];
    }
