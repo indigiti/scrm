@@ -7,6 +7,8 @@ var guid=(loader.getAttribute('data-schoolflow-group')||'').trim().toLowerCase()
 if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(guid)){
   console.error('SchoolFlow: data-schoolflow-group must be the public group GUID.');return;
 }
+var campaignGuid=(loader.getAttribute('data-schoolflow-popup-campaign')||'').trim().toLowerCase();
+if(campaignGuid&&!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(campaignGuid))return;
 window.__schoolflowLexiconFormLoaded=true;
 var url=new URL(loader.src),base=url.href.replace(/\/static\/lexicon-form\.js(?:\?.*)?$/,'');
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
@@ -92,6 +94,12 @@ function init(){
  '<option value="">Loading campuses...</option></select></div>',
  '<div class="lf-captcha"><span id="lf_captcha_label">Loading math CAPTCHA...</span>',
  '<input id="lf_captcha" class="lf-input" type="text" placeholder="Answer" autocomplete="off" inputmode="numeric" maxlength="3" required></div>',
+ '<div id="lf_otp" class="lf-otp" hidden><strong>Verify your WhatsApp number</strong>',
+ '<small>A verification code is required for this enquiry.</small>',
+ '<button type="button" id="lf_otp_send">Request WhatsApp code</button>',
+ '<div id="lf_otp_pin" hidden><input id="lf_otp_code" class="lf-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="Six-digit code">',
+ '<button type="button" id="lf_otp_check">Verify code</button></div>',
+ '<p id="lf_otp_feedback" class="lf-feedback" role="status" aria-live="polite"></p></div>',
  '<label class="lf-consent"><input id="lf_consent" type="checkbox" required>',
  '<span>I agree to be contacted by the selected school regarding this admission enquiry.</span></label>',
  '<label class="lf-honeypot" aria-hidden="true">Leave blank<input type="text" id="lf_website" tabindex="-1" autocomplete="off"></label>',
@@ -108,14 +116,16 @@ function init(){
  var form=$('lf_form'),submit=$('lf_submit'),campus=$('lf_campus'),pin=$('lf_pincode');
  var state=$('lf_state'),city=$('lf_city'),phone=$('lf_phone'),answer=$('lf_captcha');
  var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false,submissionComplete=false,detailedEnabled=false;
+ var campaignRules=null,campaignTriggersReady=false,popupTrigger='manual';
+ var otpRequired=false,otpId='',otpProof='',otpPhone='',otpCampus='',otpBusy=false;
  // The enquiry form is a gentle fallback when the visitor is not using chat.
  // These optional website attributes allow site owners to opt out or tune timing.
- var autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off';
+ var autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off'&&!campaignGuid;
  var exitEnabled=loader.getAttribute('data-schoolflow-exit-intent')!=='off';
  var configuredDelay=Number(loader.getAttribute('data-schoolflow-enquiry-delay'));
  var autoDelay=Number.isFinite(configuredDelay)&&configuredDelay>=8000&&configuredDelay<=180000?configuredDelay:30000;
  var pageOpenedAt=Date.now(),autoShownHere=false,deferredForChat=false,closeGraceTimer=null;
- var autoShownKey='schoolflow_lexicon_auto_shown_'+guid;
+ var autoShownKey='schoolflow_lexicon_auto_shown_'+guid+(campaignGuid?'_'+campaignGuid:'');
  async function decode(response){
   var data=await response.json().catch(function(){return {};});
   if(!response.ok)throw new Error(data.detail||('SchoolFlow unavailable ('+response.status+')'));
@@ -123,8 +133,8 @@ function init(){
  }
  var get=function(route){return fetch(api+route,{method:'GET',cache:'no-store',credentials:'omit',headers:{Accept:'application/json'}}).then(decode);};
  function feedback(message,success){$('lf_feedback').textContent=message||'';$('lf_feedback').classList.toggle('lf-success',!!success);}
- function closed(){try{return sessionStorage.getItem('schoolflow_lexicon_closed_'+guid)==='1';}catch(e){return false;}}
- function remember(){try{sessionStorage.setItem('schoolflow_lexicon_closed_'+guid,'1');}catch(e){}}
+ function closed(){try{return sessionStorage.getItem('schoolflow_lexicon_closed_'+guid+(campaignGuid?'_'+campaignGuid:''))==='1';}catch(e){return false;}}
+ function remember(){try{sessionStorage.setItem('schoolflow_lexicon_closed_'+guid+(campaignGuid?'_'+campaignGuid:''),'1');}catch(e){}}
  function previouslyPrompted(){try{return sessionStorage.getItem(autoShownKey)==='1';}catch(e){return autoShownHere;}}
  function rememberPrompt(){autoShownHere=true;try{sessionStorage.setItem(autoShownKey,'1');}catch(e){}}
  function chatbotOpen(){
