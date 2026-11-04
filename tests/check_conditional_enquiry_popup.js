@@ -47,7 +47,7 @@ function fixture(opts={}){
   dispatchEvent(event){(listeners[event.type]||[]).forEach(fn=>fn(event));}
  };
  const context={
-  document,window:{crypto:{randomUUID:()=>guid},location:{assign:url=>navigations.push(url)}},URL,URLSearchParams,console,
+  document,crypto:{randomUUID:()=>guid},window:{crypto:{randomUUID:()=>guid},location:{assign:url=>navigations.push(url)}},URL,URLSearchParams,console,
   location:{href:'https://school.example/admissions',origin:'https://school.example',pathname:'/admissions',search:''},
   sessionStorage:{getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)},
   Option:function(label,value){return {label,value};},
