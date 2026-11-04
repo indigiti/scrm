@@ -157,6 +157,7 @@ function sf_group_public_view(array $s, array $group): array {
         'popup_settings'=>sf_popup_settings($group),
         'form_surface_settings'=>sf_form_surface_settings($group),
         'page_popup_campaigns'=>sf_page_popup_campaigns($group),
+        'linked_school_site_id'=>(int)($group['linked_school_site_id']??0),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
         'form_otp_settings'=>sf_form_otp_admin_view($group),
@@ -922,6 +923,47 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         // Page-specific popup campaign management stays inside the existing
         // group ownership boundary; switching school never grants new rights.
+        // Provision a single-school public popup form directly from an existing
+        // school website connector. Never require an LP URL or create a second
+        // disconnected website source. The site remains the lead attribution.
+        if(preg_match('#^/api/schools/(\d+)/sites/(\d+)/public-form$#D',$path,$websiteForm)){
+            if($method!=='POST')sf_fail(405,'Unsupported school website form operation');
+            $sid=(int)$websiteForm[1];$siteId=(int)$websiteForm[2];
+            sf_membership($s,$sid,$uid,['Admin']);
+            $site=sf_source($s,$siteId);
+            if(!$site||(int)$site['school_id']!==$sid||empty($site['enabled'])||
+                !empty($site['removed_at'])||!empty($site['is_group_route']))
+                sf_fail(404,'Connect and enable a school website first');
+            $domain=trim((string)($site['domain']??''));
+            $host=sf_landing_primary_host(['domain'=>$domain]);
+            if($host===''||sf_landing_origin('https://'.$host)===''||
+               preg_replace('~^https?://~i','',$domain)!==$host&&
+               preg_replace('~^https?://~i','',$domain)!==$host.'/')
+                sf_fail(422,'The connected school website must have one valid HTTPS hostname');
+            foreach($s['group_sites']??[] as $existing){
+                if((int)($existing['linked_school_site_id']??0)!==$siteId)continue;
+                if((int)$existing['owner_id']!==$uid)
+                    sf_fail(409,'This school website form is already owned by another administrator');
+                if(count($existing['routes'])!==1||
+                   (int)$existing['routes'][0]['school_id']!==$sid)
+                    sf_fail(409,'School website form routing needs administrator review');
+                return [200,['created'=>false,'group'=>sf_group_public_view($s,$existing)]];
+            }
+            $id=sf_id($s,'group_sites');
+            $key='sfgroup_'.bin2hex(random_bytes(32));
+            $group=['id'=>$id,'guid'=>sf_uuid(),'owner_id'=>$uid,
+                'name'=>$site['name'].' · Public admission form','domain'=>$host,
+                'key_hash'=>sf_hash($key),'enabled'=>true,
+                'linked_school_site_id'=>$siteId,'linked_school_site_guid'=>$site['guid'],
+                'routes'=>[['code'=>'campus-'.$sid,'school_id'=>$sid,'site_id'=>$siteId]],
+                'form_surface_settings'=>['inline_enabled'=>false,
+                    'group_popup_enabled'=>false,'detailed_popup_enabled'=>false],
+                'created_at'=>sf_time()];
+            $s['group_sites'][]=$group;
+            sf_event($s,$sid,null,$uid,'school_website_form_created',
+                'Public form linked to registered school website GUID '.$site['guid']);
+            return [201,['created'=>true,'group'=>sf_group_public_view($s,$group)]];
+        }
         if(preg_match('#^/api/group-sites/(\d+)/page-popups(?:/([a-f0-9-]{36}))?$#iD',$path,$pm)){
             $groupId=(int)$pm[1];$target=strtolower((string)($pm[2]??''));
             $group=null;
