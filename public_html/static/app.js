@@ -299,7 +299,7 @@ function tasksPage(){const rows=ext.tasks||[];return `<div class="page-card"><h2
 function followups(){let rows=state.leads.filter(l=>l.followup_date&&!['Lost','Enrolled'].includes(l.status)).sort((a,b)=>a.followup_date.localeCompare(b.followup_date));
  return `${pageHead('Follow-ups','Prioritise calls, school visits and counselling sessions.',btn('＋ New enquiry','new-lead','primary'))}<div class="stats" style="margin:0 0 22px">${stat('Due or overdue',rows.filter(l=>l.followup_date<=day()).length,'Priority contact list','◷','orange')}${stat('Scheduled',rows.filter(l=>l.followup_date>day()).length,'Future follow-ups','▣','blue')}${stat('Active enquiries',state.leads.filter(l=>!['Lost','Enrolled'].includes(l.status)).length,'Still in admissions journey','♧')}${stat('Counsellors',state.members.filter(m=>m.role==='Counsellor').length,'Available staff','♙','green')}</div>${rows.length?`<div class="panel"><div class="table-scroll"><table class="lead-table"><thead><tr><th>Due date</th><th>Student</th><th>Contact</th><th>Stage</th><th>Assigned to</th><th>Actions</th></tr></thead><tbody>${rows.map(l=>`<tr><td><b style="color:${l.followup_date<=day()?'#dc8855':'#56607a'}">${esc(dateFmt(l.followup_date))}</b></td><td><b>${esc(l.name)}</b><small class="muted" style="display:block">${esc(l.grade)}</small></td><td>${esc(l.phone)}</td><td>${stageBadge(l.status)}</td><td>${esc(l.assigned_name||'Unassigned')}</td><td><div class="button-row">${btn('Open','view-lead','small',`data-id="${l.id}"`)}${l.consent&&l.email?btn('✉ Reminder draft','email-draft','small',`data-id="${l.id}"`):''}${btn('✓ Done','done-followup','small',`data-id="${l.id}"`)}</div></td></tr>`).join('')}</tbody></table></div></div>`:'<div class="empty-state"><b>No scheduled follow-ups</b><p>Add a follow-up date to an enquiry to see it here.</p></div>'}`;
 }
-function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}${canManageSchools()?`<section class="sf-form-route-panel"><div><strong>Public forms & campaigns</strong><p>Group form embeds, approved landing-page URLs and popup behavior are managed separately from private website API integrations.</p></div><div class="button-row">${btn('Landing Pages','nav','primary small','data-page="Landing Pages"')}${btn('Popup Campaigns','nav','small','data-page="Popup Campaigns"')}${btn('Group Forms','nav','small','data-page="Schools & Routing"')}</div></section>`:''}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${btn('Edit','edit-site','small',`data-id="${s.id}"`)}${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}${btn('Remove','remove-site','small danger',`data-id="${s.id}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
+function sitesPage(){return `${pageHead('Websites & forms','Connect separate WordPress websites, forms and landing pages.',isAdmin()?btn('＋ Connect website','new-site','primary'):'')}${canManageSchools()?`<section class="sf-form-route-panel"><div><strong>Public forms & campaigns</strong><p>Group form embeds, approved landing-page URLs and popup behavior are managed separately from private website API integrations.</p></div><div class="button-row">${btn('Landing Pages','nav','primary small','data-page="Landing Pages"')}${btn('Popup Campaigns','nav','small','data-page="Popup Campaigns"')}${btn('Group Forms','nav','small','data-page="Schools & Routing"')}</div></section>`:''}<div class="app-alert">Each website gets a different secret API key. New enquiries enter the correct school automatically. Keys are displayed once when created or rotated.</div>${state.key?`<div class="key-panel"><strong>New website API key — copy it now</strong><p class="muted-note">This secret cannot be retrieved later. Keep it on your WordPress server, never in a public form or browser code.</p><div class="key-box">${esc(state.key)}</div><div class="button-row" style="margin-top:12px">${btn('Copy key','copy-key','primary small')}${btn('I saved the key','dismiss-key','small')}</div></div>`:''}<div class="website-grid">${state.sites.map(s=>`<div class="web-tile"><div class="button-row" style="justify-content:space-between"><div class="site-icon">${s.platform==='WordPress'?'W':'⌁'}</div><span class="badge" style="background:${s.enabled?'#e6f8ef':'#ffe8ec'};color:${s.enabled?'#178c60':'#b5425d'}">${s.enabled?'● Active':'○ Disabled'}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.domain)} · ${esc(s.platform)}</p><div class="button-row" style="justify-content:space-between;margin-bottom:14px"><span class="muted-note">Captured enquiries</span><b style="font-size:22px">${s.lead_count}</b></div>${isAdmin()&&!s.is_group_route?`<div class="button-row">${s.enabled?btn('Add popup','start-site-popup','primary small',`data-id="${s.id}"`):''}${btn('Edit','edit-site','small',`data-id="${s.id}"`)}${btn('Rotate key','rotate-key','small',`data-id="${s.id}"`)}${btn(s.enabled?'Disable':'Enable','toggle-site','small',`data-id="${s.id}" data-enabled="${s.enabled?'0':'1'}"`)}${btn('Remove','remove-site','small danger',`data-id="${s.id}"`)}</div>`:''}</div>`).join('')||'<div class="empty-state"><b>No websites added yet</b><p>Connect your first WordPress enquiry form.</p></div>'}</div><div class="page-card" style="margin-top:20px"><h3 style="margin-top:0">Integration instructions</h3><p class="muted">Use a server-side HTTPS request from your WordPress form. A ready-to-configure Contact Form 7 plugin is included in the project.</p><div class="snippet">POST https://YOUR-CRM-DOMAIN${APP_BASE}/api/v1/inbound-leads<br>Authorization: Bearer YOUR_SITE_API_KEY<br>Idempotency-Key: UNIQUE_FORM_SUBMISSION_ID<br>Content-Type: application/json<br><br>{ "student_name": "Student", "parent_name": "Guardian",<br>  "phone": "+91 9876543210", "class": "Grade 4", "consent": true }</div></div>`;}
 function groupSchoolChecks(chosen=[]){
  const admins=state.me?.schools.filter(x=>x.role==='Admin')||[];
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
@@ -538,7 +538,7 @@ function landingPagesPage(){
  if(!canManageSchools())return pageHead('Landing page approvals','Administrator access required.');
  const groups=ext.groupSites||[];
  const count=groups.reduce((n,g)=>n+(g.landing_pages?.approved_urls?.length||0),0);
- return pageHead('Landing pages','Approve additional landing-page URLs for public admissions forms. The original group domain retains existing access unless you explicitly restrict it.',
+ return pageHead('Inline landing pages','Manage approved inline-form page URLs, thank-you destinations and conversion tracking separately from school website popups.',
    btn('＋ Connect group website','new-group','primary'))+
   '<div class="sf-admin-summary"><div><span>Group form websites</span><strong>'+groups.length+'</strong></div>'+
   '<div><span>Approved additional URLs</span><strong>'+count+'</strong></div>'+
@@ -554,7 +554,6 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
-   btn('Add popup to LP','new-page-popup','small','data-id="'+Number(g.id)+'"')+
    btn('Copy inline code','copy-group-inline','small','type="button" data-id="'+Number(g.id)+'"')+
    btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
    btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
@@ -564,7 +563,8 @@ function landingPagesPage(){
 function popupCampaignsPage(){
  if(!canManageSchools())return pageHead('Popup campaigns','Administrator access required.');
  const groups=ext.groupSites||[];
- return pageHead('Popup campaigns','Control timing, exit intent, scroll triggers and frequency independently for each group form.')+
+ return pageHead('School website popups','Create popups on connected school websites. Landing-page approval is not required for a registered school domain.',
+   btn('＋ Create school website popup','new-website-popup','primary'))+
   '<div class="sf-management-cards">'+groups.map(g=>{
    const p=g.popup_settings||{},enabled=!!p.enabled;
    const pageCampaigns=Array.isArray(g.page_popup_campaigns)?g.page_popup_campaigns:[];
@@ -572,21 +572,21 @@ function popupCampaignsPage(){
    return '<section class="sf-management-card"><div class="sf-management-top"><div><span class="sf-eyebrow">CAMPAIGN · GROUP #'+Number(g.id)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.domain)+'</p></div>'+
     '<span class="sf-status-pill '+(enabled?'':'sf-muted')+'">'+(enabled?'Auto-popup enabled':'Manual only')+'</span></div>'+
     '<div class="sf-management-meta"><span>Trigger: '+esc(trigger)+'</span><span>Repeat: '+esc(p.repeat_after||'7')+' days / sessions</span></div>'+
-    '<p class="sf-management-empty">Group-wide popup: manual enquiry stays available unless the script is removed from the website. Use page popups for individual landing pages.</p>'+
-    '<div class="sf-page-popup-list"><div class="sf-page-popup-header"><strong>Landing-page popups</strong><span>'+pageCampaigns.length+' configured</span></div>'+
-    (pageCampaigns.length?pageCampaigns.map(c=>'<div class="sf-page-popup-row"><div class="sf-page-popup-about"><strong>'+esc(c.name)+'</strong><small>'+esc(c.landing_page)+'</small>'+
+    '<p class="sf-management-empty">Legacy group popup is shown separately for compatibility. New school website popups have independent GUIDs and can target the whole registered site.</p>'+
+    '<div class="sf-page-popup-list"><div class="sf-page-popup-header"><strong>Website popup campaigns</strong><span>'+pageCampaigns.length+' configured</span></div>'+
+    (pageCampaigns.length?pageCampaigns.map(c=>'<div class="sf-page-popup-row"><div class="sf-page-popup-about"><strong>'+esc(c.name)+'</strong><small>'+esc((c.scope==='website'?'Entire website · ':'Specific page · ')+c.landing_page)+'</small>'+
     '<span class="sf-status-pill '+(c.settings?.enabled?'':'sf-muted')+'">'+(c.settings?.enabled?'Enabled':'Disabled')+'</span></div>'+
     '<div class="button-row">'+btn('Copy code','copy-page-popup','small','type="button" data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
     btn('Edit','edit-page-popup','small','data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
     btn('Remove','delete-page-popup','small danger','type="button" data-id="'+Number(g.id)+'" data-campaign="'+esc(c.guid)+'"')+
-    '</div></div>').join(''):'<p class="sf-management-empty">No page-specific popups created yet. Add one to target a single landing page.</p>')+
+    '</div></div>').join(''):'<p class="sf-management-empty">No website popups configured yet. Create one for an authorized school website.</p>')+
     '</div>'+
-    '<div class="button-row">'+btn('Add landing-page popup','new-page-popup','primary small','data-id="'+Number(g.id)+'"')+
+    '<div class="button-row">'+btn('Add website popup','new-page-popup','primary small','data-id="'+Number(g.id)+'"')+
     btn('Configure campaign','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
     btn(g.form_surface_settings?.group_popup_enabled===false?'Restore group popup':'Disable group popup',
      'toggle-form-surface','small','type="button" data-id="'+Number(g.id)+'" data-surface="group_popup_enabled" data-enabled="'+(g.form_surface_settings?.group_popup_enabled===false?'1':'0')+'"')+
     btn('Copy popup code','copy-group-short-popup','small','type="button" data-id="'+Number(g.id)+'"')+
-    btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+    btn('Inline LP settings','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
 function landingPagesModal(group){
@@ -982,6 +982,7 @@ function modal(){if(!state.modal)return '';
  if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
+ if(state.modal==='website-popup-source')return websitePopupSourceModal();
  if(state.modal==='page-popup'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);
   const campaign=group?.page_popup_campaigns?.find(c=>c.guid===ext.editPagePopupGuid);
   return group?pagePopupModal(group,campaign):'';}
@@ -2227,7 +2228,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
     await api(path,campaign?'PATCH':'POST',payload);
     state.modal='';ext.editPagePopupGuid=null;
     await loadRouting();
-    toast(campaign?'Landing-page popup updated':'Landing-page popup created. Copy its script from Popup Campaigns.');
+    toast(campaign?'School website popup updated':'Website popup created. Copy its script from Popup Campaigns.');
    });return;
  }
  if(f.id==='popupSettingsForm'){
