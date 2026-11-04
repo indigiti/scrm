@@ -517,7 +517,8 @@ function landingPagesPage(){
    return '<section class="sf-management-card"><div class="sf-management-top"><div><span class="sf-eyebrow">GROUP FORM · #'+Number(g.id)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.domain)+'</p></div>'+
    '<span class="sf-status-pill '+(g.enabled?'':'sf-muted')+'">'+(g.enabled?'Enabled':'Disabled')+'</span></div>'+
    '<div class="sf-management-meta"><span>'+urls.length+' approved URLs</span><span>Primary domain: '+(settings.restrict_primary?'Restricted to list':'All pages')+'</span></div>'+
-   (urls.length?'<div class="sf-approved-list">'+urls.map(u=>'<div><span aria-hidden="true">✓</span><code>'+esc(u)+'</code></div>').join('')+'</div>':
+   (urls.length?'<div class="sf-approved-list">'+urls.map(u=>'<div class="sf-approved-row"><span aria-hidden="true">✓</span><code>'+esc(u)+'</code>'+
+   btn('Remove URL','remove-landing-url','small danger','type="button" data-id="'+Number(g.id)+'" data-url="'+esc(u)+'"')+'</div>').join('')+'</div>':
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
@@ -1630,6 +1631,24 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='edit-submission-settings'){
   if(!canManageSchools())return;
   ext.editGroupId=Number(el.dataset.id);state.modal='submission-settings';render();return;
+ }
+ if(action==='remove-landing-url'){
+  if(!isAdmin())return;
+  const group=ext.groupSites.find(g=>Number(g.id)===Number(el.dataset.id));
+  const url=el.dataset.url;
+  if(!group||!group.landing_pages?.approved_urls?.includes(url))return;
+  const usedByPopup=(group.page_popup_campaigns||[]).some(c=>c.landing_page.replace(/\/+$/,'')===url.replace(/\/+$/,''));
+  if(!confirm('Remove approval for '+url+'?\n\n'+
+    (usedByPopup?'Any page-specific popup installed there will stop appearing. ':'')+
+    'Public form access at this URL may be revoked. Historical enquiries remain.'))return;
+  perform(async()=>{
+   const cfg=group.landing_pages;
+   const updated=await api('/api/group-sites/'+group.id+'/landing-pages','PATCH',{
+    approved_urls:cfg.approved_urls.filter(u=>u!==url),
+    restrict_primary:cfg.restrict_primary===true
+   });
+   group.landing_pages=updated;render();toast('Landing-page approval removed');
+  });return;
  }
  if(action==='edit-landing-pages'){
    if(!canManageSchools())return;
