@@ -191,6 +191,55 @@ function init(){
    }
   });
  }
+ function otpFeedback(text){$('lf_otp_feedback').textContent=text||'';}
+ function resetOtp(){
+  otpId='';otpProof='';otpPhone='';otpCampus='';
+  $('lf_otp_code').value='';$('lf_otp_pin').hidden=true;
+  if(otpRequired)otpFeedback('Request WhatsApp verification before submitting.');
+ }
+ async function otpRequest(action,body){
+  var response=await fetch(api+'/otp/'+action,{method:'POST',cache:'no-store',credentials:'omit',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return decode(response);
+ }
+ $('lf_otp_send').addEventListener('click',async function(){
+  if(!otpRequired||otpBusy)return;
+  var mobile=phone.value.trim();
+  if(!/^[6-9][0-9]{9}$/.test(mobile))return feedback('Enter a valid 10-digit mobile number.');
+  if(campus.disabled||!campus.value)return feedback('Select the correct campus before requesting WhatsApp OTP.');
+  if(!$('lf_consent').checked)return feedback('Please agree to be contacted.');
+  if(otpRequired&&(!otpId||!otpProof||otpPhone!==tel||otpCampus!==campus.value))
+   return feedback('Verify your WhatsApp number before submitting.');
+  if(!token||!/^[0-9]+$/.test(answer.value.trim()))
+   return feedback('Solve the math CAPTCHA before requesting WhatsApp OTP.');
+  otpBusy=true;var button=$('lf_otp_send');button.disabled=true;
+  otpFeedback('Requesting WhatsApp verification code...');
+  try{
+   var result=await otpRequest('request',{
+    phone:mobile,school_code:campus.value,consent:true,captcha_token:token,
+    captcha_answer:answer.value.trim(),landing_page:location.href.slice(0,500),
+    form_display:'popup',popup_campaign_guid:campaignGuid
+   });
+   otpId=result.otp_id;otpProof='';otpPhone=mobile;otpCampus=campus.value;
+   $('lf_otp_pin').hidden=false;otpFeedback('Enter the six-digit code sent to your WhatsApp.');
+  }catch(e){otpFeedback(e.message||'WhatsApp OTP could not be sent.');}
+  finally{otpBusy=false;button.disabled=false;}
+ });
+ $('lf_otp_check').addEventListener('click',async function(){
+  if(!otpId||otpBusy)return;
+  var code=$('lf_otp_code').value.trim();
+  if(!/^[0-9]{6}$/.test(code))return otpFeedback('Enter a six-digit WhatsApp code.');
+  otpBusy=true;var button=$('lf_otp_check');button.disabled=true;
+  try{
+   var result=await otpRequest('verify',{
+    otp_id:otpId,phone:phone.value.trim(),school_code:campus.value,code:code
+   });
+   if(!result.verified||!result.otp_proof)throw Error('WhatsApp verification not accepted');
+   otpProof=result.otp_proof;otpPhone=phone.value.trim();otpCampus=campus.value;
+   otpFeedback('WhatsApp number verified. You can submit.');
+  }catch(e){otpFeedback(e.message||'WhatsApp code was not verified.');}
+  finally{otpBusy=false;button.disabled=false;}
+ });
  function resetCaptcha(){
   token='';$('lf_captcha_label').textContent='Loading math CAPTCHA...';answer.value='';
   get('/challenge').then(function(data){token=data.token;$('lf_captcha_label').textContent=data.question;})
@@ -276,6 +325,7 @@ function init(){
     !(data.form_surfaces&&data.form_surfaces.detailed_popup_enabled===false);
    otpRequired=!!(campaignGuid&&data.otp&&data.otp.required);
    $('lf_otp').hidden=!otpRequired;
+   if(otpRequired&&!otpProof)otpFeedback('Request WhatsApp verification before submitting.');
    trigger.hidden=!detailedEnabled;
    if(!detailedEnabled){
     if(popup.classList.contains('lf-visible'))close();
@@ -334,7 +384,8 @@ function init(){
  });
  document.addEventListener('click',function(event){var el=event.target.closest('[data-lexicon-form]');if(!el)return;event.preventDefault();open();});
  // Auto-prompt is conditional, session-limited and suppressed while chat is open.
- phone.addEventListener('input',function(){phone.value=phone.value.replace(/\D/g,'').slice(0,10);});
+ phone.addEventListener('input',function(){phone.value=phone.value.replace(/\D/g,'').slice(0,10);resetOtp();});
+ campus.addEventListener('change',resetOtp);
  function manualPin(){state.readOnly=false;city.readOnly=false;state.classList.remove('lf-readonly');city.classList.remove('lf-readonly');}
  function readonlyPin(){state.readOnly=true;city.readOnly=true;state.classList.add('lf-readonly');city.classList.add('lf-readonly');}
  pin.addEventListener('input',function(){
@@ -378,6 +429,8 @@ function init(){
    student_name:value('lf_name'),parent_name:value('lf_parent'),email:value('lf_email'),phone:tel,
    pincode:value('lf_pincode'),state:value('lf_state'),city:value('lf_city'),grade:value('lf_class'),
    school_code:campus.value,consent:true,captcha_token:token,captcha_answer:value('lf_captcha'),
+   form_display:'popup',popup_campaign_guid:campaignGuid,popup_trigger:popupTrigger,
+   otp_id:otpRequired?otpId:'',otp_proof:otpRequired?otpProof:'',
    website:value('lf_website'),landing_page:(new URL(location.href).origin+new URL(location.href).pathname).slice(0,500),
     referrer:(function(){try{var u=new URL(document.referrer);return(u.origin+u.pathname).slice(0,500);}catch(e){return '';}})(),first_touch_data:firstTouch(),
    utm_source:params.get('utm_source')||'',utm_medium:params.get('utm_medium')||'',
