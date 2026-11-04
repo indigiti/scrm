@@ -255,6 +255,8 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         },true);
     }
     if($action==='enquiries' && $method==='POST') {
+        if(!sf_form_surface_settings($group)['detailed_popup_enabled'])
+            sf_fail(403,'Detailed enquiry popup has been disabled');
         $ipAttempt=substr(hash('sha256',$ip),0,20);
         $store->transaction(static function (array &$s) use ($group,$ipAttempt): void {
             sf_limit($s,'public-attempt:'.$group['id'].':'.$ipAttempt,30,3600);
@@ -275,15 +277,14 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code)){
-            if(empty($p['popup_campaign_guid'])&&!sf_landing_page_approved($group,$origin,$page))
-                sf_fail(422,'Landing page URL is not approved for this form');
-            sf_fail(403,'This form is not enabled for the selected website, school or page');
-        }
+        if(!sf_landing_page_approved($group,$origin,$page))
+            sf_fail(422,'Landing page URL is not approved for this form');
         $ipKey=substr(hash('sha256',$ip),0,20);
         return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin) || !sf_short_surface_allowed($g,$p,$origin,$page,$code))sf_fail(403,'Form unavailable');
+            if(!$g || !sf_public_origin_ok($g,$origin) ||
+                !sf_form_surface_settings($g)['detailed_popup_enabled'] ||
+                !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
