@@ -155,6 +155,7 @@ function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name
 function sf_group_public_view(array $s, array $group): array {
     return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'popup_settings'=>sf_popup_settings($group),
+        'form_surface_settings'=>sf_form_surface_settings($group),
         'page_popup_campaigns'=>sf_page_popup_campaigns($group),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
@@ -972,7 +973,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(405,'Unsupported page popup operation');
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings|form-surfaces))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -1061,6 +1062,22 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'Public group form removed; historical leads retained: '.$leadCount);
                 return [200,['removed'=>true,'guid'=>$group['guid'],
                     'historical_leads_retained'=>$leadCount,'sources_archived'=>$archived]];
+            }
+            if($operation==='form-surfaces'){
+                foreach($group['routes'] as $route)
+                    sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if($method==='GET')return [200,sf_form_surface_settings($group)];
+                if($method==='PATCH'){
+                    $settings=sf_form_surface_validate($payload,$group);
+                    foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                        $row['form_surface_settings']=$settings;break;
+                    }unset($row);
+                    foreach($group['routes'] as $route)
+                        sf_event($s,(int)$route['school_id'],null,$uid,
+                            'group_form_surfaces_changed','Form display surfaces changed for group #'.$groupId);
+                    return [200,$settings];
+                }
+                sf_fail(405,'Unsupported form surface operation');
             }
             if($operation==='landing-pages') {
                 // The owner must still administer every campus affected by this group.
