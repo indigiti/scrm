@@ -25,7 +25,7 @@ function fixture(opts={}){
   return e;
  }
  const popup=el(),logo=el('img');
- for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close','lf_complete','lf_complete_text','lf_done','lf_parent','lf_email','lf_class','lf_consent','lf_website'])byId[key]=el();
+ for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close','lf_complete','lf_complete_text','lf_done','lf_parent','lf_email','lf_class','lf_consent','lf_website','lf_otp','lf_otp_send','lf_otp_pin','lf_otp_code','lf_otp_check','lf_otp_feedback'])byId[key]=el();
  const triggerButtons=[];
  const body={classList:{add(){},remove(){}},appendChild(node){
   if(node===popup)byId.leadPopup=popup;
@@ -34,6 +34,7 @@ function fixture(opts={}){
  const loader={src:'https://crm.example.test/scrm/static/lexicon-form.js?v=hash',
   dataset:{schoolflowGroup:guid},
   getAttribute(name){if(name==='data-schoolflow-group')return guid;
+   if(name==='data-schoolflow-popup-campaign')return opts.campaign||null;
    if(name==='data-schoolflow-auto-enquiry')return opts.autoOff?'off':null;
    if(name==='data-schoolflow-exit-intent')return opts.exitOff?'off':null;
    if(name==='data-schoolflow-enquiry-delay')return opts.delay===undefined?null:String(opts.delay);
@@ -56,7 +57,13 @@ function fixture(opts={}){
   clearTimeout(id){timers.delete(id);},
   fetch:async path=>({ok:true,json:async()=>path.endsWith('/config')?{
     schools:opts.settings?[{code:'campus-1',name:'Campus One'}]:[],
-    submission_settings:opts.settings||null
+    submission_settings:opts.settings||null,
+    form_surfaces:{detailed_popup_enabled:!opts.campaign},
+    page_popup_campaigns:opts.campaign?[{
+     guid:opts.campaign,scope:'website',landing_page:'https://school.example/',
+     popup:{enabled:opts.campaignEnabled!==false,trigger:'manual',
+      school_codes:['campus-1'],include_paths:[],exclude_paths:[]}
+    }]:[],otp:{required:!!opts.otpRequired}
    }:path.endsWith('/enquiries')?{success:true,guid:'new-lead-guid',duplicate_submission:!!opts.duplicate}:
    path.endsWith('/chat-config')?{schools:[]}:{token:'challenge',question:'2 + 2'}})
  };
@@ -82,6 +89,22 @@ function fixture(opts={}){
   isOpen:()=>popup.classList.contains('lf-visible')};
 }
 (async()=>{
+{
+ const id='f47ac10a-5a49-4d2e-a5d2-58d254e0901f';
+ const t=fixture({campaign:id,settings:{},autoOff:true,otpRequired:false});await t.ready();
+ assert.equal(t.triggerButtons[0].hidden,false,
+  'campaign unlocks the approved detailed popup even with legacy detailed surface disabled');
+ t.context.window.openLeadPopup();
+ assert.equal(t.isOpen(),true,'existing enquiry rail opens original full detailed UI');
+ assert.equal(t.byId.lf_otp.hidden,true,'normal detailed popup visual layout remains unchanged');
+ assert.match(source,/class="lf-popup-box"/,'keep original popup panel HTML');
+ assert.match(source,/class="lf-logo"/,'keep original school logo');
+ const disabled=fixture({campaign:id,settings:{},autoOff:true,campaignEnabled:false});
+ await disabled.ready();
+ assert.equal(disabled.triggerButtons[0].hidden,true,'disabled campaign never leaves a dead visible tab');
+ const otp=fixture({campaign:id,settings:{},autoOff:true,otpRequired:true});await otp.ready();
+ assert.equal(otp.byId.lf_otp.hidden,false,'existing design adds only optional OTP when enabled');
+}
 {
  const t=fixture();await t.ready();
  t.advance(29999);assert.equal(t.isOpen(),false,'timer must not fire early');

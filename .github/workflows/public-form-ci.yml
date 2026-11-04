@@ -38,6 +38,7 @@ jobs:
           node --check public_html/static/schoolflow-short-form.js
           node tests/check_frontend_v2.js
           node tests/check_short_popup_campaign.js
+          node tests/check_website_popup_bootstrap.js
           node tests/check_group_routing.js
           node tests/check_lexicon_chat_autoload.js
           node tests/check_conversational_chat.js

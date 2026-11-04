@@ -43,6 +43,7 @@ jobs:
           php tests/test_popup_settings.php
           php tests/test_page_popup_campaigns.php
           php tests/test_school_website_popup.php
+          php tests/test_detailed_school_popup.php
           php tests/test_form_lifecycle.php
           php tests/test_guid_form_embed.php
           php tests/test_release_audit.php
@@ -79,6 +80,7 @@ jobs:
           node tests/check_dashboard_workspace.js
           node tests/check_group_routing.js
           node tests/check_short_popup_campaign.js
+          node tests/check_website_popup_bootstrap.js
           node tests/check_lexicon_chat_autoload.js
           node tests/check_campus_placeholder.js
           node tests/check_conditional_enquiry_popup.js

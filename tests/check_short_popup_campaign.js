@@ -37,14 +37,14 @@ function fixture(options={}){
  status.textContent='';verify.hidden=true;
  let outer=null,trigger=null;
  const head={appendChild(){}},body={appendChild(el){
-  if(el.className==='sf2-trigger')trigger=el;
+  if(typeof el.className==='string'&&el.className.startsWith('sf2-trigger'))trigger=el;
   return el;
  }};
  let countDiv=0;
  const document={
   currentScript:{src:'https://crm.example.test/scrm/static/schoolflow-short-form.js?v=xyz',dataset:{
    schoolflowGroup:guid,schoolflowMode:'popup',schoolflowShortCssVersion:'abc',
-   schoolflowPopupCampaign:options.pagePopupGuid||''
+   schoolflowPopupCampaign:options.pagePopupGuid||'',schoolflowButtonStyle:options.buttonStyle||''
   }},
   head,body,readyState:'complete',visibilityState:'visible',documentElement:{scrollHeight:2000},
   referrer:'',activeElement:node('button'),
@@ -139,6 +139,18 @@ function fixture(options={}){
  const restrictedPage=fixture({path:'/contact',pagePopupGuid:pageGuid,campaigns:[restrictedSite]});
  await restrictedPage.ready();
  assert.equal(restrictedPage.trigger().hidden,true,'optional page prefixes restrict website popup');
+ const strictInlineLp={primary_host:'school.test',approved_urls:['https://school.test/lp'],
+  restrict_primary:true};
+ const sitePopupWithStrictInline=fixture({pagePopupGuid:pageGuid,campaigns:[websiteScoped],
+  path:'/admissions',landingPages:strictInlineLp,buttonStyle:'rail'});
+ await sitePopupWithStrictInline.ready();
+ assert.equal(sitePopupWithStrictInline.trigger().hidden,false,
+  'public school campaign not blocked by strict inline-LP page allowlist');
+ assert.match(sitePopupWithStrictInline.trigger().className,/sf2-trigger-rail/,
+  'plain embedded popup keeps the original yellow school rail position');
+ sitePopupWithStrictInline.manual();
+ assert.equal(sitePopupWithStrictInline.isOpen(),true,
+  'clicking the school website enquiry rail opens the short form');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');

@@ -29,11 +29,22 @@ function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, str
 function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publicRoot):string {
     if(!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD',$guid))
         sf_fail(404,'Public form not found');
-    $enabled=$store->transaction(static function(array $s)use($guid):bool {
+    $embedInfo=$store->transaction(static function(array $s)use($guid):array {
         $group=sf_public_group($s,strtolower($guid));
-        return $group!==null && count(sf_group_campuses($s,$group))>0;
+        if($group===null||count(sf_group_campuses($s,$group))===0)
+            return ['enabled'=>false,'schoolSitePopup'=>false,'campaigns'=>[]];
+        $linked=!empty($group['linked_school_site_id']);
+        $campaigns=[];
+        if($linked)foreach(sf_page_popup_public($s,$group) as $campaign){
+            // Only public, enabled campaign metadata; never private site API keys.
+            $campaigns[]=['guid'=>$campaign['guid'],'scope'=>$campaign['scope'],
+                'landing_page'=>$campaign['landing_page'],
+                'include_paths'=>$campaign['popup']['include_paths']??[],
+                'exclude_paths'=>$campaign['popup']['exclude_paths']??[]];
+        }
+        return ['enabled'=>true,'schoolSitePopup'=>$linked,'campaigns'=>$campaigns];
     });
-    if(!$enabled)sf_fail(404,'Public form not found');
+    if(!$embedInfo['enabled'])sf_fail(404,'Public form not found');
     $assets=['static/lexicon-form.js','static/lexicon-form.css',
         'static/admissions-chat.js','static/admissions-chat.css',
         'static/schoolflow-short-form.js','static/schoolflow-short-form.css'];
@@ -45,16 +56,37 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         if(!is_string($hash))throw new RuntimeException('Public form asset unreadable');
         $versions[]=substr($hash,0,16);
     }
-    $data=json_encode(['guid'=>strtolower($guid),'versions'=>$versions],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
+    $data=json_encode(['guid'=>strtolower($guid),'versions'=>$versions,
+        'schoolSitePopup'=>$embedInfo['schoolSitePopup'],'campaigns'=>$embedInfo['campaigns']],
+        JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
     return '(function(){'."\n".
         'var current=document.currentScript;if(!current)return;'."\n".
         'var meta='.$data.';'."\n".
         'var base=new URL(current.src).origin+"/scrm";'."\n".
+        // A plain legacy embed on a newly connected school website must not
+        // render a disabled detailed popup. Resolve the single matching active
+        // website campaign and use its short-popup GUID automatically. For zero
+        // or ambiguous matches, fail closed; admin can copy a specific campaign.
+        'var autoCampaign="";'."\n".
+        'if(meta.schoolSitePopup&&!current.hasAttribute("data-schoolflow-form")&&!current.hasAttribute("data-schoolflow-mode")&&!current.hasAttribute("data-schoolflow-popup-campaign")){'."\n".
+        'var here=new URL(location.href),path=here.pathname.replace(/\\/+$/,"")||"/";'."\n".
+        'var matches=function(prefix){return prefix==="/"||path===prefix||path.indexOf(prefix+"/")===0;};'."\n".
+        'var eligible=meta.campaigns.filter(function(x){try{var site=new URL(x.landing_page),page=site.pathname.replace(/\\/+$/,"")||"/";'."\n".
+        'if(site.origin!==here.origin)return false;'."\n".
+        'if(x.scope==="page")return path===page;'."\n".
+        'if(x.scope!=="website")return false;'."\n".
+        'var allowed=x.include_paths||[],blocked=x.exclude_paths||[];'."\n".
+        'return(!allowed.length||allowed.some(matches))&&!blocked.some(matches);'."\n".
+        '}catch(e){return false;}});'."\n".
+        'if(eligible.length!==1){console.warn("SchoolFlow: expected one eligible active website popup; use a specific campaign embed when none or multiple match.");return;}'."\n".
+        'autoCampaign=eligible[0].guid;'."\n".
+        '}'."\n".
         'var shortForm=current.getAttribute("data-schoolflow-form")==="short";'."\n".
         'var script=document.createElement("script");script.async=true;'."\n".
         'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
         '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button","data-schoolflow-popup-campaign"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);}'."\n".
         'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
@@ -255,7 +287,9 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         },true);
     }
     if($action==='enquiries' && $method==='POST') {
-        if(!sf_form_surface_settings($group)['detailed_popup_enabled'])
+        $campaign=$p['popup_campaign_guid']??'';
+        if(!is_string($campaign)||strlen($campaign)>64)sf_fail(422,'Invalid website popup campaign');
+        if($campaign===''&&!sf_form_surface_settings($group)['detailed_popup_enabled'])
             sf_fail(403,'Detailed enquiry popup has been disabled');
         $ipAttempt=substr(hash('sha256',$ip),0,20);
         $store->transaction(static function (array &$s) use ($group,$ipAttempt): void {
@@ -277,14 +311,21 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if(!sf_landing_page_approved($group,$origin,$page))
+        if($campaign!==''){
+            if(!sf_popup_campaign_match($group,$campaign,$origin,$page,$code))
+                sf_fail(403,'Website popup is not enabled on this page for the selected school');
+        }elseif(!sf_landing_page_approved($group,$origin,$page))
             sf_fail(422,'Landing page URL is not approved for this form');
         $ipKey=substr(hash('sha256',$ip),0,20);
-        return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
+        $otpSecret=$store->publicFormKey();
+        return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer,$campaign,$otpSecret): array {
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin) ||
-                !sf_form_surface_settings($g)['detailed_popup_enabled'] ||
-                !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
+            if(!$g||!sf_public_origin_ok($g,$origin)||
+                ($campaign!==''
+                    ?!sf_popup_campaign_match($g,$campaign,$origin,$page,$code)
+                    :(!sf_form_surface_settings($g)['detailed_popup_enabled']||
+                      !sf_landing_page_approved($g,$origin,$page))))
+                sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
@@ -292,6 +333,9 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
                 if(($receipt['school_id']??null)!==$route['school_id'])sf_fail(409,'Submission belongs to another school');
                 return [200,['success'=>true,'duplicate_submission'=>true]];
             }
+            $verified=$campaign!==''?
+                sf_form_otp_consume($s,$g,(int)$route['school_id'],$code,
+                    $phone,$origin,$p,$otpSecret):['verified'=>false];
             sf_limit($s,'public-form-ip:'.$g['id'].':'.$ipKey,10,3600);
             sf_limit($s,'public-form-group:'.$g['id'],150,3600);
             foreach($s['receipts'] as $receipt)if(($receipt['public_challenge']??'')===$proof)sf_fail(409,'This math CAPTCHA was already used');
@@ -300,7 +344,21 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['student_name']=$student;$details['parent_name']=$guardian;$details['grade']=$grade;
             $details['pincode']=$pin;$details['state']=$state;$details['city']=$city;
             $details['landing_page']=$page;$details['referrer']=$referrer;
+            if($campaign!==''){
+                $details['popup_campaign_id']=$campaign;
+                $trigger=(string)($p['popup_trigger']??'');
+                $details['popup_trigger']=in_array($trigger,['manual','delay','scroll','exit'],true)?$trigger:'manual';
+            }
             $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_website_received');
+            if(!empty($verified['verified'])){
+                foreach($s['leads'] as &$savedLead)if($savedLead['id']===$lead['id']){
+                    $savedLead['whatsapp_verified']=true;
+                    $savedLead['whatsapp_verified_at']=$verified['verified_at'];
+                    $savedLead['verification_method']='wabridge_whatsapp_otp';
+                    $savedLead['verification_job_id']=$verified['provider_job_id'];
+                    break;
+                }unset($savedLead);
+            }
             $s['receipts'][]=['public_group_id'=>$g['id'],'school_id'=>$route['school_id'],
                 'idempotency_key'=>$idem,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
             return [201,['success'=>true,'guid'=>$lead['guid'],'duplicate_submission'=>false]];

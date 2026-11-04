@@ -318,6 +318,19 @@ function sfGroupConversionEmbed(guid){
 }
 function sfGroupEmbedGuide(group){
  if(!group.guid)return '<p class="muted-note">This group has no public Form ID. Create the group before copying embed codes.</p>';
+ if(group.linked_school_site_id){
+  const campaigns=Array.isArray(group.page_popup_campaigns)?group.page_popup_campaigns:[];
+  return '<details class="sf-embed-guide"><summary><span><strong>School website popup installation</strong><small>Copy a campaign-specific script, not the disabled legacy form</small></span>'+
+   '<span class="sf-embed-guide-count">'+campaigns.length+' campaign(s)</span></summary><div class="sf-embed-guide-body">'+
+   '<p class="sf-embed-guide-intro">This school-specific public form has no active inline or detailed-popup surface. Install one enabled campaign script in the WordPress header. The plain script works only when exactly one active campaign matches.</p>'+
+   (campaigns.length?campaigns.map(c=>'<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(c.name)+'</strong>'+
+    '<p>'+esc(c.scope==='website'?'Entire website':'Specific page')+' · '+esc(c.landing_page)+(c.settings?.enabled?' · Enabled':' · Disabled')+'</p></div>'+
+    btn('Copy popup script','copy-page-popup','small','type="button" data-id="'+Number(group.id)+'" data-campaign="'+esc(c.guid)+'"')+'</div>'+
+    '<pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(sfPagePopupEmbed(group.guid,c.guid))+'</code></pre></div>').join(''):
+    '<p class="sf-embed-guide-intro">No campaigns configured. Create and enable a website popup first.</p>')+
+   '</div></details>';
+ }
+
  const id=Number(group.id);
  const snippet=(label,note,code,action)=>
   '<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(label)+'</strong><p>'+esc(note)+'</p></div>'+
@@ -339,7 +352,9 @@ function sfGroupEmbedGuide(group){
 }
 function sfPagePopupEmbed(groupGuid,campaignGuid){
  const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(groupGuid);
- return '<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="popup" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
+ // School-site campaigns reuse the original balanced detailed-popup UI. Explicit
+ // short popup embeds remain backwards compatible when requested separately.
+ return '<script defer src="'+src+'" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
 }
 function websitePopupSourceModal(){
  const sites=state.sites.filter(s=>!s.is_group_route&&s.enabled!==false&&!s.removed_at&&
@@ -613,14 +628,20 @@ function routingPage(){
  <div class="app-alert">For a school group website, connect the permitted campuses below. Copy the public one-tag script into the website head; no Google Script, WordPress plugin or HFCM required. The older Contact Form 7 connector remains optional. A parent's choice can route only to an approved campus.</div>
  <section class="page-card" style="margin-bottom:20px"><div class="section-head" style="margin-top:0"><div><h2>Group websites</h2><p>One form, one private group key, multiple school destinations</p></div>${btn('＋ Connect group website','new-group','primary small')}</div>
  ${ext.groupKey?`<div class="key-panel"><strong>New group website key — copy and save now</strong><p class="muted-note">This secret is shown once. Set SCHOOLFLOW_CRM_GROUP_SITE_KEY on the WordPress server, never in HTML.</p><div class="key-box">${esc(ext.groupKey)}</div><div class="button-row" style="margin-top:10px">${btn('Copy key','copy-group-key','primary small')}${btn('I saved the key','dismiss-group-key','small')}</div></div>`:''}
- <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div><details class="sf-embed-details"><summary>Install form embed scripts <span aria-hidden="true">⌄</span></summary><div class="muted-note" style="margin:8px 0 4px"><b>GUID form embed</b> — script assets refresh automatically. This GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupEmbed(g.guid||'')) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div>
+ <div class="route-school-grid">${groups.map(g=>`<div class="route-school-card"><div class="route-school-head"><div><h3>${esc(g.name)}</h3><p class="muted-note">${esc(g.domain)} · Group #${Number(g.id)}</p></div><span class="badge ${g.enabled?'':'route-inactive'}">${g.enabled?'Active':'Disabled'}</span></div>${g.linked_school_site_id?`<details class="sf-embed-details"><summary>Install school website popup <span aria-hidden="true">⌄</span></summary>
+<p class="muted-note">Popup-only website form: copy the exact campaign embed. The legacy detailed and inline scripts are intentionally disabled.</p>
+${(g.page_popup_campaigns||[]).map(c=>`<div class="sf-embed-guide-item"><strong>${esc(c.name)}</strong> · ${c.settings?.enabled?"Enabled":"Disabled"}
+<pre class="sf-embed-guide-code" tabindex="0"><code>${esc(sfPagePopupEmbed(g.guid,c.guid))}</code></pre>
+<div class="button-row">${btn("Copy popup code","copy-page-popup","small",`data-id="${Number(g.id)}" data-campaign="${esc(c.guid)}"`)}</div></div>`).join("")}
+${!(g.page_popup_campaigns||[]).length?`<p class="muted-note">Create and enable a popup campaign before installing the script.</p>`:""}
+</details>`:`<details class="sf-embed-details"><summary>Install form embed scripts <span aria-hidden="true">⌄</span></summary><div class="muted-note" style="margin:8px 0 4px"><b>GUID form embed</b> — script assets refresh automatically. This GUID is safe to publish. Never use the private sfgroup key in HTML.</div><code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupEmbed(g.guid||'')) }</code><div class="button-row" style="margin-bottom:10px">${btn("Copy head script","copy-group-embed","small",`data-id="${Number(g.id)}"`)}</div>
  <div class="muted-note"><b>Compact inline admission form</b> — paste the div and script where the form should appear.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:pre-wrap;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','inline'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy inline form","copy-group-inline","small",`data-id="${Number(g.id)}"`)}</div>
  <div class="muted-note"><b>Compact popup</b> — shorter alternative to the existing detailed popup.</div>
  <code style="display:block;overflow-wrap:anywhere;white-space:normal;font-size:11px;margin:8px 0">${esc(sfGroupShortEmbed(g.guid||'','popup'))}</code>
  <div class="button-row" style="margin-bottom:10px">${btn("Copy compact popup","copy-group-short-popup","small",`data-id="${Number(g.id)}"`)}</div>
- </details><div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Add page popup','new-page-popup','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}
+ </details>`}<div class="route-sources">${g.schools.map(c=>`<div class="route-source"><span><b>${esc(c.name)}</b><small>Choice code: ${esc(c.code)}</small></span><span class="role-label">School #${Number(c.school_id)}</span></div>`).join('')}</div><div class="button-row">${btn('Landing URLs','edit-landing-pages','small',`data-id="${Number(g.id)}"`)}${btn('Add page popup','new-page-popup','small',`data-id="${Number(g.id)}"`)}${btn('Popup settings','edit-popup-settings','small',`data-id="${Number(g.id)}"`)}${btn('Submission & tracking','edit-submission-settings','small',`data-id="${Number(g.id)}"`)}${btn('Edit schools','edit-group','small',`data-id="${Number(g.id)}"`)}
  <details class="sf-advanced-action"><summary>Form visibility ▾</summary><div class="button-row">
  ${[['inline_enabled','Inline'],['group_popup_enabled','Group popup'],['detailed_popup_enabled','Detailed popup']].map(([key,label])=>
  btn((g.form_surface_settings?.[key]===false?'Restore ':'Disable ')+label,
