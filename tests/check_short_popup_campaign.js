@@ -37,7 +37,7 @@ function fixture(options={}){
  status.textContent='';verify.hidden=true;
  let outer=null,trigger=null;
  const head={appendChild(){}},body={appendChild(el){
-  if(el.className==='sf2-trigger')trigger=el;
+  if(typeof el.className==='string'&&el.className.startsWith('sf2-trigger'))trigger=el;
   return el;
  }};
  let countDiv=0;
