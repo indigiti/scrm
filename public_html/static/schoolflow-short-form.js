@@ -39,6 +39,7 @@ function init(){
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
  var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true,submissionSettings=null;
+ var otpSettings={required:false},otpId='',otpProof='',otpPhone='',otpCampus='',otpBusy=false,otpCooldown=null;
  var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
  var campaignKey='sf2_popup_'+guid;
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
@@ -159,6 +160,29 @@ function init(){
  function error(s){status.textContent=s;status.classList.add('sf2-error');}
  function clear(){status.textContent='';status.classList.remove('sf2-error');}
  async function get(path){var r=await fetch(api+path,{credentials:'omit',cache:'no-store',headers:{Accept:'application/json'}});var d=await r.json().catch(function(){return {};});if(!r.ok)throw Error(d.detail||'SchoolFlow temporarily unavailable');return d;}
+
+ function otpStatus(message,isError){
+  var element=outer.querySelector('.sf2-otp-status');
+  element.textContent=message;element.classList.toggle('sf2-error',!!isError);
+ }
+ function resetOtp(){
+  otpId='';otpProof='';otpPhone='';otpCampus='';
+  form.elements.otp_code.value='';
+  outer.querySelector('.sf2-otp-pin').hidden=true;
+  if(otpSettings.required)otpStatus('Request a WhatsApp code to continue.');
+ }
+ function useOtpSettings(cfg){
+  otpSettings=cfg||{required:false};
+  outer.querySelector('.sf2-otp').hidden=!otpSettings.required;
+  if(otpSettings.required&&!token)challenge();
+ }
+ async function otpApi(action,body){
+  var response=await fetch(api+'/otp/'+action,{method:'POST',credentials:'omit',cache:'no-store',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  var data=await response.json().catch(function(){return {};});
+  if(!response.ok)throw Error(data.detail||'WhatsApp verification unavailable');
+  return data;
+ }
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
