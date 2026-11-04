@@ -318,6 +318,19 @@ function sfGroupConversionEmbed(guid){
 }
 function sfGroupEmbedGuide(group){
  if(!group.guid)return '<p class="muted-note">This group has no public Form ID. Create the group before copying embed codes.</p>';
+ if(group.linked_school_site_id){
+  const campaigns=Array.isArray(group.page_popup_campaigns)?group.page_popup_campaigns:[];
+  return '<details class="sf-embed-guide"><summary><span><strong>School website popup installation</strong><small>Copy a campaign-specific script, not the disabled legacy form</small></span>'+
+   '<span class="sf-embed-guide-count">'+campaigns.length+' campaign(s)</span></summary><div class="sf-embed-guide-body">'+
+   '<p class="sf-embed-guide-intro">This school-specific public form has no active inline or detailed-popup surface. Install one enabled campaign script in the WordPress header. The plain script works only when exactly one active campaign matches.</p>'+
+   (campaigns.length?campaigns.map(c=>'<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(c.name)+'</strong>'+
+    '<p>'+esc(c.scope==='website'?'Entire website':'Specific page')+' · '+esc(c.landing_page)+(c.settings?.enabled?' · Enabled':' · Disabled')+'</p></div>'+
+    btn('Copy popup script','copy-page-popup','small','type="button" data-id="'+Number(group.id)+'" data-campaign="'+esc(c.guid)+'"')+'</div>'+
+    '<pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(sfPagePopupEmbed(group.guid,c.guid))+'</code></pre></div>').join(''):
+    '<p class="sf-embed-guide-intro">No campaigns configured. Create and enable a website popup first.</p>')+
+   '</div></details>';
+ }
+
  const id=Number(group.id);
  const snippet=(label,note,code,action)=>
   '<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(label)+'</strong><p>'+esc(note)+'</p></div>'+
