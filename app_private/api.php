@@ -1019,6 +1019,49 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $group=null;
             foreach($s['group_sites'] as $g) if($g['id']===$groupId && $g['owner_id']===$uid) {$group=$g;break;}
             if(!$group)sf_fail(404,'Group website not found');
+            if($method==='DELETE' && $operation===''){
+                foreach($group['routes'] as $route)
+                    sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if(!is_string($payload['confirm_guid']??null)||
+                    !hash_equals((string)$group['guid'],$payload['confirm_guid']))
+                    sf_fail(422,'Confirm the exact public Form GUID to remove this group');
+                $sourceIds=array_map(static fn(array $route):int=>(int)$route['site_id'],$group['routes']);
+                $leadCount=0;
+                foreach($s['leads'] as $lead)
+                    if(in_array((int)($lead['site_id']??0),$sourceIds,true))$leadCount++;
+                // Delete only the active group configuration. Historical lead
+                // source rows survive as disabled attribution records if used.
+                $s['group_sites']=array_values(array_filter($s['group_sites'],
+                    static fn(array $row):bool=>(int)$row['id']!==$groupId));
+                $archived=0;
+                $s['sites']=array_values(array_filter($s['sites'],
+                    static function(array $site)use($sourceIds,&$s,&$archived):bool{
+                        if(!in_array((int)$site['id'],$sourceIds,true))return true;
+                        foreach($s['leads'] as $lead)
+                            if((int)($lead['site_id']??0)===(int)$site['id']){
+                                $archived++;return true;
+                            }
+                        return false;
+                    }));
+                foreach($s['sites'] as &$source)
+                    if(in_array((int)$source['id'],$sourceIds,true)){
+                        $source['enabled']=0;$source['removed_at']=sf_time();
+                        $source['key_hash']=sf_hash(bin2hex(random_bytes(32)));
+                    }
+                unset($source);
+                // Stale submission receipts and OTP state cannot be replayed
+                // after a form is removed; leads and permanent audits remain.
+                $s['receipts']=array_values(array_filter($s['receipts']??[],
+                    static fn(array $row):bool=>(int)($row['group_site_id']??0)!==$groupId
+                        && !in_array((int)($row['site_id']??0),$sourceIds,true)));
+                $s['form_otp_challenges']=array_values(array_filter($s['form_otp_challenges']??[],
+                    static fn(array $row):bool=>(int)($row['group_id']??0)!==$groupId));
+                foreach($group['routes'] as $route)
+                    sf_event($s,(int)$route['school_id'],null,$uid,'group_form_removed',
+                        'Public group form removed; historical leads retained: '.$leadCount);
+                return [200,['removed'=>true,'guid'=>$group['guid'],
+                    'historical_leads_retained'=>$leadCount,'sources_archived'=>$archived]];
+            }
             if($operation==='landing-pages') {
                 // The owner must still administer every campus affected by this group.
                 foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
