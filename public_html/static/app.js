@@ -337,6 +337,43 @@ function sfGroupEmbedGuide(group){
  '<p class="sf-embed-guide-intro">Use one form variant per placement. The primary website and any additional landing-page URL must be approved in SchoolFlow. Embed codes are public; API credentials are not.</p>'+
  '</div></details>';
 }
+function sfPagePopupEmbed(groupGuid,campaignGuid){
+ const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(groupGuid);
+ return '<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="popup" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
+}
+function pagePopupModal(group,campaign){
+ const saved=campaign?.settings||{},get=(key,fallback)=>saved[key]??fallback;
+ const chosen=Array.isArray(get('school_ids',[]))?get('school_ids',[]):[];
+ const existing=!!campaign;
+ return modalFrame((existing?'Edit landing-page popup':'Add landing-page popup')+' · '+esc(group.name),
+  'One popup campaign per approved website page, with a separate schedule and school targeting.',
+  '<form id="pagePopupForm" data-id="'+Number(group.id)+'" data-campaign="'+esc(campaign?.guid||'')+'">'+
+  '<div class="form-field"><label>Campaign name<input name="name" maxlength="90" required placeholder="November Admissions Campaign" value="'+esc(campaign?.name||'')+'"></label></div>'+
+  '<div class="form-field"><label>Full landing-page URL<input name="landing_page" type="url" maxlength="300" required placeholder="https://school.example/admissions/" value="'+esc(campaign?.landing_page||'')+'"></label>'+
+  '<small>The exact HTTPS page must belong to your group domain or be approved under Landing Pages. Do not enter a thank-you page.</small></div>'+
+  '<label class="sf-check-row"><input type="checkbox" name="enabled" '+(get('enabled',false)?'checked':'')+'>'+
+  '<span><strong>Enable this page popup</strong><small>Off by default until you install and test its unique embed code.</small></span></label>'+
+  '<div class="two-cols">'+
+  select('Popup trigger','trigger',[['manual','Button only'],['delay','Time delay'],['scroll','Scroll depth'],['either','Time or scroll'],['exit','Exit intent']].map(([v,label])=>option(v,label,get('trigger','manual'))).join(''))+
+  input('Delay (seconds)','delay_seconds','number',get('delay_seconds',8),true)+
+  input('Scroll depth (%)','scroll_percent','number',get('scroll_percent',40),true)+
+  select('Repeat after dismissal','repeat_after',[['session','Next session'],['1','1 day'],['7','7 days'],['30','30 days'],['never','Never']].map(([v,label])=>option(v,label,get('repeat_after','7'))).join(''))+
+  select('Position','position',[['center','Center'],['right','Right'],['bottom','Bottom']].map(([v,label])=>option(v,label,get('position','center'))).join(''))+
+  input('Start date (optional)','start_date','date',get('start_date',''))+
+  input('End date (optional)','end_date','date',get('end_date',''))+'</div>'+
+  '<label class="sf-check-row"><input type="checkbox" name="exit_intent" '+(get('exit_intent',false)?'checked':'')+'> Allow desktop exit intent</label>'+
+  '<label class="sf-check-row"><input type="checkbox" name="mobile_enabled" '+(get('mobile_enabled',true)?'checked':'')+'> Allow on mobile</label>'+
+  '<fieldset class="group-school-choice"><legend>Campuses available in this popup (none checked = all connected)</legend>'+
+  (group.schools||[]).map(s=>'<label><input type="checkbox" name="popup_school_ids" value="'+Number(s.school_id)+'" '+(chosen.includes(s.school_id)?'checked':'')+'> '+esc(s.name)+'</label>').join('')+
+  '</fieldset>'+
+  (existing?'<div class="sf-embed-guide-item"><strong>Install on this landing page</strong>'+
+   '<pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(sfPagePopupEmbed(group.guid,campaign.guid))+'</code></pre>'+
+   '<div class="button-row" style="margin-top:9px">'+btn('Copy this popup code','copy-page-popup','small','type="button" data-id="'+Number(group.id)+'" data-campaign="'+esc(campaign.guid)+'"')+'</div></div>':
+   '<div class="sf-help-panel"><p>The copy-ready script will appear after saving. It is tied to this exact landing page and will not open on other pages.</p></div>')+
+  '<p class="muted-note">A separate group-wide popup may still be installed elsewhere. Remove or disable that embed on this page to avoid duplicate enquiry buttons.</p>'+
+  '<div class="button-row">'+btn('Cancel','close-modal')+
+  '<button type="submit" class="btn primary">'+(existing?'Save popup changes':'Create popup')+'</button></div></form>');
+}
 function popupSettingsModal(group){
  const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
  return modalFrame('Popup campaign · '+esc(group.name),'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
@@ -893,6 +930,9 @@ function modal(){if(!state.modal)return '';
  if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
+ if(state.modal==='page-popup'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);
+  const campaign=group?.page_popup_campaigns?.find(c=>c.guid===ext.editPagePopupGuid);
+  return group?pagePopupModal(group,campaign):'';}
  if(state.modal==='new-group'||state.modal==='edit-group'){
    const g=state.modal==='edit-group'?ext.groupSites.find(x=>x.id===ext.editGroupId):null;
    return modalFrame(g?'Edit group website':'Connect group website','Choose the schools available in the parent enquiry dropdown.',`<form id="groupSiteForm">${input('Group website name','name','text',g?.name||'',true)}${input('Website domain','domain','text',g?.domain||'',true)}${groupSchoolChecks(g?.schools.map(x=>x.school_id)||[])}<div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">${g?'Save school routes':'Create group key'}</button></div></form>`);
