@@ -5,7 +5,7 @@ const source=fs.readFileSync(__dirname+'/../public_html/static/lexicon-form.js',
 const guid='ab123456-78ab-4abc-8def-123456789abc';
 function fixture(opts={}){
  let now=0,nextId=0,shown=0;
- const timers=new Map(),listeners={},byId={},session=opts.session||new Map();
+ const timers=new Map(),listeners={},byId={},session=opts.session||new Map(),navigations=[];
  function el(tag='div'){
   const handlers={};
   const classes=new Set();
@@ -15,6 +15,7 @@ function fixture(opts={}){
    addEventListener(type,fn){handlers[type]=fn;},
    setAttribute(key,value){this[key]=value;},
    getAttribute(key){return this[key]||null;},
+   validity:{valid:true},
    querySelector(key){if(key==='.lf-logo')return logo;return null;},
    replaceChildren(...children){this.options=children;},
    add(item){this.options.push(item);},
@@ -24,7 +25,7 @@ function fixture(opts={}){
   return e;
  }
  const popup=el(),logo=el('img');
- for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close'])byId[key]=el();
+ for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close','lf_complete','lf_complete_text','lf_done','lf_parent','lf_email','lf_class','lf_consent','lf_website'])byId[key]=el();
  const triggerButtons=[];
  const body={classList:{add(){},remove(){}},appendChild(node){
   if(node===popup)byId.leadPopup=popup;
@@ -46,14 +47,17 @@ function fixture(opts={}){
   dispatchEvent(event){(listeners[event.type]||[]).forEach(fn=>fn(event));}
  };
  const context={
-  document,window:{},URL,URLSearchParams,console,
+  document,window:{crypto:{randomUUID:()=>guid},location:{assign:url=>navigations.push(url)}},URL,URLSearchParams,console,
   location:{href:'https://school.example/admissions',origin:'https://school.example',pathname:'/admissions',search:''},
   sessionStorage:{getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)},
   Option:function(label,value){return {label,value};},
   Date:class extends Date{static now(){return now;}},
   setTimeout(fn,ms){const id=++nextId;timers.set(id,{fn,at:now+ms});return id;},
   clearTimeout(id){timers.delete(id);},
-  fetch:async path=>({ok:true,json:async()=>path.endsWith('/config')?{schools:[]}:
+  fetch:async path=>({ok:true,json:async()=>path.endsWith('/config')?{
+    schools:opts.settings?[{code:'campus-1',name:'Campus One'}]:[],
+    submission_settings:opts.settings||null
+   }:path.endsWith('/enquiries')?{success:true,guid:'new-lead-guid',duplicate_submission:!!opts.duplicate}:
    path.endsWith('/chat-config')?{schools:[]}:{token:'challenge',question:'2 + 2'}})
  };
  vm.runInNewContext(source,context,{filename:'lexicon-form.js'});
@@ -72,7 +76,9 @@ function fixture(opts={}){
   context.window.__schoolflowAdmissionsChatState={guid,open};
   document.dispatchEvent({type:'schoolflow:admissions-chat-state',detail:{guid,open}});
  }
- return {advance,exit,chat,popup,context,session,triggerButtons,document,
+ return {advance,exit,chat,popup,context,session,triggerButtons,document,navigations,byId,
+  ready:async()=>{for(let i=0;i<10;i++)await Promise.resolve();},
+  submit:()=>byId.lf_form.handlers.submit({preventDefault(){}}),
   isOpen:()=>popup.classList.contains('lf-visible')};
 }
 {
@@ -124,3 +130,33 @@ function fixture(opts={}){
  t.context.window.openLeadPopup();assert.equal(t.isOpen(),true,'opt-out preserves manual form');
 }
 console.log('PASS: delayed form, exit intent, chat suppression, after-chat grace, dismissal and opt-out');
+
+async function assertPopupConfirmation(settings,duplicate=false){
+ const t=fixture({autoOff:true,settings,duplicate});
+ t.context.window.openLeadPopup();await t.ready();
+ const d=t.byId;
+ d.lf_name.value='Test Student';d.lf_parent.value='Test Guardian';
+ d.lf_email.value='test@example.invalid';d.lf_phone.value='9876543210';
+ d.lf_pincode.value='411014';d.lf_state.value='Maharashtra';
+ d.lf_city.value='Pune';d.lf_class.value='IV';
+ d.lf_campus.value='campus-1';
+ d.lf_campus.options=[{value:'campus-1',disabled:false}];d.lf_campus.disabled=false;
+ d.lf_captcha.value='4';d.lf_consent.checked=true;
+ await t.submit();await t.ready();
+ assert.deepEqual(t.navigations,[],'detailed popup never navigates to a thank-you URL');
+ assert.equal(d.lf_form.hidden,true,'completed form hidden');
+ assert.equal(d.lf_complete.hidden,false,'confirmation visible inside popup');
+ assert.match(d.lf_complete_text.textContent,duplicate?/already been received/:/has been received/);
+ assert.equal(t.isOpen(),true,'popup stays open after submission');
+ d.lf_done.handlers.click();
+ assert.equal(t.isOpen(),false,'parent can close successful popup');
+}
+(async()=>{
+ await assertPopupConfirmation({detailed_redirect:false,thank_you_url:'https://school.example/thanks'});
+ await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://school.example/thanks'});
+ await assertPopupConfirmation(null);
+ await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://evil.invalid/thanks'});
+ await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://school.example/thanks'},true);
+ console.log('PASS: detailed popup confirms in place regardless of legacy redirect settings');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+
