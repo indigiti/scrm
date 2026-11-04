@@ -20,7 +20,7 @@ function sf_form_otp_settings(array $group):array {
 function sf_form_otp_admin_view(array $group):array {
     $cfg=sf_form_otp_settings($group);
     return ['enabled'=>(bool)$cfg['enabled'],'short_forms'=>(bool)$cfg['short_forms'],
-        'session_id'=>(string)$cfg['session_id'],'has_api_key'=>!empty($cfg['api_key_sealed']),
+        'session_id'=>(string)$cfg['session_id'],'has_api_key'=>(bool)($cfg['api_key_sealed']||(getenv('SCHOOLFLOW_WABRIDGE_API_KEY')?:'')),
         'provider'=>'wabridge','ttl_seconds'=>300,'resend_after_seconds'=>60,
         'backend'=>'https://stage.digiti.in/wabridge',
         'delivery_verified'=>false];
@@ -57,7 +57,8 @@ function sf_form_otp_validate_settings(array $payload,array $group,SchoolFlowSto
             $old['api_key_sealed']=$store->seal($key);
         }
     }
-    if($old['enabled']&&(!$old['short_forms']||!$old['session_id']||!$old['api_key_sealed']))
+    if($old['enabled']&&(!$old['short_forms']||!$old['session_id']||
+        (!$old['api_key_sealed']&&!(getenv('SCHOOLFLOW_WABRIDGE_API_KEY')?:''))))
         sf_fail(422,'Connect a WaBridge session and API credential before enabling short-form OTP');
     $old['created_at']=sf_time();
     return $old;
@@ -90,7 +91,10 @@ function sf_form_otp_send_adapter(array $cfg,SchoolFlowStore $store,string $phon
     $base=(string)(getenv('SCHOOLFLOW_WABRIDGE_BASE_URL')?:'https://stage.digiti.in/wabridge');
     if(!preg_match('~^https://[a-z0-9.-]+(?::443)?/wabridge/?$~iD',$base))
         throw new RuntimeException('Unsafe WaBridge backend URL');
-    $secret=$store->unseal((string)$cfg['api_key_sealed']);
+    $secret=$cfg['api_key_sealed']?$store->unseal((string)$cfg['api_key_sealed']):
+        (string)(getenv('SCHOOLFLOW_WABRIDGE_API_KEY')?:'');
+    if(!preg_match('/^[A-Za-z0-9._~-]{24,256}$/D',$secret))
+        throw new RuntimeException('Missing scoped WaBridge API credential');
     $ch=curl_init(rtrim($base,'/').'/api/v1/messages.php');
     if($ch===false)throw new RuntimeException('WaBridge connection unavailable');
     try{
@@ -128,7 +132,8 @@ function sf_form_otp_request(string $guid,string $origin,array $p,string $ip,
             sf_fail(403,'Form unavailable');
         $config=sf_form_otp_settings($group);
         if(!$config['enabled']||!$config['short_forms'])sf_fail(409,'WhatsApp verification not enabled');
-        if(!$config['session_id']||!$config['api_key_sealed'])sf_fail(503,'WhatsApp verification unavailable');
+        if(!$config['session_id']||(!$config['api_key_sealed']&&
+            !(getenv('SCHOOLFLOW_WABRIDGE_API_KEY')?:'')))sf_fail(503,'WhatsApp verification unavailable');
         $route=sf_form_otp_route($s,$group,$campus);
         sf_limit($s,'public-otp-ip:'.$group['id'].':'.$ipKey,8,3600);
         sf_limit($s,'public-otp-phone:'.$group['id'].':'.$hashed,3,3600);
