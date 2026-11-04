@@ -118,7 +118,7 @@ try{
     $leadBody=['student_name'=>'Demo Child','parent_name'=>'Guardian',
         'phone'=>'9876543210','grade'=>'I','consent'=>true];
     [$sent,$lead]=wp_api('POST','/api/v1/inbound-leads',$leadBody,$site['api_key'],
-        'school-connector-demo-0001');
+        'https://school.test','school-connector-demo-0001');
     wp_assert($sent===201,'private connected website receives admission lead; HTTP '.$sent.' '.json_encode($lead));
     [$removed,$removal]=wp_api('DELETE','/api/group-sites/'.$groupId,['confirm_guid'=>$groupGuid]);
     wp_assert($removed===200&&$removal['removed'],'form removed with consent');
@@ -128,7 +128,7 @@ try{
         'public-form removal preserves connected school website');
     wp_assert(count($state['leads'])===1,'historic admissions lead retained');
     $after=wp_api('POST','/api/v1/inbound-leads',$leadBody,$site['api_key'],
-        'school-connector-demo-0001');
+        'https://school.test','school-connector-demo-0001');
     wp_assert($after[0]===200&&$after[1]['duplicate_submission']===true,
         'website idempotency receipts retained after popup form removal');
     wp_assert(wp_api('GET','/api/public/forms/'.$groupGuid.'/config')[0]===403,
