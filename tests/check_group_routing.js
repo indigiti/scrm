@@ -67,6 +67,12 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/Approved landing pages/);
  assert.match(html,/restrict_primary/);
  handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
+ handlers.click({target:{closest:()=>({dataset:{action:'edit-submission-settings',id:'1'}})}});
+ assert.match(html,/Redirect short inline form after success/,'inline LP thank-you redirect configurable');
+ assert.match(html,/Popup forms never redirect/,'popup submissions always confirm without navigation');
+ assert.doesNotMatch(html,/name="popup_redirect"/,'no popup redirect switch can mislead administrators');
+ assert.doesNotMatch(html,/name="detailed_redirect"/,'no legacy detailed redirect switch shown');
+ handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'new-page-popup',id:'1'}})}});
  assert.match(html,/pagePopupForm/,'page popup editor opens for selected school group');
  assert.match(html,/Placement/,'popup editor supports whole-website and optional exact-page scope');
@@ -78,6 +84,10 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  await sleep(120);
  assert.match(html,/Configure campaign/);
  assert.match(html,/School website popups/);
+ handlers.click({target:{closest:()=>({dataset:{action:'new-website-popup'}})}});
+ assert.match(html,/websitePopupSourceForm/,'website picker replaces landing-page approval');
+ assert.match(html,/ABC Group Website/,'connected group site is offered as popup source');
+ handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'edit-popup-settings',id:'1'}})}});
  assert.match(html,/Website embed codes/,'embed guide appears inside popup settings');
  assert.match(html,/Short popup/);
