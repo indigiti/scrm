@@ -1,25 +1,31 @@
-# Install a school website popup with WordPress HFCM
+# WordPress SchoolFlow popup — approved detailed design
 
-## Correct embed code
+The current Lexicon popup layout is the **approved design**. School-specific campaigns use the existing `lexicon-form.js` markup and `lexicon-form.css`. Do not replace the popup with a compact widget or redesign its logo, layout, fields, typography, colours, spacing, or mobile presentation when changing the form backend.
 
-From SchoolFlow → Popup Campaigns, choose the correct school, open its popup, and click **Copy popup script**.
-The recommended snippet has `data-schoolflow-form="short"`, `data-schoolflow-mode="popup"` and `data-schoolflow-popup-campaign="CAMPAIGN_GUID"` on its external `/scrm/embed/FORM_GUID` script tag. Use the exact generated GUIDs; the form and campaign identifiers are different.
+## Correct school website campaign embed
 
-In HFCM choose HTML → Site Wide → Header → All Devices → Active and save. Use one popup script per website placement. No shortcode is required for a site-wide HFCM header. Never put a private website or group API key into public HTML.
+From **Popup Campaigns → Edit website popup → Copy popup script**, paste the exact generated tag into WordPress Header Footer Code Manager:
 
-## Previously installed plain script
+```html
+<script defer src="https://stage.digiti.in/scrm/embed/FORM_GUID"
+  data-schoolflow-popup-campaign="CAMPAIGN_GUID"></script>
+```
 
-Existing connected school-site forms that use only the plain `/scrm/embed/FORM_GUID` tag automatically resolve **one** enabled popup campaign matching the website origin and current page, and keep the yellow right-side Enquire Now rail. If no campaign qualifies or multiple campaigns overlap, no button is displayed; copy a campaign-specific script instead.
+Both GUIDs are public references, not API keys. Copy the real values from the CRM rather than these placeholders. Choose **HTML, Site Wide, Header, All Devices, Active** in HFCM. Disable older overlapping SchoolFlow snippets.
 
-Legacy shared group forms retain their historic plain-script detailed-form behavior.
+For the original plain WordPress embed, `<script defer src="https://stage.digiti.in/scrm/embed/FORM_GUID"></script>`, the server can automatically identify **exactly one enabled campaign matching the website and current page**. It now renders the same detailed popup and familiar yellow **ENQUIRE NOW** side rail. When zero or multiple campaigns qualify it does not show an inactive rail; use the campaign-specific embed instead.
 
-## If Enquire Now does not open
+Legacy multi-campus group forms continue to support their original detailed script. Existing explicitly configured **compact short popup** embeds remain supported for integrations that intentionally chose that variant.
 
-1. Deploy the DigiOps artifact for this fix to Cloudways. A GitHub merge does not update the live CRM.
-2. Confirm the school form and popup campaign are enabled. An explicit campaign URL, path prefixes, and campus restriction must permit the current page.
-3. Check only one SchoolFlow popup snippet is installed in HFCM. Remove obsolete duplicate snippets.
-4. In Developer Tools → Network, confirm the external `/scrm/embed/...` script, the versioned short-form JS, and `/scrm/api/public/forms/{FORM_GUID}/config` return success.
-5. Confirm the live site's HTTPS origin matches the school's registered website domain.
-6. Submit one accepted test enquiry. The popup must confirm success without navigating away; inline LP forms alone can redirect to an approved thank-you page.
+## Display behaviour
 
-The installed HFCM snippet is not edited by this repository fix. The server bootstrap and client assets change only after Cloudways deployment.
+- **School popup:** Original detailed form; manual yellow side rail; optional campaign-based timing, scroll and exit-intent triggers; confirmation in the popup.
+- **Inline landing-page form:** Separate short inline form; may redirect to its own approved thank-you destination. This must not affect a school popup.
+- **WhatsApp OTP:** The original detailed layout stays identical when OTP is disabled. If required by the admin, a small matching verification section appears; submissions enforce the verified proof on the server.
+- **School routing and security:** Registered domain, campaign GUID, selected campus, enabled state, optional page restrictions and CAPTCHA are checked on the server before accepting leads.
+
+## If ENQUIRE NOW does not open
+
+First deploy the release to the live Cloudways sCRM app. Confirm the intended campaign is enabled and matches the website. Open the browser Network tab and verify `/scrm/embed/{FORM_GUID}`, `/scrm/static/lexicon-form.js`, and `/scrm/api/public/forms/{FORM_GUID}/config` load successfully. Remove duplicate HFCM snippets and clear website caches. Finally test an actual lead and verify the correct school received it.
+
+A GitHub release does **not** automatically update WordPress or Cloudways. Site-wide HFCM script changes require an authorized WordPress administrator, unless the existing plain script is reused.
