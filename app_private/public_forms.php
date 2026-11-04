@@ -15,7 +15,7 @@ function sf_public_origin_ok(array $group, string $origin): bool {
     return sf_landing_origin_approved($group,$origin);
 }
 function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, string $origin): bool {
-    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|chat-config|chat|counsel|counsel-lead|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD', $path, $m)) return false;
+    if (!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|otp/request|otp/verify|chat-config|chat|counsel|counsel-lead|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD', $path, $m)) return false;
     return $store->transaction(static function (array $s) use ($m, $origin): bool {
         $group = sf_public_group($s, strtolower($m[1]));
         return $group !== null && sf_public_origin_ok($group, $origin) && count(sf_group_campuses($s, $group)) > 0;
@@ -115,7 +115,7 @@ function sf_public_fetch_pin(string $pin): ?array {
     return sf_public_parse_pin($body);
 }
 function sf_public_handle(string $method, string $path, array $p, array $headers, string $ip, SchoolFlowStore $store): array {
-    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD',$path,$m))
+    if(!preg_match('~^/api/public/forms/([a-f0-9-]{36})/(config|challenge|enquiries|short-enquiries|otp/request|otp/verify|chat-config|chat|chat-start|chat-followup|chat-remember|chat-resume|chat-forget|callback|pin/[0-9]{6})$~iD',$path,$m))
         sf_fail(404,'Public form not found');
     $guid=strtolower($m[1]);$action=$m[2];$origin=(string)($headers['origin']??'');
     $group=$store->transaction(static function (array $s) use ($guid,$origin) {
@@ -131,7 +131,8 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
                 'landing_pages'=>['primary_host'=>sf_landing_primary_host($g),
                     'approved_urls'=>sf_landing_settings($g)['approved_urls'],
                     'restrict_primary'=>sf_landing_settings($g)['restrict_primary']],
-                'submission_settings'=>sf_submission_public($g,$origin)]];
+                'submission_settings'=>sf_submission_public($g,$origin),
+                'otp'=>sf_form_otp_public_view($g)]];
         });
     }
     if($action==='challenge' && $method==='GET') {
@@ -160,6 +161,10 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         },true);
         return [200,$found];
     }
+    if($action==='otp/request' && $method==='POST')
+        return sf_form_otp_request($guid,$origin,$p,$ip,$store);
+    if($action==='otp/verify' && $method==='POST')
+        return sf_form_otp_verify($guid,$origin,$p,$store);
     if($action==='short-enquiries' && $method==='POST') {
         $idem=(string)($headers['idempotency-key']??'');
         if(!preg_match('/^[a-zA-Z0-9_-]{12,100}$/D',$idem))sf_fail(422,'Submission ID missing');
@@ -176,7 +181,8 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         if(!sf_landing_page_approved($group,$origin,$page))sf_fail(422,'Landing page URL is not approved for this form');
         $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
         $ipKey=substr(hash('sha256',$ip),0,20);
-        return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer):array{
+        $otpSecret=$store->publicFormKey();
+        return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer,$otpSecret):array{
             $g=sf_public_group($s,$guid);
             if(!$g || !sf_public_origin_ok($g,$origin) || !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
             $route=null;
@@ -187,6 +193,11 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
                     if(($receipt['school_id']??null)!==$route['school_id'])sf_fail(409,'Submission belongs to another school');
                     return [200,['success'=>true,'duplicate_submission'=>true]];
                 }
+            // A browser's inline/popup label is untrusted. Both short surfaces
+            // share one mandatory setting, with the OTP bound to campus,
+            // mobile, form group, and approved website origin.
+            $verified=sf_form_otp_consume($s,$g,(int)$route['school_id'],$code,
+                $phone,$origin,$p,$otpSecret);
             sf_limit($s,'public-short-ip:'.$g['id'].':'.$ipKey,10,3600);
             sf_limit($s,'public-short-group:'.$g['id'],150,3600);
             foreach($s['receipts'] as $receipt)if(($receipt['public_challenge']??'')===$proof)sf_fail(409,'Math CAPTCHA already used');
@@ -202,6 +213,15 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['popup_trigger']=in_array($trigger,['manual','delay','scroll','exit'],true)?$trigger:'';
             $details['popup_campaign_id']='group-'.$g['id'];
             $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_short_received',true);
+            if($verified['verified']){
+                foreach($s['leads'] as &$savedLead)if($savedLead['id']===$lead['id']){
+                    $savedLead['whatsapp_verified']=true;
+                    $savedLead['whatsapp_verified_at']=$verified['verified_at'];
+                    $savedLead['verification_method']='wabridge_whatsapp_otp';
+                    $savedLead['verification_job_id']=$verified['provider_job_id'];
+                    break;
+                }unset($savedLead);
+            }
             $s['receipts'][]=['public_group_id'=>$g['id'],'school_id'=>$route['school_id'],
                 'idempotency_key'=>$idem,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
             return [201,['success'=>true,'guid'=>$lead['guid'],'duplicate_submission'=>false]];
