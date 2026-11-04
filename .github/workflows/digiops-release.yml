@@ -79,6 +79,7 @@ jobs:
           node tests/check_dashboard_workspace.js
           node tests/check_group_routing.js
           node tests/check_short_popup_campaign.js
+          node tests/check_website_popup_bootstrap.js
           node tests/check_lexicon_chat_autoload.js
           node tests/check_campus_placeholder.js
           node tests/check_conditional_enquiry_popup.js
