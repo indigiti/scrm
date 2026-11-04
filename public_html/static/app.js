@@ -305,10 +305,10 @@ function groupSchoolChecks(chosen=[]){
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
 }
 function sfGroupEmbed(guid){
- return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'"></script>';
+ return '<script defer src="'+window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(guid)+'"></script>';
 }
 function sfGroupShortEmbed(guid,mode='inline'){
- const src=window.location.origin+'/scrm/embed/'+encodeURIComponent(guid);
+ const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(guid);
  const tag='<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="'+mode+'"'+(mode==='inline'?' data-schoolflow-target="#schoolflow-admissions"':'')+'></script>';
  return mode==='inline'?'<div id="schoolflow-admissions"></div>\n'+tag:tag;
 }
