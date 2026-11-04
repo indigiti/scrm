@@ -1627,6 +1627,38 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    if(!canManageSchools())return;
    ext.editGroupId=Number(el.dataset.id);state.modal='landing-pages';render();return;
  }
+ if(action==='new-page-popup'||action==='edit-page-popup'){
+   if(!isAdmin())return;
+   const group=ext.groupSites.find(g=>Number(g.id)===Number(el.dataset.id));
+   if(!group)return;
+   const campaign=action==='edit-page-popup'
+    ?group.page_popup_campaigns?.find(c=>c.guid===el.dataset.campaign):null;
+   if(action==='edit-page-popup'&&!campaign)return;
+   ext.editGroupId=Number(group.id);
+   ext.editPagePopupGuid=campaign?.guid||null;
+   state.modal='page-popup';render();return;
+ }
+ if(action==='delete-page-popup'){
+   if(!isAdmin())return;
+   const group=ext.groupSites.find(g=>Number(g.id)===Number(el.dataset.id));
+   const campaign=group?.page_popup_campaigns?.find(c=>c.guid===el.dataset.campaign);
+   if(!campaign)return;
+   if(!confirm('Remove the popup for '+campaign.landing_page+'? Its embed code will stop showing the form. Existing enquiries remain saved.'))return;
+   perform(async()=>{
+    await api('/api/group-sites/'+group.id+'/page-popups/'+encodeURIComponent(campaign.guid),'DELETE');
+    await loadRouting();toast('Landing-page popup removed');
+   });return;
+ }
+ if(action==='copy-page-popup'){
+   const group=ext.groupSites.find(g=>Number(g.id)===Number(el.dataset.id));
+   const campaign=group?.page_popup_campaigns?.find(c=>c.guid===el.dataset.campaign);
+   if(!campaign||!group?.guid)return;
+   const snippet=sfPagePopupEmbed(group.guid,campaign.guid);
+   if(!navigator.clipboard?.writeText)return toast('Select the displayed script and copy it manually.',true);
+   navigator.clipboard.writeText(snippet).then(()=>toast('Landing-page popup code copied'))
+    .catch(()=>toast('Clipboard blocked; select the displayed code manually.',true));
+   return;
+ }
  if(action==='edit-popup-settings'){
    if(!canManageSchools())return;
    ext.editGroupId=Number(el.dataset.id);state.modal='popup-settings';render();return;
@@ -2074,6 +2106,33 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    const group=ext.groupSites.find(g=>g.id===id);if(group)group.landing_pages=settings;
    state.modal='';render();toast('Approved landing pages saved. Removed URLs are now blocked.');
   });return;
+ }
+ if(f.id==='pagePopupForm'){
+   if(!isAdmin())return;
+   const groupId=Number(f.dataset.id),group=ext.groupSites.find(g=>Number(g.id)===groupId);
+   if(!group)return;
+   const campaign=f.dataset.campaign||'';
+   if(campaign&&!group.page_popup_campaigns?.some(c=>c.guid===campaign))return;
+   const chosen=Array.from(f.querySelectorAll('input[name="popup_school_ids"]:checked'))
+    .map(x=>Number(x.value));
+   const payload={
+    name:String(fd.name||'').trim(),landing_page:String(fd.landing_page||'').trim(),
+    settings:{
+     enabled:!!f.elements.enabled.checked,trigger:String(fd.trigger),
+     delay_seconds:Number(fd.delay_seconds),scroll_percent:Number(fd.scroll_percent),
+     repeat_after:String(fd.repeat_after),position:String(fd.position),
+     exit_intent:!!f.elements.exit_intent.checked,mobile_enabled:!!f.elements.mobile_enabled.checked,
+     start_date:String(fd.start_date||''),end_date:String(fd.end_date||''),
+     school_ids:chosen
+    }
+   };
+   perform(async()=>{
+    const path='/api/group-sites/'+groupId+'/page-popups'+(campaign?'/'+encodeURIComponent(campaign):'');
+    await api(path,campaign?'PATCH':'POST',payload);
+    state.modal='';ext.editPagePopupGuid=null;
+    await loadRouting();
+    toast(campaign?'Landing-page popup updated':'Landing-page popup created. Copy its script from Popup Campaigns.');
+   });return;
  }
  if(f.id==='popupSettingsForm'){
   if(!canManageSchools())return;
