@@ -1107,7 +1107,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 // after a form is removed; leads and permanent audits remain.
                 $s['receipts']=array_values(array_filter($s['receipts']??[],
                     static fn(array $row):bool=>(int)($row['group_site_id']??0)!==$groupId
-                        && !in_array((int)($row['site_id']??0),$sourceIds,true)));
+                        && (int)($row['public_group_id']??0)!==$groupId
+                        && !in_array((int)($row['site_id']??0),$managedIds,true)));
                 $s['form_otp_challenges']=array_values(array_filter($s['form_otp_challenges']??[],
                     static fn(array $row):bool=>(int)($row['group_id']??0)!==$groupId));
                 foreach($group['routes'] as $route)
