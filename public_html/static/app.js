@@ -1707,6 +1707,32 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const id=Number(el.dataset.id);if(!confirm('Rotate the group website key? Your WordPress integration will stop until the new key is installed.'))return;
    perform(async()=>{const r=await api(`/api/group-sites/${id}/rotate-key`,'POST',{});ext.groupKey=r.api_key;render();toast('New group key generated. Update WordPress.');});return;
  }
+ if(action==='remove-group-form'){
+  if(!isAdmin())return;
+  const id=Number(el.dataset.id),group=ext.groupSites.find(g=>Number(g.id)===id);
+  if(!group||!group.guid)return;
+  const label=prompt('REMOVE PUBLIC FORM\n\nThis revokes ALL inline, popup and detailed embed scripts, cancels its popup campaigns and removes its group routing.\nExisting enquiries and audit records are preserved.\n\nType the exact group name to confirm:\n'+group.name);
+  if(label!==group.name){if(label!==null)toast('Removal cancelled: group name did not match.',true);return;}
+  perform(async()=>{
+   const result=await api('/api/group-sites/'+id,'DELETE',{confirm_guid:group.guid});
+   ext.editGroupId=null;state.modal='';await loadRouting();
+   toast('Group form removed. Historical enquiries retained: '+result.historical_leads_retained);
+  });return;
+ }
+ if(action==='toggle-form-surface'){
+  if(!isAdmin())return;
+  const id=Number(el.dataset.id),group=ext.groupSites.find(g=>Number(g.id)===id);
+  const name=el.dataset.surface;
+  if(!group||!['inline_enabled','group_popup_enabled','detailed_popup_enabled'].includes(name))return;
+  const enabled=el.dataset.enabled==='1';
+  if(!confirm((enabled?'Restore':'Disable')+' '+name.replaceAll('_',' ')+
+   ' for '+group.name+'? Installed scripts will '+(enabled?'work again.':'stop showing the selected form.')+
+   ' Existing enquiries are unaffected.'))return;
+  perform(async()=>{
+   group.form_surface_settings=await api('/api/group-sites/'+id+'/form-surfaces','PATCH',{[name]:enabled});
+   render();toast(enabled?'Form surface restored':'Form surface disabled; other form embeds remain active');
+  });return;
+ }
  if(action==='toggle-group'){
    const id=Number(el.dataset.id),g=ext.groupSites.find(x=>x.id===id);if(!g)return;
    if(!confirm(`${g.enabled?'Disable':'Enable'} group website ${g.name}?`))return;
@@ -1789,6 +1815,17 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  if(action==='dismiss-key'){state.key='';render();return;}
  if(action==='copy-key'){navigator.clipboard?.writeText(state.key).then(()=>toast('Key copied')).catch(()=>toast('Select and copy the key manually',true));return;}
  if(action==='rotate-key'){if(!confirm('Rotate the website API key? Its current key will stop working immediately.'))return;perform(async()=>{let result=await api(`/api/schools/${state.schoolId}/sites/${Number(el.dataset.id)}/rotate-key`,'POST');state.key=result.api_key;render();toast('Website key rotated');});return;}
+ if(action==='remove-site'){
+  if(!isAdmin())return;
+  const id=Number(el.dataset.id),site=state.sites.find(s=>Number(s.id)===id);
+  if(!site||site.is_group_route||!site.guid)return;
+  const confirmation=prompt('REMOVE CONNECTED WEBSITE\n\nThis revokes the private website API key immediately and hides the connector from the dashboard. Historical enquiries and audit events remain.\n\nType the exact website name to confirm:\n'+site.name);
+  if(confirmation!==site.name){if(confirmation!==null)toast('Removal cancelled: website name did not match.',true);return;}
+  perform(async()=>{
+   const result=await api('/api/schools/'+state.schoolId+'/sites/'+id,'DELETE',{confirm_guid:site.guid});
+   await reload();toast('Website removed. Historical enquiries retained: '+result.historical_leads_retained);
+  });return;
+ }
  if(action==='toggle-site'){perform(async()=>{await api(`/api/schools/${state.schoolId}/sites/${Number(el.dataset.id)}?enabled=${el.dataset.enabled==='1'}`,'PATCH');await reload();toast('Website status updated');});return;}
 
  if(action==='api-send-email'||action==='api-send-wa'){
