@@ -11,3 +11,19 @@
  }
 }
 @media(prefers-reduced-motion:reduce){.sf2,.sf2 *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+
+/* Optional WaBridge verification, visible only when required by school policy. */
+.sf2-otp{margin:15px 0;padding:15px;border:1px solid #d5ddfc;background:#f7f9ff;border-radius:14px}
+.sf2-otp[hidden],.sf2-otp-pin[hidden]{display:none!important}
+.sf2-otp>strong{display:block;font-size:14px;color:#14294c;margin-bottom:4px}
+.sf2-otp>small{display:block;color:#60728f;font-size:12px;line-height:1.5}
+.sf2-otp-send,.sf2-otp-check{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #6668ee;border-radius:10px;background:#fff;color:#4344d8;font-size:12px;font-weight:750;cursor:pointer;margin-top:12px}
+.sf2-otp-check{background:#4e50f0;color:#fff}
+.sf2-otp button:disabled{opacity:.55;cursor:not-allowed}
+.sf2-otp-pin{margin-top:12px}
+.sf2-otp-pin label{margin:0}
+.sf2-otp-pin input{font-variant-numeric:tabular-nums;letter-spacing:.15em}
+.sf2-otp-status{font-size:12px!important;color:#446b4f!important;margin:10px 0 0!important;line-height:1.55}
+.sf2-otp-status.sf2-error{color:#9b2831!important}
+.sf2-otp :is(button,input):focus-visible{outline:3px solid #90a3ff;outline-offset:2px}

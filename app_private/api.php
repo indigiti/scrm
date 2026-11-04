@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/messaging.php';
 require_once __DIR__ . '/public_forms.php';
+require_once __DIR__ . '/form_otp.php';
 require_once __DIR__ . '/popup_settings.php';
 require_once __DIR__ . '/landing_pages.php';
 require_once __DIR__ . '/marketing_controls.php';
@@ -156,6 +157,7 @@ function sf_group_public_view(array $s, array $group): array {
         'popup_settings'=>sf_popup_settings($group),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
+        'form_otp_settings'=>sf_form_otp_admin_view($group),
         'schools'=>array_map(static fn($r)=>['code'=>$r['code'],'school_id'=>$r['school_id'],
             'name'=>(sf_find($s['schools'],(int)$r['school_id'])['name']??'Unknown school')], $group['routes'])];
 }
@@ -917,7 +919,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -966,6 +968,26 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,$settings];
                 }
                 sf_fail(405,'Unsupported landing-page settings operation');
+            }
+            if($operation==='otp-settings'){
+                // A group website can route to multiple campuses: each campus Admin
+                // must authorize configuration changes to its public form.
+                foreach($group['routes'] as $route)
+                    sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if($method==='GET')return [200,sf_form_otp_admin_view($group)];
+                if($method==='PATCH'){
+                    $settings=sf_form_otp_validate_settings($payload,$group,$store);
+                    foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                        $row['form_otp_settings']=$settings;break;
+                    }
+                    unset($row);
+                    foreach($group['routes'] as $route)
+                        sf_event($s,(int)$route['school_id'],null,$uid,'form_otp_settings_updated',
+                            'WhatsApp form verification configuration changed for group #'.$groupId);
+                    $group['form_otp_settings']=$settings;
+                    return [200,sf_form_otp_admin_view($group)];
+                }
+                sf_fail(405,'Unsupported WhatsApp OTP settings method');
             }
             if($operation==='submission-settings'){
                 foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);

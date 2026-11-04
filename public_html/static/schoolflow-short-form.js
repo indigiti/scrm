@@ -27,6 +27,11 @@ function init(){
   ['Nursery','LKG','UKG','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'].map(function(x){return '<option>'+x+'</option>';}).join('')+
   '</select></label><label>Campus<select name="school_code" required disabled><option value="">Loading campuses…</option></select></label></div>'+
   '<div class="sf2-verify" hidden><label class="sf2-question">Security question</label><input name="captcha_answer" inputmode="numeric" maxlength="3" placeholder="Answer" required><button type="button" class="sf2-refresh">Refresh question</button></div>'+
+  '<div class="sf2-otp" hidden><strong>Verify your WhatsApp number</strong><small>A six-digit code is required before submitting.</small>'+
+  '<button type="button" class="sf2-otp-send">Request WhatsApp code</button>'+
+  '<div class="sf2-otp-pin" hidden><label>Six-digit code<input name="otp_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>'+
+  '<button type="button" class="sf2-otp-check">Verify code</button></div>'+
+  '<p class="sf2-otp-status" role="status" aria-live="polite"></p></div>'+
   '<label class="sf2-consent"><input type="checkbox" name="consent" required> I agree to be contacted by the selected school about this admission enquiry.</label>'+
   '<input class="sf2-trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">'+
   '<p class="sf2-status" aria-live="polite"></p><button type="submit" class="sf2-submit">Request Admission Callback</button></form></div>';
@@ -34,6 +39,7 @@ function init(){
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
  var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true,submissionSettings=null;
+ var otpSettings={required:false},otpId='',otpProof='',otpPhone='',otpCampus='',otpBusy=false,otpCooldown=null;
  var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
  var campaignKey='sf2_popup_'+guid;
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
@@ -145,20 +151,83 @@ function init(){
   try{
    var destination=new URL(url);
    if(destination.origin!==location.origin||destination.protocol!=='https:')return;
-   sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
+   try{sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
     time:Date.now(),event_id:response.guid||attemptId,form_surface:mode,school_code:campus.value
-   }));
+   }));}catch(storageError){/* Conversion storage must never prevent successful redirect. */}
    location.assign(destination.href);
   }catch(e){console.warn('SchoolFlow: thank-you redirect could not be completed');}
  }
  function error(s){status.textContent=s;status.classList.add('sf2-error');}
  function clear(){status.textContent='';status.classList.remove('sf2-error');}
  async function get(path){var r=await fetch(api+path,{credentials:'omit',cache:'no-store',headers:{Accept:'application/json'}});var d=await r.json().catch(function(){return {};});if(!r.ok)throw Error(d.detail||'SchoolFlow temporarily unavailable');return d;}
+
+ function otpStatus(message,isError){
+  var element=outer.querySelector('.sf2-otp-status');
+  element.textContent=message;element.classList.toggle('sf2-error',!!isError);
+ }
+ function resetOtp(){
+  otpId='';otpProof='';otpPhone='';otpCampus='';
+  form.elements.otp_code.value='';
+  outer.querySelector('.sf2-otp-pin').hidden=true;
+  if(otpSettings.required)otpStatus('Request a WhatsApp code to continue.');
+ }
+ function useOtpSettings(cfg){
+  otpSettings=cfg||{required:false};
+  outer.querySelector('.sf2-otp').hidden=!otpSettings.required;
+  if(otpSettings.required&&opened&&!token)challenge();
+ }
+ async function otpApi(action,body){
+  var response=await fetch(api+'/otp/'+action,{method:'POST',credentials:'omit',cache:'no-store',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  var data=await response.json().catch(function(){return {};});
+  if(!response.ok)throw Error(data.detail||'WhatsApp verification unavailable');
+  return data;
+ }
+ async function requestOtp(){
+  if(otpBusy||!otpSettings.required)return;
+  var fields=form.elements,phone=fields.phone.value.trim();
+  if(!/^[6-9][0-9]{9}$/.test(phone))return error('Enter a valid 10-digit mobile number.');
+  if(!campus.value||campus.disabled)return error('Select a campus first.');
+  if(!fields.consent.checked)return error('Consent is required to request a WhatsApp code.');
+  if(!token){await challenge();return error('Solve the math question before requesting a code.');}
+  if(!/^\d+$/.test(fields.captcha_answer.value.trim()))return error('Enter the math security answer.');
+  otpBusy=true;clear();
+  var button=outer.querySelector('.sf2-otp-send');
+  button.disabled=true;otpStatus('Requesting verification code…');
+  try{
+   var result=await otpApi('request',{phone:phone,school_code:campus.value,
+    consent:true,captcha_token:token,captcha_answer:fields.captcha_answer.value.trim(),
+    landing_page:location.href.slice(0,500)});
+   otpId=result.otp_id;otpProof='';otpPhone=phone;otpCampus=campus.value;
+   outer.querySelector('.sf2-otp-pin').hidden=false;
+   otpStatus('Code request queued. Enter the code when it arrives in WhatsApp.');
+   if(otpCooldown!==null)clearTimeout(otpCooldown);
+   otpCooldown=setTimeout(function(){
+    button.disabled=false;button.textContent='Request another code';otpCooldown=null;
+   },60000);
+  }catch(e){otpStatus(e.message||'Unable to request verification.',true);button.disabled=false;}
+  finally{otpBusy=false;}
+ }
+ async function verifyOtp(){
+  if(otpBusy||!otpId)return;
+  var pin=form.elements.otp_code.value.trim();
+  if(!/^[0-9]{6}$/.test(pin))return otpStatus('Enter the six-digit code.',true);
+  otpBusy=true;var button=outer.querySelector('.sf2-otp-check');button.disabled=true;
+  try{
+   var result=await otpApi('verify',{otp_id:otpId,phone:form.elements.phone.value.trim(),
+    school_code:campus.value,code:pin});
+   if(!result.verified||!result.otp_proof)throw Error('Verification was not accepted');
+   otpProof=result.otp_proof;otpPhone=form.elements.phone.value.trim();otpCampus=campus.value;
+   otpStatus('WhatsApp number verified. You can submit your enquiry.');
+  }catch(e){otpStatus(e.message||'Invalid WhatsApp code.',true);}
+  finally{otpBusy=false;button.disabled=false;}
+ }
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
    pageAllowed=approvedPage(d.landing_pages);
    submissionSettings=d.submission_settings||null;
+   useOtpSettings(d.otp);
    if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
     return error('This landing page URL is not approved. Contact the school website administrator.');}
    campus.replaceChildren(new Option('Select campus',''));
@@ -200,6 +269,7 @@ function init(){
    config=d.popup||null;configLoaded=true;
    pageAllowed=approvedPage(d.landing_pages);
    submissionSettings=d.submission_settings||null;
+   useOtpSettings(d.otp);
    if(!pageAllowed){trigger.hidden=true;return;}
    if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
@@ -209,6 +279,10 @@ function init(){
   addEventListener('popstate',setupTriggers);
  }else campuses();
  outer.querySelector('.sf2-refresh').addEventListener('click',challenge);
+ outer.querySelector('.sf2-otp-send').addEventListener('click',requestOtp);
+ outer.querySelector('.sf2-otp-check').addEventListener('click',verifyOtp);
+ form.elements.phone.addEventListener('input',resetOtp);
+ campus.addEventListener('change',resetOtp);
  form.addEventListener('submit',async function(ev){
   ev.preventDefault();if(busy||!opened)return;clear();
   var p=form.elements;var phone=p.phone.value.trim();
@@ -218,12 +292,15 @@ function init(){
   if(!p.consent.checked)return error('Consent is required.');
   if(!token){await challenge();if(token)error('Please answer the security question to complete your enquiry.');return;}
   if(!/^\d+$/.test(p.captcha_answer.value.trim()))return error('Enter the security answer.');
+  if(otpSettings.required&&(!otpId||!otpProof||otpPhone!==phone||otpCampus!==campus.value))
+   return error('Verify your WhatsApp number before submitting the enquiry.');
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
    school_code:campus.value,form_display:mode,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),utm_source:query.get('utm_source')||'',
+   otp_id:otpSettings.required?otpId:'',otp_proof:otpSettings.required?otpProof:'',
    utm_medium:query.get('utm_medium')||'',utm_campaign:query.get('utm_campaign')||'',
    utm_term:query.get('utm_term')||'',utm_content:query.get('utm_content')||''};
   busy=true;submit.disabled=true;submit.textContent='Submitting…';
@@ -232,7 +309,7 @@ function init(){
    status.textContent='Thank you. Your admission enquiry has been received.';
    completed=true;remember('completed');clearTriggers();
    completeSubmission(body);
-   form.reset();verify.hidden=true;token='';attemptId='';
+   form.reset();verify.hidden=true;token='';attemptId='';resetOtp();
   }catch(e){error(e.message);await challenge();}
   finally{busy=false;submit.disabled=false;submit.textContent='Request Admission Callback';}
  });

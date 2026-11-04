@@ -402,6 +402,21 @@ function enquiryInterfacePage(){
   '</form></section>';
 }
 
+function formOtpSettingsModal(group){
+ const cfg=group.form_otp_settings||{};
+ return modalFrame('WhatsApp OTP · '+esc(group.name),
+  'Verify a parent mobile number before accepting inline or popup admissions enquiries.',
+  '<form id="formOtpSettingsForm" data-id="'+Number(group.id)+'">'+
+  '<label class="sf-check-row"><input type="checkbox" name="enabled" '+(cfg.enabled?'checked':'')+'>'+
+  '<span><strong>Require WhatsApp code verification</strong><small>Inline and popup forms use the same policy. Math CAPTCHA stays active.</small></span></label>'+
+  '<div class="form-field"><label>Connected WaBridge session ID</label><input name="session_id" maxlength="128" value="'+esc(cfg.session_id||'')+'" placeholder="Authorized session identifier"></div>'+
+  '<div class="sf-help-panel"><strong>Service configuration</strong><p>Provider credential: '+(cfg.has_api_key?'Configured':'Not configured')+
+  '. The credential stays in private server configuration, never in page source. Confirm WhatsApp connectivity and queue processing before activation.</p>'+
+  '<p>Codes expire after 5 minutes. Resend requires 60 seconds. Five incorrect attempts lock a challenge. Unofficial WhatsApp needs a fallback for production-critical flows.</p></div>'+
+  '<div class="button-row">'+btn('Cancel','close-modal')+
+  '<button type="submit" class="btn primary">Save OTP settings</button></div></form>');
+}
+
 function submissionSettingsModal(group){
  const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
  const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
@@ -444,7 +459,8 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
-   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
+   btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
   (!groups.length?'<div class="sf-management-card"><h3>No group forms connected</h3><p>Connect a group website from Schools & Routing first.</p>'+btn('Go to Schools & Routing','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -846,6 +862,7 @@ function modal(){if(!state.modal)return '';
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
   return modalFrame(state.modal==='edit-template'?'Edit email template':'New email template','For parent-approved communications only.',`<form id="templateForm">${input('Template title','title','text',t.title,true)}${input('Email subject','subject','text',t.subject,true)}<div class="form-field"><label>Message</label><textarea name="body" required maxlength="4000" rows="7">${esc(t.body)}</textarea></div><button class="btn primary" type="submit">Save template</button></form>`);
  }
+ if(state.modal==='form-otp-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?formOtpSettingsModal(group):'';}
  if(state.modal==='submission-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?submissionSettingsModal(group):'';}
  if(state.modal==='landing-pages'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?landingPagesModal(group):'';}
  if(state.modal==='popup-settings'){const group=ext.groupSites.find(g=>g.id===ext.editGroupId);return group?popupSettingsModal(group):'';}
@@ -1509,6 +1526,10 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    state.key='';state.detail=null;state.modal=action==='route-connect'?'new-site':'';
    perform(reload);return;
  }
+ if(action==='edit-form-otp-settings'){
+  if(!canManageSchools())return;
+  ext.editGroupId=Number(el.dataset.id);state.modal='form-otp-settings';render();return;
+ }
  if(action==='edit-submission-settings'){
   if(!canManageSchools())return;
   ext.editGroupId=Number(el.dataset.id);state.modal='submission-settings';render();return;
@@ -1892,6 +1913,21 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   const names=['from','to','utm_source','utm_medium','utm_campaign','utm_content','utm_term','form_type','status'];
   ext.campaignFilters=Object.fromEntries(names.map(k=>[k,String(fd[k]||'').trim()]));
   perform(loadCampaignReport);return;
+ }
+ if(f.id==='formOtpSettingsForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const enabled=!!f.elements.enabled.checked;
+  const sessionId=String(fd.session_id||'').trim();
+  perform(async()=>{
+   const settings=await api('/api/group-sites/'+id+'/otp-settings','PATCH',{
+    enabled,short_forms:true,session_id:sessionId
+   });
+   const group=ext.groupSites.find(g=>g.id===id);
+   if(group)group.form_otp_settings=settings;
+   state.modal='';render();
+   toast(enabled?'WhatsApp verification enabled for short forms':'WhatsApp verification disabled; math CAPTCHA remains active');
+  });return;
  }
  if(f.id==='submissionSettingsForm'){
   if(!canManageSchools())return;

@@ -30,9 +30,10 @@ function fixture(options={}){
  campus.add=item=>campus.options.push(item);
  const form=node('form');form.elements={
   school_code:campus,parent_name:node('input'),phone:node('input'),
-  captcha_answer:node('input'),grade:node('select'),consent:node('input'),website:node('input')
+  captcha_answer:node('input'),otp_code:node('input'),grade:node('select'),consent:node('input'),website:node('input')
  };
  const status=node('p'),submit=node('button'),verify=node('div'),close=node('button'),question=node('label'),refresh=node('button');
+ const otp=node('div'),otpPin=node('div'),otpSend=node('button'),otpCheck=node('button'),otpStatus=node('p');
  status.textContent='';verify.hidden=true;
  let outer=null,trigger=null;
  const head={appendChild(){}},body={appendChild(el){
@@ -55,7 +56,9 @@ function fixture(options={}){
     outer=el;
     el.querySelector=selector=>({
      form, '.sf2-verify':verify,'.sf2-status':status,'.sf2-submit':submit,
-     '.sf2-close':close,'.sf2-question':question,'.sf2-refresh':refresh
+     '.sf2-close':close,'.sf2-question':question,'.sf2-refresh':refresh,
+     '.sf2-otp':otp,'.sf2-otp-pin':otpPin,'.sf2-otp-send':otpSend,
+     '.sf2-otp-check':otpCheck,'.sf2-otp-status':otpStatus
     })[selector]||null;
     el.querySelectorAll=()=>[close,form.elements.parent_name,submit];
    }
@@ -65,7 +68,7 @@ function fixture(options={}){
  const sMap=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v))});
  const config={...defaults,...options.config};
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
-   schools:[{code:'campus-1',name:'Campus One'}],popup:config,landing_pages:options.landingPages
+   schools:[{code:'campus-1',name:'Campus One'}],popup:config,otp:options.otp||{required:false},landing_pages:options.landingPages
   }: {token:'test',question:'1 + 1'}});
  class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
@@ -87,10 +90,15 @@ function fixture(options={}){
   advance:ms=>{now+=ms;for(const [id,t] of [...timers])if(t.due<=now){timers.delete(id);t.fn();}},
   scroll:percent=>{context.scrollY=percent*10;windowHandlers.scroll?.();},
   exit:()=>documentHandlers.mouseout?.({relatedTarget:null,clientY:0}),
-  storage,session,getConfig:()=>config,document,outer:()=>outer
+  storage,session,getConfig:()=>config,document,outer:()=>outer,otp:()=>otp,otpSend:()=>otpSend
  };
 }
 (async function(){
+ const otpRequired=fixture({otp:{required:true},config:{enabled:false}});
+ await otpRequired.ready();
+ assert.equal(otpRequired.otp().hidden,false,'public config reveals required short-form OTP control');
+ otpRequired.manual();await otpRequired.ready();
+ assert.equal(typeof otpRequired.otpSend().handlers.click,'function','OTP request action is bound in popup');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');
