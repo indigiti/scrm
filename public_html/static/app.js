@@ -313,9 +313,34 @@ function sfGroupShortEmbed(guid,mode='inline'){
  return mode==='inline'?'<div id="schoolflow-admissions"></div>\n'+tag:tag;
 }
 
+function sfGroupConversionEmbed(guid){
+ return '<script defer src="'+window.location.origin+APP_BASE+'/static/schoolflow-conversion.js" data-schoolflow-group="'+encodeURIComponent(guid)+'"></script>';
+}
+function sfGroupEmbedGuide(group){
+ if(!group.guid)return '<p class="muted-note">This group has no public Form ID. Create the group before copying embed codes.</p>';
+ const id=Number(group.id);
+ const snippet=(label,note,code,action)=>
+  '<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(label)+'</strong><p>'+esc(note)+'</p></div>'+
+  btn('Copy code',action,'small','type="button" data-id="'+id+'" aria-label="Copy '+esc(label)+' embed code"')+
+  '</div><pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(code)+'</code></pre></div>';
+ return '<details class="sf-embed-guide"><summary><span><strong>Website embed codes</strong><small>Copy short popup, inline form, detailed popup or conversion tracking</small></span><span class="sf-embed-guide-count">4 codes</span></summary>'+
+ '<div class="sf-embed-guide-body">'+
+ '<p class="sf-embed-guide-intro">These snippets use this group’s current public Form ID. Paste the selected form script into the intended website page. Never paste a private group API key into HTML.</p>'+
+ snippet('Short popup','Compact admission popup with manual or configured automatic triggers.',
+  sfGroupShortEmbed(group.guid,'popup'),'copy-group-short-popup')+
+ snippet('Short inline form','Paste both lines where the enquiry form should appear. Only inline redirects to the approved thank-you page when enabled.',
+  sfGroupShortEmbed(group.guid,'inline'),'copy-group-inline')+
+ snippet('Detailed popup','The plain script loads the legacy full enquiry popup. Popup success stays on the current page.',
+  sfGroupEmbed(group.guid),'copy-group-embed')+
+ snippet('Thank-you conversion tracking','Install only on the approved thank-you page, not alongside a popup. Configure Google Ads/Meta tags separately.',
+  sfGroupConversionEmbed(group.guid),'copy-group-conversion')+
+ '<p class="sf-embed-guide-intro">Use one form variant per placement. The primary website and any additional landing-page URL must be approved in SchoolFlow. Embed codes are public; API credentials are not.</p>'+
+ '</div></details>';
+}
 function popupSettingsModal(group){
  const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
  return modalFrame('Popup campaign · '+esc(group.name),'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
+ sfGroupEmbedGuide(group)+
  '<form id="popupSettingsForm" data-id="'+Number(group.id)+'">'+
  '<div class="form-field"><label><input type="checkbox" name="enabled" '+(v('enabled',false)?'checked':'')+'> Enable automatic admission popup</label></div>'+
  '<div class="two-cols">'+
