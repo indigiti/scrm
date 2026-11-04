@@ -1023,7 +1023,7 @@ async function loadPublicChat(){
  if(!isAdmin())return;
  const base='/api/schools/'+state.schoolId+'/public-chat';
  const [settings,provider,review,groups,report,sources,files,quality]=await Promise.all([
-   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites'),
+   api(base),api(base+'/provider'),api(base+'/review'),api('/api/group-sites?school_id='+encodeURIComponent(state.schoolId)),
    api(base+'/counsellor-report'),api(base+'/sources'),api(base+'/knowledge-files'),api(base+'/quality')
  ]);
  ext.chatSettings=settings;ext.chatProvider=provider;ext.chatProviderTest=null;
