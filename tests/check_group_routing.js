@@ -24,7 +24,8 @@ const data={
  '/api/schools/1/campaign-report':{totals:{enquiries:1,applied_or_later:0,confirmed_or_enrolled:0,enrolled:0,potential_duplicates:0,hot_or_warm:0},
   as_of:'2026-11-03T07:00:00+00:00',by:{utm_campaign:[{name:'nursery-pune',enquiries:1,applied:0,confirmed:0,enrolled:0}],utm_source:[{name:'google',enquiries:1,applied:0,confirmed:0,enrolled:0}]},
   filters:{},school_id:1},
- '/api/group-sites':routes,
+ '/api/group-sites?school_id=1':routes,
+ '/api/group-sites?school_id=2':routes,
 };
 const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
