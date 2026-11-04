@@ -86,7 +86,7 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
         '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button","data-schoolflow-popup-campaign"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
-        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);}'."\n".
+        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);script.setAttribute("data-schoolflow-button-style","rail");}'."\n".
         'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
