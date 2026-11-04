@@ -69,8 +69,10 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'new-page-popup',id:'1'}})}});
  assert.match(html,/pagePopupForm/,'page popup editor opens for selected school group');
- assert.match(html,/Full landing-page URL/,'popup editor targets one HTTPS page');
- assert.match(html,/Enable this page popup/,'popup editor allows deliberate opt-in');
+ assert.match(html,/Placement/,'popup editor supports whole-website and optional exact-page scope');
+ assert.match(html,/Enable popup after installation/,'popup editor defaults disabled until installation');
+ assert.match(html,/Entire registered school website/,'website scope does not require LP approval');
+ assert.match(html,/School\(s\) receiving this popup/,'selected-school control is explicit');
  handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Popup Campaigns'}})}});
  await sleep(120);
