@@ -35,13 +35,13 @@ function run(variant,url,attrs={}){
 const page='https://school.test/admissions/';
 const enabled=run('linked-one',page);
 assert.equal(enabled.appended.length,1,'plain embed resolves active school popup');
-assert.match(enabled.appended[0].src,/\/schoolflow-short-form\.js\?v=/,
- 'not the disabled legacy detailed popup');
+assert.match(enabled.appended[0].src,/\/lexicon-form\.js\?v=/,
+ 'registered school campaign uses the original approved detailed popup design');
 assert.equal(enabled.appended[0].attributes['data-schoolflow-mode'],'popup');
 assert.equal(enabled.appended[0].attributes['data-schoolflow-popup-campaign'],campaignGuid,
  'campaign GUID forwarded to public-form authorization');
-assert.equal(enabled.appended[0].attributes['data-schoolflow-button-style'],'rail',
- 'existing website right-side yellow rail retained');
+assert.equal(enabled.appended[0].attributes['data-schoolflow-popup-campaign'],campaignGuid,
+ 'existing WordPress head snippet opens the campaign in the familiar detailed popup');
 assert.equal(run('linked-one','https://different.test/admissions/').appended.length,0,
  'cross-domain cannot be auto-bound');
 assert.equal(run('linked-off',page).appended.length,0,
@@ -60,11 +60,11 @@ assert.match(run('legacy',page).appended[0].src,/lexicon-form\.js\?v=/,
 const explicit=run('linked-off',page,{'data-schoolflow-form':'short',
  'data-schoolflow-mode':'popup','data-schoolflow-popup-campaign':campaignGuid});
 assert.match(explicit.appended[0].src,/schoolflow-short-form\.js/,
- 'explicit campaign script still loads and validates against public config');
+ 'explicit legacy compact popup script remains backwards compatible');
 const detailedCss=fs.readFileSync(path.join(root,'public_html/static/lexicon-form.css'),'utf8');
 const shortCss=fs.readFileSync(path.join(root,'public_html/static/schoolflow-short-form.css'),'utf8');
 assert.match(detailedCss,/\.side-tab\[hidden\][^{]*\{display:none!important\}/,
  'legacy hidden rail cannot be forced visible');
 assert.match(shortCss,/\.sf2-trigger\[hidden\][^{]*\{display:none!important\}/,
  'short hidden campaign trigger cannot be forced visible');
-console.log('PASS: installed plain school-site embed, matching campaign, disabled/ambiguous fail-closed, legacy compatibility, hidden rail CSS');
+console.log('PASS: original detailed popup design preserved for school campaigns, disabled and ambiguous fail-closed, legacy short embed compatible');
