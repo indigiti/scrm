@@ -31,6 +31,8 @@ async function check(){
   campus,Option:Choice,Date,Set,Array,Promise,
   get:async()=>config,feedback:v=>{message=v;},loadedAt:0,
   trigger:{hidden:true},detailedEnabled:false,submissionSettings:null,
+  campaignGuid:'',campaignRules:null,otpRequired:false,
+  $:()=>({hidden:true}),
   popup:{classList:{contains:()=>false}},close:()=>{}
  });
  const helpers=src.slice(src.indexOf(' function campusPlaceholder(label){'),src.indexOf(' function open(){'));
