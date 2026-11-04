@@ -59,17 +59,8 @@ function loadAdmissionsChat(){
 }
 loadAdmissionsChat();
 
-// A detailed popup must NEVER navigate just because a legacy default URL exists.
-// Only a specifically enabled, same-origin, approved HTTPS destination is permitted.
-function approvedDetailedDestination(settings,origin){
- if(!settings||settings.detailed_redirect!==true||!settings.thank_you_url)return '';
- try{
-  var url=new URL(settings.thank_you_url);
-  if(url.origin!==origin||url.protocol!=='https:')return '';
-  if(url.username||url.password||url.search||url.hash)return '';
-  return url.href;
- }catch(e){return '';}
-}
+// This legacy detailed form is always presented as a popup. It must never
+// navigate away after a successful submission; only inline forms redirect.
 function init(){
  if(document.getElementById('leadPopup'))return;
  var tabs=document.createElement('div');tabs.className='side-tabs';
@@ -303,17 +294,8 @@ function init(){
    var saved=await fetch(api+'/enquiries',{method:'POST',credentials:'omit',cache:'no-store',
     headers:{'Content-Type':'application/json','Idempotency-Key':attemptId},body:JSON.stringify(data)}).then(decode);
    remember();
-   var destination=approvedDetailedDestination(submissionSettings,location.origin);
-   if(!saved.duplicate_submission&&destination){
-    // A blocked sessionStorage write must not suppress a valid redirect.
-    try{sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
-     time:Date.now(),event_id:saved.guid||attemptId,form_surface:'detailed',school_code:campus.value
-    }));}catch(storageError){}
-    window.location.assign(destination);
-    return;
-   }
-   // Popup confirmation is the default. Never redirect from a detailed popup
-   // when the school has not explicitly enabled the detailed-form destination.
+   // Legacy detailed popup: remain on the landing page regardless of any
+   // saved detailed_redirect setting. This form is not an inline surface.
    submissionComplete=true;form.hidden=true;$('lf_complete').hidden=false;
    $('lf_complete_text').textContent=saved.duplicate_submission?
     'This enquiry has already been received. No additional enquiry was created.':
