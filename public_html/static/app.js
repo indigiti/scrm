@@ -402,6 +402,21 @@ function enquiryInterfacePage(){
   '</form></section>';
 }
 
+function formOtpSettingsModal(group){
+ const cfg=group.form_otp_settings||{};
+ return modalFrame('WhatsApp OTP · '+esc(group.name),
+  'Verify a parent mobile number before accepting inline or popup admissions enquiries.',
+  '<form id="formOtpSettingsForm" data-id="'+Number(group.id)+'">'+
+  '<label class="sf-check-row"><input type="checkbox" name="enabled" '+(cfg.enabled?'checked':'')+'>'+
+  '<span><strong>Require WhatsApp code verification</strong><small>Inline and popup forms use the same policy. Math CAPTCHA stays active.</small></span></label>'+
+  '<div class="form-field"><label>Connected WaBridge session ID</label><input name="session_id" maxlength="128" value="'+esc(cfg.session_id||'')+'" placeholder="Authorized session identifier"></div>'+
+  '<div class="sf-help-panel"><strong>Service configuration</strong><p>Provider credential: '+(cfg.has_api_key?'Configured':'Not configured')+
+  '. The credential stays in private server configuration, never in page source. Confirm WhatsApp connectivity and queue processing before activation.</p>'+
+  '<p>Codes expire after 5 minutes. Resend requires 60 seconds. Five incorrect attempts lock a challenge. Unofficial WhatsApp needs a fallback for production-critical flows.</p></div>'+
+  '<div class="button-row">'+btn('Cancel','close-modal')+
+  '<button type="submit" class="btn primary">Save OTP settings</button></div></form>');
+}
+
 function submissionSettingsModal(group){
  const settings=group.submission_settings||{},links=settings.thank_you_urls||[];
  const code='<script defer src="'+window.location.origin+'/scrm/static/schoolflow-conversion.js" data-schoolflow-group="'+(group.guid||'')+'"></script>';
