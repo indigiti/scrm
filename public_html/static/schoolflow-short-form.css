@@ -27,3 +27,6 @@
 .sf2-otp-status{font-size:12px!important;color:#446b4f!important;margin:10px 0 0!important;line-height:1.55}
 .sf2-otp-status.sf2-error{color:#9b2831!important}
 .sf2-otp :is(button,input):focus-visible{outline:3px solid #90a3ff;outline-offset:2px}
+
+/* A disabled or unapproved popup must not leave a dead enquiry button. */
+.sf2-trigger[hidden]{display:none!important}
