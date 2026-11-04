@@ -523,10 +523,7 @@ function submissionSettingsModal(group){
    '<small>Each destination must belong to the registered website or an approved additional form domain. Redirects never cross website origins.</small></div>'+
    '<label class="sf-check-row"><input type="checkbox" name="inline_redirect" '+(settings.inline_redirect!==false?'checked':'')+'>'+
    '<span><strong>Redirect short inline form after success</strong><small>Requires a matching approved thank-you URL. Otherwise keep the success message.</small></span></label>'+
-   '<label class="sf-check-row"><input type="checkbox" name="popup_redirect" '+(settings.popup_redirect?'checked':'')+'>'+
-   '<span><strong>Redirect short popup after success</strong><small>Default is to display confirmation in the popup.</small></span></label>'+
-   '<label class="sf-check-row"><input type="checkbox" name="detailed_redirect" '+(settings.detailed_redirect?'checked':'')+'>'+
-   '<span><strong>Use approved destination for detailed inline forms</strong><small>Legacy detailed popups always show in-place confirmation. This setting never redirects a popup.</small></span></label>'+
+   '<div class="sf-help-panel"><strong>Popup confirmation</strong><p>Popup forms never redirect to the landing-page thank-you URL. The accepted enquiry is confirmed inside the popup. Conversion redirects are reserved for short inline LP submissions.</p></div>'+
    '<div class="sf-help-panel"><strong>Required on every approved thank-you page</strong><p>Install this tracking snippet to create one GTM event only after an accepted form submission. No parent or student information is included.</p>'+
    '<code class="sf-code-snippet">'+esc(code)+'</code>'+
    '<p>Configure Google Ads and Meta Lead conversions inside your own GTM workspace using the <code>schoolflow_lead</code> custom event. Ad-platform connection and consent setup are separate.</p></div>'+
@@ -2180,8 +2177,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   perform(async()=>{
    const settings=await api('/api/group-sites/'+id+'/submission-settings','PATCH',{
     thank_you_urls:links,inline_redirect:!!f.elements.inline_redirect.checked,
-    popup_redirect:!!f.elements.popup_redirect.checked,
-    detailed_redirect:!!f.elements.detailed_redirect.checked
+    popup_redirect:false,detailed_redirect:false
    });
    const group=ext.groupSites.find(g=>g.id===id);if(group)group.submission_settings=settings;
    state.modal='';render();toast('Approved submission and conversion settings saved');
