@@ -186,7 +186,7 @@ function init(){
   return option;
  }
  function loadSchools(force){
-  if(!force && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
+  if(!force && loadedAt>0 && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
   var selected=campus.value;campus.disabled=true;
   campus.replaceChildren(campusPlaceholder('Loading campuses...'));
   return get('/config').then(function(data){
