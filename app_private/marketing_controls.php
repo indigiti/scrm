@@ -29,6 +29,10 @@ function sf_submission_validate(array $p,array $group):array{
   $origins[$origin]=true;$urls[]=$url;
  }
  $settings['thank_you_urls']=$urls;
+ // Product contract: thank-you page conversions belong to inline LP forms only.
+ // Retain legacy fields for stored settings but never enable popup navigation.
+ $settings['popup_redirect']=false;
+ $settings['detailed_redirect']=false;
  return $settings;
 }
 function sf_submission_public(array $group,string $origin):array{
@@ -37,7 +41,7 @@ function sf_submission_public(array $group,string $origin):array{
  foreach($settings['thank_you_urls'] as $candidate)
   if(sf_landing_origin((string)$candidate)===$origin){$url=$candidate;break;}
  return ['thank_you_url'=>$url,'inline_redirect'=>$settings['inline_redirect'],
-  'popup_redirect'=>$settings['popup_redirect'],'detailed_redirect'=>$settings['detailed_redirect']];
+  'popup_redirect'=>false,'detailed_redirect'=>false];
 }
 /** Never use browser-supplied touch metadata for routing, authorization or staff identity. */
 function sf_marketing_first_touch(array $payload):?array{
