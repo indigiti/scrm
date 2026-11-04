@@ -1914,6 +1914,21 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   ext.campaignFilters=Object.fromEntries(names.map(k=>[k,String(fd[k]||'').trim()]));
   perform(loadCampaignReport);return;
  }
+ if(f.id==='formOtpSettingsForm'){
+  if(!canManageSchools())return;
+  const id=Number(f.dataset.id);
+  const enabled=!!f.elements.enabled.checked;
+  const sessionId=String(fd.session_id||'').trim();
+  perform(async()=>{
+   const settings=await api('/api/group-sites/'+id+'/otp-settings','PATCH',{
+    enabled,short_forms:true,session_id:sessionId
+   });
+   const group=ext.groupSites.find(g=>g.id===id);
+   if(group)group.form_otp_settings=settings;
+   state.modal='';render();
+   toast(enabled?'WhatsApp verification enabled for short forms':'WhatsApp verification disabled; math CAPTCHA remains active');
+  });return;
+ }
  if(f.id==='submissionSettingsForm'){
   if(!canManageSchools())return;
   const id=Number(f.dataset.id);
