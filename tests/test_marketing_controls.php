@@ -112,7 +112,7 @@ try{
 
  $logs=$store->transaction(static fn(array $s):array=>$s['audit_logs']??[]);
  marketing_ok(count(array_filter($logs,static fn(array $e):bool=>in_array($e['action']??'',[
-  'enquiry_panels_updated','submission_settings_updated'],true)))===2,
+  'enquiry_panels_updated','submission_settings_updated'],true)))===3,
   'admin changes are audited without disabling logging');
  echo "PASS: conversion redirects, same-origin policy, UTM metadata validation, full-history reporting, staff privacy and admin drawer settings\n";
 }finally{foreach(glob($dir.'/*')?:[] as $file)@unlink($file);@rmdir($dir);}
