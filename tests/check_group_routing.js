@@ -1,10 +1,10 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const js=fs.readFileSync(__dirname+'/../public_html/static/app.js','utf8');
-const handlers={};let html='';
+const handlers={},copied=[];let html='';
 const root={addEventListener:(k,fn)=>handlers[k]=fn,querySelector:()=>null};
 Object.defineProperty(root,'innerHTML',{get:()=>html,set:v=>html=v});
 const schools=[{id:1,name:'ABC Wakad',role:'Admin'},{id:2,name:'ABC Baner',role:'Admin'}];
-const routes=[{id:1,name:'ABC Group Website',domain:'group.test',enabled:true,schools:[{code:'campus-1',name:'ABC Wakad',school_id:1},{code:'campus-2',name:'ABC Baner',school_id:2}]}];
+const routes=[{id:1,name:'ABC Group Website',domain:'group.test',guid:'a8b5de5d-ac84-4169-9347-21144cedd39c',enabled:true,schools:[{code:'campus-1',name:'ABC Wakad',school_id:1},{code:'campus-2',name:'ABC Baner',school_id:2}]}];
 const data={
  '/api/setup/status':{needs_setup:false},'/api/me':{user:{id:1,name:'Group admin'},schools},
  '/api/schools/1/leads':[{id:7,guid:'12345678-1234-4123-8123-123456789012',name:'',guardian:'Example Parent',phone:'9876543210',
@@ -29,7 +29,7 @@ const data={
 const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
  fetch:async path=>{const route=path.replace('/scrm','');if(!(route in data))throw Error('Unexpected API '+route);return {status:200,ok:true,json:async()=>data[route]};},
- setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async()=>{}}},URLSearchParams,window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
+ setTimeout,Date,Intl,console,URL,Blob,confirm:()=>true,prompt:()=>null,navigator:{clipboard:{writeText:async text=>{copied.push(text);}}},URLSearchParams,window:{location:{href:'',origin:'https://schoolflow.test'},open:()=>{}}};
 vm.runInNewContext(js,ctx);
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
@@ -70,6 +70,32 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  await sleep(120);
  assert.match(html,/Configure campaign/);
  assert.match(html,/Popup campaigns/);
+ handlers.click({target:{closest:()=>({dataset:{action:'edit-popup-settings',id:'1'}})}});
+ assert.match(html,/Website embed codes/,'embed guide appears inside popup settings');
+ assert.match(html,/Short popup/);
+ assert.match(html,/Short inline form/);
+ assert.match(html,/Detailed popup/);
+ assert.match(html,/Thank-you conversion tracking/);
+ assert.match(html,/data-schoolflow-mode=&quot;popup&quot;/,'popup has explicit popup mode');
+ assert.match(html,/data-schoolflow-mode=&quot;inline&quot;/,'inline has explicit inline mode');
+ assert.match(html,/data-schoolflow-target/,'inline includes target element');
+ assert.match(html,/schoolflow-conversion\.js/,'thank-you conversion snippet included');
+ assert.match(html,/a8b5de5d-ac84-4169-9347-21144cedd39c/,'copy code uses group's current GUID');
+ assert.match(html,/type="button" data-id="1" aria-label="Copy Short popup/,'copy buttons cannot submit settings form');
+ const actions=[
+  ['copy-group-short-popup','data-schoolflow-mode="popup"'],
+  ['copy-group-inline','data-schoolflow-mode="inline"'],
+  ['copy-group-embed','<script defer src="https://schoolflow.test/scrm/embed/'],
+  ['copy-group-conversion','schoolflow-conversion.js']
+ ];
+ for(const [action,needle] of actions){
+  handlers.click({target:{closest:()=>({dataset:{action,id:'1'}})}});
+  assert.ok(copied.at(-1).includes(needle),'correct snippet copied for '+action);
+ }
+ assert.equal(copied.length,4,'four copy actions are independent');
+ assert.ok(copied[1].startsWith('<div id="schoolflow-admissions"></div>'),'inline includes container and script');
+ assert.ok(!copied[2].includes('data-schoolflow-form="short"'),'bare legacy script remains detailed popup');
+ handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Team'}})}});
  await sleep(120);
  assert.match(html,/Assign existing staff/,'team offers school-scoped staff assignment');
