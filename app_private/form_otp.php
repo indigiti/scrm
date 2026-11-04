@@ -41,7 +41,9 @@ function sf_form_otp_validate_settings(array $payload,array $group,SchoolFlowSto
         $old[$key]=$payload[$key];
     }
     if(array_key_exists('session_id',$payload)){
-        if(!is_string($payload['session_id'])||!preg_match('/^[A-Za-z0-9._:-]{1,128}$/D',$payload['session_id']))
+        if(!is_string($payload['session_id'])||
+            ($payload['session_id']!==''&&!preg_match('/^[A-Za-z0-9._:-]{1,128}$/D',$payload['session_id']))||
+            ($payload['session_id']===''&&$old['enabled']))
             sf_fail(422,'Choose an authorized WaBridge session ID');
         $old['session_id']=$payload['session_id'];
     }
