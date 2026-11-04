@@ -99,3 +99,52 @@ function sf_popup_public(array $s,array $group): array {
     unset($settings['school_ids']);
     return $settings;
 }
+
+
+/**
+ * Optional page-scoped short-popup campaigns. A group may serve several school
+ * landing pages; do not make one global popup control all of them.
+ * Campaigns reference stable public GUIDs and never contain private credentials.
+ */
+function sf_page_popup_campaigns(array $group):array {
+    $campaigns=$group['page_popup_campaigns']??[];
+    return is_array($campaigns)?array_values(array_filter($campaigns,'is_array')):[];
+}
+function sf_page_popup_validate(array $payload,array $group):array {
+    foreach(array_keys($payload) as $key)
+        if(!in_array($key,['name','landing_page','settings'],true))
+            sf_fail(422,'Unknown landing-page popup field');
+    $name=sf_text($payload,'name',90,3);
+    $landing=sf_landing_normalize_url(sf_text($payload,'landing_page',300,12));
+    $origin=sf_landing_origin($landing);
+    if(!sf_landing_origin_approved($group,$origin)||
+        !sf_landing_page_approved($group,$origin,$landing))
+        sf_fail(422,'Approve the landing-page URL before attaching a popup');
+    foreach(sf_submission_settings($group)['thank_you_urls'] as $thankYou)
+        if($thankYou===$landing)sf_fail(422,'Do not show an enquiry popup on a thank-you page');
+    if(!isset($payload['settings'])||!is_array($payload['settings']))
+        sf_fail(422,'Popup settings are required');
+    $settings=sf_popup_validate($payload['settings'],$group);
+    // Enforce URL targeting server-side; freeform path prefixes are not allowed
+    // to broaden a page-specific campaign beyond the one approved destination.
+    $settings['include_paths']=[];
+    $settings['exclude_paths']=[];
+    return ['name'=>$name,'landing_page'=>$landing,'settings'=>$settings];
+}
+function sf_page_popup_public(array $s,array $group):array {
+    $out=[];
+    foreach(sf_page_popup_campaigns($group) as $campaign){
+        $settings=$campaign['settings']??[];
+        if(!is_array($settings)||empty($settings['enabled']))continue;
+        $landing=(string)($campaign['landing_page']??'');
+        if(!sf_landing_page_approved($group,sf_landing_origin($landing),$landing))
+            continue; // Revoking LP approval immediately disables its popup.
+        $popup=sf_popup_public($s,array_replace($group,['popup_settings'=>$settings]));
+        $out[]=[
+            'guid'=>(string)$campaign['guid'],
+            'landing_page'=>$landing,
+            'popup'=>$popup
+        ];
+    }
+    return $out;
+}
