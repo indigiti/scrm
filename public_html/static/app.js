@@ -410,6 +410,9 @@ function formOtpSettingsModal(group){
   '<label class="sf-check-row"><input type="checkbox" name="enabled" '+(cfg.enabled?'checked':'')+'>'+
   '<span><strong>Require WhatsApp code verification</strong><small>Inline and popup forms use the same policy. Math CAPTCHA stays active.</small></span></label>'+
   '<div class="form-field"><label>Connected WaBridge session ID</label><input name="session_id" maxlength="128" value="'+esc(cfg.session_id||'')+'" placeholder="Authorized session identifier"></div>'+
+  '<div class="form-field"><label>SchoolFlow-scoped WaBridge API credential</label>'+
+  '<input type="password" name="api_key" maxlength="256" autocomplete="new-password" placeholder="'+
+  (cfg.has_api_key?'Leave blank to keep configured credential':'Enter a scoped API credential')+'"></div>'+
   '<div class="sf-help-panel"><strong>Service configuration</strong><p>Provider credential: '+(cfg.has_api_key?'Configured':'Not configured')+
   '. The credential stays in private server configuration, never in page source. Confirm WhatsApp connectivity and queue processing before activation.</p>'+
   '<p>Codes expire after 5 minutes. Resend requires 60 seconds. Five incorrect attempts lock a challenge. Unofficial WhatsApp needs a fallback for production-critical flows.</p></div>'+
