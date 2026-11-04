@@ -125,7 +125,14 @@ function init(){
   try{
    var target=new URL(choice.landing_page),current=new URL(location.href);
    var normalize=function(path){return path.replace(/\/+$/,'')||'/';};
-   if(target.origin!==current.origin||normalize(target.pathname)!==normalize(current.pathname))return false;
+   if(target.origin!==current.origin)return false;
+   if((choice.scope||'page')==='page'&&normalize(target.pathname)!==normalize(current.pathname))return false;
+   if(!['page','website'].includes(choice.scope||'page'))return false;
+   var paths=choice.popup||{},includes=paths.include_paths||[],excludes=paths.exclude_paths||[];
+   var matches=function(path){return path==='/'||normalize(current.pathname)===path||normalize(current.pathname).startsWith(path+'/');};
+   if((choice.scope||'page')==='website'&&((includes.length&&!includes.some(matches))||excludes.some(matches)))return false;
+   var thankYou=data.submission_settings&&data.submission_settings.thank_you_url;
+   if(thankYou){try{var thanks=new URL(thankYou);if(thanks.origin===current.origin&&normalize(thanks.pathname)===normalize(current.pathname))return false;}catch(e){}}
    if(target.protocol!=='https:')return false;
   }catch(e){return false;}
   config=choice.popup||null;
@@ -219,7 +226,7 @@ function init(){
   try{
    var result=await otpApi('request',{phone:phone,school_code:campus.value,
     consent:true,captcha_token:token,captcha_answer:fields.captcha_answer.value.trim(),
-    landing_page:location.href.slice(0,500)});
+    landing_page:location.href.slice(0,500),popup_campaign_guid:pagePopupGuid,form_display:mode});
    otpId=result.otp_id;otpProof='';otpPhone=phone;otpCampus=campus.value;
    outer.querySelector('.sf2-otp-pin').hidden=false;
    otpStatus('Code request queued. Enter the code when it arrives in WhatsApp.');
@@ -247,7 +254,7 @@ function init(){
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
-   pageAllowed=approvedPage(d.landing_pages)&&allowedSurface(d)&&configurePagePopup(d);
+   pageAllowed=(pagePopupGuid||approvedPage(d.landing_pages))&&allowedSurface(d)&&configurePagePopup(d);
    if(mode==='inline')outer.style.display=pageAllowed?'':'none';
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
@@ -322,7 +329,7 @@ function init(){
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
-   school_code:campus.value,form_display:mode,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
+   school_code:campus.value,form_display:mode,popup_campaign_guid:pagePopupGuid,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),utm_source:query.get('utm_source')||'',
    otp_id:otpSettings.required?otpId:'',otp_proof:otpSettings.required?otpProof:'',
