@@ -1182,7 +1182,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if (!isset($adminIds[$sid])) continue;
                 $sites=[];$leads=0;$new=0;$unassigned=0;$enrolled=0;$hot=0;$breached=0;
                 $slaMinutes=sf_sla_policy($s,$sid)['first_contact_minutes'];
-                foreach ($s['sites'] as $site) if ($site['school_id']===$sid) {
+                foreach ($s['sites'] as $site) if ($site['school_id']===$sid && empty($site['removed_at'])) {
                     $sites[]=['id'=>$site['id'],'name'=>$site['name'],'domain'=>$site['domain'],
                         'platform'=>$site['platform'],'enabled'=>(bool)$site['enabled']];
                 }
@@ -1478,7 +1478,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         if ($area==='sites') {
             if ($itemId===null && $method==='GET') {
                 $rows=[];
-                foreach ($s['sites'] as $site) if ($site['school_id']===$schoolId) {
+                foreach ($s['sites'] as $site) if ($site['school_id']===$schoolId && empty($site['removed_at'])) {
                     $count=0;foreach ($s['leads'] as $lead) if ($lead['site_id']===$site['id'])$count++;
                     $view=$site;unset($view['key_hash']);$view['lead_count']=$count;$rows[]=$view;
                 }
@@ -1496,8 +1496,33 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             }
             if ($itemId!==null) {
                 $site=sf_source($s,$itemId);
-                if (!$site || $site['school_id']!==$schoolId) sf_fail(404,'Website not found');
+                if (!$site || $site['school_id']!==$schoolId || !empty($site['removed_at'])) sf_fail(404,'Website not found');
                 if(!empty($site['is_group_route'])) sf_fail(403,'Manage group sources from Schools & Routing');
+                if($method==='DELETE'&&$sub===''){
+                    if(!is_string($payload['confirm_guid']??null)||
+                        !hash_equals((string)$site['guid'],$payload['confirm_guid']))
+                        sf_fail(422,'Confirm the exact website GUID before removal');
+                    $leadCount=0;
+                    foreach($s['leads'] as $lead)
+                        if((int)($lead['site_id']??0)===$itemId)$leadCount++;
+                    if($leadCount===0){
+                        $s['sites']=array_values(array_filter($s['sites'],
+                            static fn(array $entry):bool=>(int)$entry['id']!==$itemId));
+                    }else{
+                        foreach($s['sites'] as &$entry)if((int)$entry['id']===$itemId){
+                            $entry['enabled']=0;$entry['removed_at']=sf_time();
+                            $entry['key_hash']=sf_hash(bin2hex(random_bytes(32)));
+                            break;
+                        }
+                        unset($entry);
+                    }
+                    $s['receipts']=array_values(array_filter($s['receipts']??[],
+                        static fn(array $row):bool=>(int)($row['site_id']??0)!==$itemId));
+                    sf_event($s,$schoolId,null,$uid,'school_website_removed',
+                        'Website connector removed; historical leads retained: '.$leadCount);
+                    return [200,['removed'=>true,'guid'=>$site['guid'],
+                        'historical_leads_retained'=>$leadCount]];
+                }
                 foreach ($s['sites'] as &$v) if ($v['id']===$itemId) {
                     if ($sub==='rotate-key' && $method==='POST') {
                         $key='sfsite_'.bin2hex(random_bytes(32));$v['key_hash']=sf_hash($key);
