@@ -506,3 +506,6 @@ body.lf-popup-open {
 #lf_done{display:inline-flex;justify-content:center;align-items:center;min-height:44px;min-width:140px;padding:12px 23px;background:#5054fb;color:#fff;border:none;border-radius:10px;font-weight:750;font:inherit;cursor:pointer}
 #lf_done:hover{background:#393bc4}
 #lf_done:focus-visible{outline:3px solid #86a5ff;outline-offset:3px}
+
+/* Admin-disabled detailed popups must never leave a nonfunctional rail visible. */
+.side-tab[hidden],.side-tabs[hidden]{display:none!important}
