@@ -977,7 +977,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             if($method==='POST'&&$target===''){
                 if(count($items)>=25)sf_fail(422,'Maximum 25 page-specific popup campaigns');
                 $validated=sf_page_popup_validate($payload,$group);
-                foreach($items as $row)if($row['landing_page']===$validated['landing_page'])
+                foreach($items as $row)if(($row['scope']??'page')===$validated['scope']&&
+                    $row['landing_page']===$validated['landing_page'])
                     sf_fail(409,'A popup already exists for this landing page');
                 $created=array_merge(['guid'=>sf_uuid(),'created_at'=>sf_time()],$validated);
                 $items[]=$created;
@@ -996,7 +997,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if($method==='PATCH'){
                     $validated=sf_page_popup_validate($payload,$group);
                     foreach($items as $j=>$row)
-                        if($j!==$index&&$row['landing_page']===$validated['landing_page'])
+                        if($j!==$index&&($row['scope']??'page')===$validated['scope']&&
+                            $row['landing_page']===$validated['landing_page'])
                             sf_fail(409,'A popup already exists for this landing page');
                     $items[$index]=array_replace($items[$index],$validated);
                     $result=$items[$index];
@@ -1038,6 +1040,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if($group['owner_id']!==$uid)continue;
                     if($schoolFilter!==null && !array_filter($group['routes'],
                         static fn(array $route):bool=>(int)$route['school_id']===$schoolFilter))continue;
+                    $authorized=true;
+                    foreach($group['routes'] as $route){
+                        $sid=(int)$route['school_id'];
+                        if(!in_array($sid,$authorizedSchools,true)){$authorized=false;break;}
+                    }
+                    if(!$authorized)continue;
                     $visible[]=sf_group_public_view($s,$group);
                 }
                 return [200,$visible];
@@ -1077,9 +1085,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 $s['group_sites']=array_values(array_filter($s['group_sites'],
                     static fn(array $row):bool=>(int)$row['id']!==$groupId));
                 $archived=0;
+                $linkedSite=(int)($group['linked_school_site_id']??0);
+                $managedIds=array_values(array_filter($sourceIds,
+                    static fn(int $id):bool=>$id!==$linkedSite));
                 $s['sites']=array_values(array_filter($s['sites'],
-                    static function(array $site)use($sourceIds,&$s,&$archived):bool{
-                        if(!in_array((int)$site['id'],$sourceIds,true))return true;
+                    static function(array $site)use($managedIds,&$s,&$archived):bool{
+                        if(!in_array((int)$site['id'],$managedIds,true))return true;
                         foreach($s['leads'] as $lead)
                             if((int)($lead['site_id']??0)===(int)$site['id']){
                                 $archived++;return true;
@@ -1087,7 +1098,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         return false;
                     }));
                 foreach($s['sites'] as &$source)
-                    if(in_array((int)$source['id'],$sourceIds,true)){
+                    if(in_array((int)$source['id'],$managedIds,true)){
                         $source['enabled']=0;$source['removed_at']=sf_time();
                         $source['key_hash']=sf_hash(bin2hex(random_bytes(32)));
                     }
@@ -1213,6 +1224,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 return [200,sf_group_public_view($s,$group)];
             }
             if($method==='PATCH' && $operation==='') {
+                if(!empty($group['linked_school_site_id']))
+                    sf_fail(422,'This form follows its school website. Manage the connected website instead.');
                 $name=sf_text($payload,'name',140,3);
                 $domain=sf_text($payload,'domain',180,3);
                 $enabled=$payload['enabled']??true;
@@ -1558,6 +1571,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if (!$site || $site['school_id']!==$schoolId || !empty($site['removed_at'])) sf_fail(404,'Website not found');
                 if(!empty($site['is_group_route'])) sf_fail(403,'Manage group sources from Schools & Routing');
                 if($method==='DELETE'&&$sub===''){
+                    foreach($s['group_sites']??[] as $form)
+                        if((int)($form['linked_school_site_id']??0)===$itemId)
+                            sf_fail(409,'Remove the website popup form before removing this school website');
                     if(!is_string($payload['confirm_guid']??null)||
                         !hash_equals((string)$site['guid'],$payload['confirm_guid']))
                         sf_fail(422,'Confirm the exact website GUID before removal');
@@ -1594,6 +1610,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
+                        if(array_key_exists('domain',$payload)&&
+                           (string)$payload['domain']!==(string)$v['domain']){
+                            foreach($s['group_sites']??[] as $form)
+                                if((int)($form['linked_school_site_id']??0)===$itemId)
+                                    sf_fail(409,'Remove or migrate the school popup form before changing this domain');
+                        }
                         $query=parse_url($uri,PHP_URL_QUERY);
                         parse_str(is_string($query)?$query:'',$siteQuery);
                         $enabled=$siteQuery['enabled']??null;
