@@ -81,12 +81,12 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'if(eligible.length!==1){console.warn("SchoolFlow: expected one eligible active website popup; use a specific campaign embed when none or multiple match.");return;}'."\n".
         'autoCampaign=eligible[0].guid;'."\n".
         '}'."\n".
-        'var shortForm=current.getAttribute("data-schoolflow-form")==="short"||!!autoCampaign;'."\n".
+        'var shortForm=current.getAttribute("data-schoolflow-form")==="short";'."\n".
         'var script=document.createElement("script");script.async=true;'."\n".
         'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
         '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button","data-schoolflow-popup-campaign"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
-        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);script.setAttribute("data-schoolflow-button-style","rail");}'."\n".
+        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);}'."\n".
         'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
