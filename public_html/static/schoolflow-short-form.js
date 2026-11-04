@@ -151,9 +151,9 @@ function init(){
   try{
    var destination=new URL(url);
    if(destination.origin!==location.origin||destination.protocol!=='https:')return;
-   sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
+   try{sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
     time:Date.now(),event_id:response.guid||attemptId,form_surface:mode,school_code:campus.value
-   }));
+   }));}catch(storageError){/* Conversion storage must never prevent successful redirect. */}
    location.assign(destination.href);
   }catch(e){console.warn('SchoolFlow: thank-you redirect could not be completed');}
  }
