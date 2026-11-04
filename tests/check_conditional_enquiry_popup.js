@@ -81,8 +81,9 @@ function fixture(opts={}){
   submit:()=>byId.lf_form.handlers.submit({preventDefault(){}}),
   isOpen:()=>popup.classList.contains('lf-visible')};
 }
+(async()=>{
 {
- const t=fixture();
+ const t=fixture();await t.ready();
  t.advance(29999);assert.equal(t.isOpen(),false,'timer must not fire early');
  t.advance(1);assert.equal(t.isOpen(),true,'30s timer opens the fallback');
  assert.equal(t.session.get('schoolflow_lexicon_auto_shown_'+guid),'1');
@@ -90,7 +91,7 @@ function fixture(opts={}){
  assert.equal(t.isOpen(),true,'explicit open works');
 }
 {
- const t=fixture();
+ const t=fixture();await t.ready();
  t.chat(true);t.advance(30000);
  assert.equal(t.isOpen(),false,'active chatbot suppresses timed enquiry');
  t.chat(false);t.advance(14999);
@@ -99,7 +100,7 @@ function fixture(opts={}){
  assert.equal(t.isOpen(),true,'deferred fallback opens after chat closes');
 }
 {
- const t=fixture();
+ const t=fixture();await t.ready();
  t.advance(8000);t.exit(0,{});
  assert.equal(t.isOpen(),false,'ordinary mouseout does not signal exit');
  t.exit(45);assert.equal(t.isOpen(),false,'leaving away from top does not trigger');
@@ -111,20 +112,20 @@ function fixture(opts={}){
 }
 {
  const session=new Map([['schoolflow_lexicon_closed_'+guid,'1']]);
- const t=fixture({session});
+ const t=fixture({session});await t.ready();
  t.advance(30000);t.exit(0);
  assert.equal(t.isOpen(),false,'previous dismissal suppresses all auto popups');
  t.context.window.openLeadPopup();assert.equal(t.isOpen(),true,'dismissal does not disable manual open');
 }
 {
- const t=fixture();
+ const t=fixture();await t.ready();
  t.context.window.__schoolflowAdmissionsChatMounted=guid;
  t.context.window.__schoolflowAdmissionsChatState={guid,open:false,leadCaptured:true};
  t.advance(30000);t.exit(0);
  assert.equal(t.isOpen(),false,'existing chatbot lead is never solicited again');
 }
 {
- const t=fixture({autoOff:true});
+ const t=fixture({autoOff:true});await t.ready();
  t.advance(180000);t.exit(0);
  assert.equal(t.isOpen(),false,'site may disable automatic fallback');
  t.context.window.openLeadPopup();assert.equal(t.isOpen(),true,'opt-out preserves manual form');
@@ -132,8 +133,8 @@ function fixture(opts={}){
 console.log('PASS: delayed form, exit intent, chat suppression, after-chat grace, dismissal and opt-out');
 
 async function assertPopupConfirmation(settings,duplicate=false){
- const t=fixture({autoOff:true,settings,duplicate});
- t.context.window.openLeadPopup();await t.ready();
+ const t=fixture({autoOff:true,settings,duplicate});await t.ready();
+ t.context.window.openLeadPopup();
  const d=t.byId;
  d.lf_name.value='Test Student';d.lf_parent.value='Test Guardian';
  d.lf_email.value='test@example.invalid';d.lf_phone.value='9876543210';
@@ -151,12 +152,13 @@ async function assertPopupConfirmation(settings,duplicate=false){
  d.lf_done.handlers.click();
  assert.equal(t.isOpen(),false,'parent can close successful popup');
 }
-(async()=>{
+{
  await assertPopupConfirmation({detailed_redirect:false,thank_you_url:'https://school.example/thanks'});
  await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://school.example/thanks'});
  await assertPopupConfirmation(null);
  await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://evil.invalid/thanks'});
  await assertPopupConfirmation({detailed_redirect:true,thank_you_url:'https://school.example/thanks'},true);
  console.log('PASS: detailed popup confirms in place regardless of legacy redirect settings');
+}
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
