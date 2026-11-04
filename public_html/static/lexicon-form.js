@@ -10,7 +10,6 @@ if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test
 window.__schoolflowLexiconFormLoaded=true;
 var url=new URL(loader.src),base=url.href.replace(/\/static\/lexicon-form\.js(?:\?.*)?$/,'');
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
-var thankYou=loader.dataset.thankYou||'https://lexiconedu.in/thank-you/';
 var submissionSettings=null;
 var firstTouchKey='schoolflow_first_touch_'+guid;
 function firstTouch(){
@@ -60,6 +59,8 @@ function loadAdmissionsChat(){
 }
 loadAdmissionsChat();
 
+// This legacy detailed form is always presented as a popup. It must never
+// navigate away after a successful submission; only inline forms redirect.
 function init(){
  if(document.getElementById('leadPopup'))return;
  var tabs=document.createElement('div');tabs.className='side-tabs';
@@ -95,13 +96,18 @@ function init(){
  '<span>I agree to be contacted by the selected school regarding this admission enquiry.</span></label>',
  '<label class="lf-honeypot" aria-hidden="true">Leave blank<input type="text" id="lf_website" tabindex="-1" autocomplete="off"></label>',
  '<p class="lf-feedback" id="lf_feedback" role="alert" aria-live="polite"></p>',
- '<button id="lf_submit" type="submit">SUBMIT</button></form></div></div>'
+ '<button id="lf_submit" type="submit">SUBMIT</button></form>'+
+ '<div id="lf_complete" class="lf-confirmation" role="status" aria-live="polite" hidden>'+
+ '<div class="lf-confirmation-icon" aria-hidden="true">✓</div>'+
+ '<h3>Thank you for your enquiry</h3>'+
+ '<p id="lf_complete_text">Your admission enquiry has been received. Our admissions team will contact you.</p>'+
+ '<button type="button" id="lf_done">Close</button></div></div></div>'
  ].join('');
  var popup=box.firstElementChild;popup.querySelector('.lf-logo').src=logo;document.body.appendChild(popup);
  var $=function(id){return document.getElementById(id);};
  var form=$('lf_form'),submit=$('lf_submit'),campus=$('lf_campus'),pin=$('lf_pincode');
  var state=$('lf_state'),city=$('lf_city'),phone=$('lf_phone'),answer=$('lf_captcha');
- var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false;
+ var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false,submissionComplete=false;
  // The enquiry form is a gentle fallback when the visitor is not using chat.
  // These optional website attributes allow site owners to opt out or tune timing.
  var autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off';
@@ -207,7 +213,10 @@ function init(){
  function open(){
   lastFocus=document.activeElement;
   popup.classList.add('lf-visible');popup.setAttribute('aria-hidden','false');document.body.classList.add('lf-popup-open');
-  feedback('');loadSchools(true);resetCaptcha();$('lf_name').focus();
+  feedback('');
+  form.hidden=submissionComplete;$('lf_complete').hidden=!submissionComplete;
+  if(submissionComplete){$('lf_done').focus();}
+  else{loadSchools(true);resetCaptcha();$('lf_name').focus();}
  }
  function close(){
   popup.classList.remove('lf-visible');popup.setAttribute('aria-hidden','true');document.body.classList.remove('lf-popup-open');
@@ -215,6 +224,7 @@ function init(){
  }
  window.openLeadPopup=open;
  trigger.addEventListener('click',open);$('lf_close').addEventListener('click',close);
+ $('lf_done').addEventListener('click',close);
  popup.addEventListener('click',function(event){if(event.target===popup)close();});
  document.addEventListener('keydown',function(event){
   if(!popup.classList.contains('lf-visible'))return;
@@ -284,19 +294,13 @@ function init(){
    var saved=await fetch(api+'/enquiries',{method:'POST',credentials:'omit',cache:'no-store',
     headers:{'Content-Type':'application/json','Idempotency-Key':attemptId},body:JSON.stringify(data)}).then(decode);
    remember();
-   var destination=thankYou;
-   if(submissionSettings&&submissionSettings.detailed_redirect&&submissionSettings.thank_you_url)
-    destination=submissionSettings.thank_you_url;
-   if(!saved.duplicate_submission && submissionSettings&&submissionSettings.detailed_redirect){
-    try{var approved=new URL(destination);
-     if(approved.origin===location.origin&&approved.protocol==='https:'){
-      sessionStorage.setItem('schoolflow_conversion_'+guid,JSON.stringify({
-       time:Date.now(),event_id:saved.guid||attemptId,form_surface:'detailed',school_code:campus.value
-      }));
-     }
-    }catch(e){}
-   }
-   attemptId='';feedback('Enquiry submitted successfully.',true);window.location.assign(destination);
+   // Legacy detailed popup: remain on the landing page regardless of any
+   // saved detailed_redirect setting. This form is not an inline surface.
+   submissionComplete=true;form.hidden=true;$('lf_complete').hidden=false;
+   $('lf_complete_text').textContent=saved.duplicate_submission?
+    'This enquiry has already been received. No additional enquiry was created.':
+    'Your admission enquiry has been received. Our admissions team will contact you.';
+   attemptId='';$('lf_done').focus();
   }catch(error){feedback(error.message||'Submission failed. Please try again.');resetCaptcha();}
   finally{blocked=false;submit.disabled=false;submit.textContent='SUBMIT';}
  });

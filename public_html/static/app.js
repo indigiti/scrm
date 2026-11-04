@@ -432,7 +432,7 @@ function submissionSettingsModal(group){
    '<label class="sf-check-row"><input type="checkbox" name="popup_redirect" '+(settings.popup_redirect?'checked':'')+'>'+
    '<span><strong>Redirect short popup after success</strong><small>Default is to display confirmation in the popup.</small></span></label>'+
    '<label class="sf-check-row"><input type="checkbox" name="detailed_redirect" '+(settings.detailed_redirect?'checked':'')+'>'+
-   '<span><strong>Use approved destination for detailed form</strong><small>When disabled, preserve the original detailed form redirect.</small></span></label>'+
+   '<span><strong>Use approved destination for detailed inline forms</strong><small>Legacy detailed popups always show in-place confirmation. This setting never redirects a popup.</small></span></label>'+
    '<div class="sf-help-panel"><strong>Required on every approved thank-you page</strong><p>Install this tracking snippet to create one GTM event only after an accepted form submission. No parent or student information is included.</p>'+
    '<code class="sf-code-snippet">'+esc(code)+'</code>'+
    '<p>Configure Google Ads and Meta Lead conversions inside your own GTM workspace using the <code>schoolflow_lead</code> custom event. Ad-platform connection and consent setup are separate.</p></div>'+
