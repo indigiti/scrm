@@ -161,7 +161,7 @@ function sf_form_otp_request(string $guid,string $origin,array $p,string $ip,
         }
     }catch(Throwable $e){error_log('SchoolFlow OTP transport '.get_class($e));}
     $store->transaction(static function(array &$s)use($id,$state,$job):void {
-        foreach($s['form_otp_challenges']??[] as &$row)
+        foreach($s['form_otp_challenges'] as &$row)
             if(($row['guid']??'')===$id){$row['state']=$state;$row['provider_job_id']=$job;break;}
         unset($row);
     },true);
@@ -178,31 +178,36 @@ function sf_form_otp_verify(string $guid,string $origin,array $p,
     if(!preg_match('/^[a-f0-9-]{36}$/iD',$id)||!preg_match('/^[6-9][0-9]{9}$/D',$phone)||
        !preg_match('/^[0-9]{6}$/D',$code))sf_fail(422,'Invalid verification details');
     $key=$store->publicFormKey();$hash=sf_form_otp_phone_hash($phone,$key);
-    return $store->transaction(static function(array &$s)use($guid,$origin,$id,$campus,$code,$hash,$key):array {
+    $answer=$store->transaction(static function(array &$s)use($guid,$origin,$id,$campus,$code,$hash,$key):array {
         $group=sf_public_group($s,$guid);
         if(!$group||!sf_public_origin_ok($group,$origin))sf_fail(403,'Form unavailable');
         $cfg=sf_form_otp_settings($group);
         if(!$cfg['enabled'])sf_fail(409,'OTP verification not enabled');
-        foreach($s['form_otp_challenges']??[] as &$row){
-            if(($row['guid']??'')!==$id)continue;
-            if($row['group_id']!==$group['id']||$row['origin']!==$origin||
-                !hash_equals((string)$row['phone_hash'],$hash)||
-                !hash_equals((string)$row['campus_code'],$campus))
+        foreach($s['form_otp_challenges']??[] as $index=>$current){
+            if(($current['guid']??'')!==$id)continue;
+            if($current['group_id']!==$group['id']||$current['origin']!==$origin||
+                !hash_equals((string)$current['phone_hash'],$hash)||
+                !hash_equals((string)$current['campus_code'],$campus))
                 sf_fail(422,'Verification does not match this enquiry');
-            if($row['state']!=='queued'||$row['expires_at']<time()||!empty($row['used_at'])||
-                !empty($row['verified_at']))sf_fail(422,'Verification expired or already used');
-            if(($row['attempts']??0)>=5)sf_fail(429,'Too many incorrect codes');
-            $row['attempts']++;
-            if(!hash_equals((string)$row['code_hash'],sf_form_otp_code_hash($code,$id,$key)))
-                sf_fail(422,'Incorrect verification code');
+            if($current['state']!=='queued'||$current['expires_at']<time()||
+                !empty($current['used_at'])||!empty($current['verified_at']))
+                sf_fail(422,'Verification expired or already used');
+            if(($current['attempts']??0)>=5)return ['error'=>'locked'];
+            $s['form_otp_challenges'][$index]['attempts']++;
+            if(!hash_equals((string)$current['code_hash'],sf_form_otp_code_hash($code,$id,$key)))
+                // Return the error AFTER commit, so wrong guesses consume attempts.
+                return ['error'=>'incorrect'];
             $secret=bin2hex(random_bytes(24));
-            $row['verified_at']=time();$row['proof_hash']=hash('sha256',$secret);
-            return [200,['verified'=>true,'otp_id'=>$id,'otp_proof'=>$secret,
-                'expires_in'=>max(0,(int)$row['expires_at']-time())]];
+            $s['form_otp_challenges'][$index]['verified_at']=time();
+            $s['form_otp_challenges'][$index]['proof_hash']=hash('sha256',$secret);
+            return ['verified'=>true,'otp_id'=>$id,'otp_proof'=>$secret,
+                'expires_in'=>max(0,(int)$current['expires_at']-time())];
         }
-        unset($row);
         sf_fail(422,'Verification expired or unavailable');
     },true);
+    if(($answer['error']??'')==='locked')sf_fail(429,'Too many incorrect codes');
+    if(($answer['error']??'')==='incorrect')sf_fail(422,'Incorrect verification code');
+    return [200,$answer];
 }
 function sf_form_otp_consume(array &$s,array $group,int $schoolId,string $campus,
     string $phone,string $origin,array $p,string $key):array {
@@ -212,7 +217,7 @@ function sf_form_otp_consume(array &$s,array $group,int $schoolId,string $campus
     if(!preg_match('/^[a-f0-9-]{36}$/iD',$id)||!preg_match('/^[a-f0-9]{48}$/D',$proof))
         sf_fail(422,'Verify your WhatsApp number before submitting');
     $hashed=sf_form_otp_phone_hash($phone,$key);
-    foreach($s['form_otp_challenges']??[] as &$row){
+    foreach($s['form_otp_challenges']??[] as $index=>$row){
         if(($row['guid']??'')!==$id)continue;
         if((int)$row['group_id']!==(int)$group['id']||$row['school_id']!==$schoolId||
             !hash_equals((string)$row['phone_hash'],$hashed)||
@@ -222,7 +227,7 @@ function sf_form_otp_consume(array &$s,array $group,int $schoolId,string $campus
             $row['expires_at']<time()||
             !hash_equals((string)$row['proof_hash'],hash('sha256',$proof)))
             sf_fail(422,'WhatsApp verification expired or does not match the form');
-        $row['used_at']=time();
+        $s['form_otp_challenges'][$index]['used_at']=time();
         return ['verified'=>true,'verified_at'=>gmdate('Y-m-d\TH:i:s+00:00',(int)$row['verified_at']),
             'provider'=>'wabridge','provider_job_id'=>(string)$row['provider_job_id'],
             'otp_id'=>$id];
