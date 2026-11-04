@@ -927,8 +927,23 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin' && sf_staff_enabled($member)) $authorizedSchools[]=$member['school_id'];
             if(!$authorizedSchools) sf_fail(403,'School administrator access required');
             if($method==='GET' && $groupId===null) {
+                // Scope the group list to the selected admin school, not every
+                // group ever created by this multi-campus account.
+                $query=[];parse_str((string)(parse_url($uri,PHP_URL_QUERY)??''),$query);
+                $schoolFilter=null;
+                if(array_key_exists('school_id',$query)){
+                    if(!is_string($query['school_id']) || !preg_match('/^[1-9][0-9]*$/D',$query['school_id']))
+                        sf_fail(422,'Choose a valid school');
+                    $schoolFilter=(int)$query['school_id'];
+                    sf_membership($s,$schoolFilter,$uid,['Admin']);
+                }
                 $visible=[];
-                foreach($s['group_sites'] as $group) if($group['owner_id']===$uid) $visible[]=sf_group_public_view($s,$group);
+                foreach($s['group_sites'] as $group) {
+                    if($group['owner_id']!==$uid)continue;
+                    if($schoolFilter!==null && !array_filter($group['routes'],
+                        static fn(array $route):bool=>(int)$route['school_id']===$schoolFilter))continue;
+                    $visible[]=sf_group_public_view($s,$group);
+                }
                 return [200,$visible];
             }
             if($method==='POST' && $groupId===null) {
