@@ -174,7 +174,7 @@ function init(){
  function useOtpSettings(cfg){
   otpSettings=cfg||{required:false};
   outer.querySelector('.sf2-otp').hidden=!otpSettings.required;
-  if(otpSettings.required&&!token)challenge();
+  if(otpSettings.required&&opened&&!token)challenge();
  }
  async function otpApi(action,body){
   var response=await fetch(api+'/otp/'+action,{method:'POST',credentials:'omit',cache:'no-store',
