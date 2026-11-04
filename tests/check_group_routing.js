@@ -24,7 +24,8 @@ const data={
  '/api/schools/1/campaign-report':{totals:{enquiries:1,applied_or_later:0,confirmed_or_enrolled:0,enrolled:0,potential_duplicates:0,hot_or_warm:0},
   as_of:'2026-11-03T07:00:00+00:00',by:{utm_campaign:[{name:'nursery-pune',enquiries:1,applied:0,confirmed:0,enrolled:0}],utm_source:[{name:'google',enquiries:1,applied:0,confirmed:0,enrolled:0}]},
   filters:{},school_id:1},
- '/api/group-sites':routes,
+ '/api/group-sites?school_id=1':routes,
+ '/api/group-sites?school_id=2':routes,
 };
 const ctx={document:{getElementById:id=>id==='root'?root:null,addEventListener:()=>{},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},remove:()=>{}})},
  sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
@@ -65,6 +66,11 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/landingPagesForm/);
  assert.match(html,/Approved landing pages/);
  assert.match(html,/restrict_primary/);
+ handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
+ handlers.click({target:{closest:()=>({dataset:{action:'new-page-popup',id:'1'}})}});
+ assert.match(html,/pagePopupForm/,'page popup editor opens for selected school group');
+ assert.match(html,/Full landing-page URL/,'popup editor targets one HTTPS page');
+ assert.match(html,/Enable this page popup/,'popup editor allows deliberate opt-in');
  handlers.click({target:{closest:()=>({dataset:{action:'close-modal'}})}});
  handlers.click({target:{closest:()=>({dataset:{action:'nav',page:'Popup Campaigns'}})}});
  await sleep(120);

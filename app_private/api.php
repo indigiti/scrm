@@ -155,6 +155,7 @@ function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name
 function sf_group_public_view(array $s, array $group): array {
     return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'popup_settings'=>sf_popup_settings($group),
+        'page_popup_campaigns'=>sf_page_popup_campaigns($group),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
         'form_otp_settings'=>sf_form_otp_admin_view($group),
@@ -918,6 +919,58 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             usort($schools,fn($a,$b)=>strcmp($a['name'],$b['name']));
             return [200,['user'=>['id'=>$uid,'name'=>$user['name'],'email'=>$user['email'],'must_change_password'=>!empty($user['must_change_password'])],'schools'=>$schools]];
         }
+        // Page-specific popup campaign management stays inside the existing
+        // group ownership boundary; switching school never grants new rights.
+        if(preg_match('#^/api/group-sites/(\d+)/page-popups(?:/([a-f0-9-]{36}))?$#iD',$path,$pm)){
+            $groupId=(int)$pm[1];$target=strtolower((string)($pm[2]??''));
+            $group=null;
+            foreach($s['group_sites']??[] as $row)
+                if((int)$row['id']===$groupId&&(int)$row['owner_id']===$uid){$group=$row;break;}
+            if(!$group)sf_fail(404,'Group website not found');
+            foreach($group['routes'] as $route)
+                sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+            $items=sf_page_popup_campaigns($group);
+            if($method==='GET'&&$target==='')return [200,$items];
+            if($method==='POST'&&$target===''){
+                if(count($items)>=25)sf_fail(422,'Maximum 25 page-specific popup campaigns');
+                $validated=sf_page_popup_validate($payload,$group);
+                foreach($items as $row)if($row['landing_page']===$validated['landing_page'])
+                    sf_fail(409,'A popup already exists for this landing page');
+                $created=array_merge(['guid'=>sf_uuid(),'created_at'=>sf_time()],$validated);
+                $items[]=$created;
+                foreach($s['group_sites'] as &$row)if((int)$row['id']===$groupId){
+                    $row['page_popup_campaigns']=$items;break;
+                }unset($row);
+                foreach($group['routes'] as $route)sf_event($s,(int)$route['school_id'],null,$uid,
+                    'page_popup_created','Landing-page popup '.$created['guid'].' created');
+                return [201,$created];
+            }
+            if($target!==''){
+                $index=null;
+                foreach($items as $j=>$row)
+                    if(hash_equals((string)($row['guid']??''),$target)){$index=$j;break;}
+                if($index===null)sf_fail(404,'Page popup not found');
+                if($method==='PATCH'){
+                    $validated=sf_page_popup_validate($payload,$group);
+                    foreach($items as $j=>$row)
+                        if($j!==$index&&$row['landing_page']===$validated['landing_page'])
+                            sf_fail(409,'A popup already exists for this landing page');
+                    $items[$index]=array_replace($items[$index],$validated);
+                    $result=$items[$index];
+                }elseif($method==='DELETE'){
+                    $result=['deleted'=>true,'guid'=>$target];
+                    array_splice($items,$index,1);
+                }else sf_fail(405,'Unsupported page popup method');
+                foreach($s['group_sites'] as &$row)if((int)$row['id']===$groupId){
+                    $row['page_popup_campaigns']=$items;break;
+                }unset($row);
+                foreach($group['routes'] as $route)sf_event($s,(int)$route['school_id'],null,$uid,
+                    $method==='DELETE'?'page_popup_deleted':'page_popup_updated',
+                    'Landing-page popup '.$target.' changed');
+                return [200,$result];
+            }
+            sf_fail(405,'Unsupported page popup operation');
+        }
         // Group website administration: owner must be an administrator of each destination school.
         if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
@@ -927,8 +980,23 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             foreach($s['memberships'] as $member) if($member['user_id']===$uid && $member['role']==='Admin' && sf_staff_enabled($member)) $authorizedSchools[]=$member['school_id'];
             if(!$authorizedSchools) sf_fail(403,'School administrator access required');
             if($method==='GET' && $groupId===null) {
+                // Scope the group list to the selected admin school, not every
+                // group ever created by this multi-campus account.
+                $query=[];parse_str((string)(parse_url($uri,PHP_URL_QUERY)??''),$query);
+                $schoolFilter=null;
+                if(array_key_exists('school_id',$query)){
+                    if(!is_string($query['school_id']) || !preg_match('/^[1-9][0-9]*$/D',$query['school_id']))
+                        sf_fail(422,'Choose a valid school');
+                    $schoolFilter=(int)$query['school_id'];
+                    sf_membership($s,$schoolFilter,$uid,['Admin']);
+                }
                 $visible=[];
-                foreach($s['group_sites'] as $group) if($group['owner_id']===$uid) $visible[]=sf_group_public_view($s,$group);
+                foreach($s['group_sites'] as $group) {
+                    if($group['owner_id']!==$uid)continue;
+                    if($schoolFilter!==null && !array_filter($group['routes'],
+                        static fn(array $route):bool=>(int)$route['school_id']===$schoolFilter))continue;
+                    $visible[]=sf_group_public_view($s,$group);
+                }
                 return [200,$visible];
             }
             if($method==='POST' && $groupId===null) {

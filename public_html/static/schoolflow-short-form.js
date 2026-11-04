@@ -5,6 +5,8 @@ var loader=document.currentScript;if(!loader)return;
 var guid=(loader.dataset.schoolflowGroup||'').trim().toLowerCase();
 if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(guid))return;
 var mode=loader.dataset.schoolflowMode==='inline'?'inline':'popup';
+var pagePopupGuid=(loader.dataset.schoolflowPopupCampaign||'').trim().toLowerCase();
+if(pagePopupGuid&&!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(pagePopupGuid))return;
 var target=loader.dataset.schoolflowTarget||'#schoolflow-admissions';
 var base=new URL(loader.src).href.replace(/\/static\/schoolflow-short-form\.js(?:\?.*)?$/,'');
 var api=base+'/api/public/forms/'+encodeURIComponent(guid);
@@ -38,10 +40,10 @@ function init(){
  host.appendChild(outer);
  var form=outer.querySelector('form'),campus=form.elements.school_code,verify=outer.querySelector('.sf2-verify');
  var status=outer.querySelector('.sf2-status'),submit=outer.querySelector('.sf2-submit'),token='',attemptId='',busy=false,opened=mode!=='popup';
- var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=true,submissionSettings=null;
+ var configLoaded=false,config=null,previousFocus=null,alreadyShown=false,completed=false,closedByUser=false,pageAllowed=!pagePopupGuid,submissionSettings=null;
  var otpSettings={required:false},otpId='',otpProof='',otpPhone='',otpCampus='',otpBusy=false,otpCooldown=null;
  var openedAt=Date.now(),timer=null,scrollListener=null,exitListener=null,popupTrigger='manual';
- var campaignKey='sf2_popup_'+guid;
+ var campaignKey='sf2_popup_'+guid+(pagePopupGuid?'_'+pagePopupGuid:'');
  function readStored(){try{return JSON.parse(localStorage.getItem(campaignKey)||'{}')||{};}catch(e){return {};}}
  function writeStored(x){try{localStorage.setItem(campaignKey,JSON.stringify(x));}catch(e){}}
  function remember(reason){var x=readStored();x[reason]=Date.now();writeStored(x);}
@@ -108,6 +110,20 @@ function init(){
    };
    document.addEventListener('mouseout',exitListener);
   }
+ }
+ function configurePagePopup(data){
+  if(mode!=='popup')return true;
+  if(!pagePopupGuid){config=data.popup||null;return true;}
+  var choice=(data.page_popup_campaigns||[]).find(function(row){return row&&row.guid===pagePopupGuid;});
+  if(!choice)return false;
+  try{
+   var target=new URL(choice.landing_page),current=new URL(location.href);
+   var normalize=function(path){return path.replace(/\/+$/,'')||'/';};
+   if(target.origin!==current.origin||normalize(target.pathname)!==normalize(current.pathname))return false;
+   if(target.protocol!=='https:')return false;
+  }catch(e){return false;}
+  config=choice.popup||null;
+  return !!(config&&config.enabled);
  }
  function approvedPage(policy){
   if(!policy||!policy.primary_host)return true; // backwards-compatible config
@@ -225,14 +241,14 @@ function init(){
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
-   pageAllowed=approvedPage(d.landing_pages);
+   pageAllowed=approvedPage(d.landing_pages)&&configurePagePopup(d);
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
    if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
     return error('This landing page URL is not approved. Contact the school website administrator.');}
    campus.replaceChildren(new Option('Select campus',''));
-   var permitted=d.popup&&Array.isArray(d.popup.school_codes)?d.popup.school_codes:null;
-   (d.schools||[]).forEach(function(x){if(x&&x.code&&x.name&&(!config||!config.enabled||!permitted||permitted.includes(x.code)))campus.add(new Option(x.name,x.code));});
+   var permitted=mode==='popup'&&config&&config.enabled&&Array.isArray(config.school_codes)?config.school_codes:null;
+   (d.schools||[]).forEach(function(x){if(x&&x.code&&x.name&&(!permitted||permitted.includes(x.code)))campus.add(new Option(x.name,x.code));});
    campus.disabled=campus.options.length<2;
    if(campus.disabled)error('No approved campuses available for this website.');
   }catch(e){campus.replaceChildren(new Option('Campuses unavailable',''));error('Unable to load campuses. Verify that this website domain is authorized in SchoolFlow.');}
@@ -252,6 +268,7 @@ function init(){
  }
  if(mode==='popup'){
   var trigger=document.createElement('button');trigger.className='sf2-trigger';trigger.textContent=loader.dataset.schoolflowButton||'Enquire Now';
+  trigger.hidden=!!pagePopupGuid;
   document.body.appendChild(trigger);trigger.addEventListener('click',function(){popupTrigger='manual';open();});
   outer.querySelector('.sf2-close').addEventListener('click',close);
   outer.addEventListener('click',function(e){if(e.target===outer)close();});
@@ -266,11 +283,12 @@ function init(){
    }
   });
   get('/config').then(function(d){
-   config=d.popup||null;configLoaded=true;
-   pageAllowed=approvedPage(d.landing_pages);
+   configLoaded=true;
+   pageAllowed=approvedPage(d.landing_pages)&&configurePagePopup(d);
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
-   if(!pageAllowed){trigger.hidden=true;return;}
+   trigger.hidden=!pageAllowed;
+   if(!pageAllowed)return;
    if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
    setupTriggers();

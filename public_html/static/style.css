@@ -654,3 +654,18 @@ body{background:#f4f7fb;color:#182b43}
 .sf-embed-guide-code{max-width:100%;margin:0;padding:12px;border:1px solid #e6e8f2;border-radius:8px;background:#f7f8fc;color:#303b59;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;user-select:text}
 .sf-embed-guide-code:focus-visible{outline:3px solid #8e93ff;outline-offset:2px}
 @media(max-width:580px){.sf-embed-guide-item-top{flex-wrap:wrap}.sf-embed-guide-item-top .btn{margin-left:auto}.sf-embed-guide-body{padding:10px}.sf-embed-guide-item{padding:11px}}
+
+
+/* School-scoped landing-page popup collection within Popup Campaigns. */
+.sf-page-popup-list{margin:14px 0;border-top:1px solid var(--line);padding-top:12px;display:grid;gap:10px}
+.sf-page-popup-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sf-page-popup-header strong{font-size:12px;color:#354065}
+.sf-page-popup-header span{font-size:11px;color:#8590a9;font-variant-numeric:tabular-nums}
+.sf-page-popup-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:rgba(247,249,255,.91);border:1px solid #e5eafb;border-radius:12px;padding:12px}
+.sf-page-popup-about{min-width:0;flex:1}
+.sf-page-popup-about strong{display:block;font-size:12px;color:#2f3a58;font-weight:800;overflow-wrap:anywhere}
+.sf-page-popup-about small{display:block;margin:4px 0 8px;font-size:11px;color:#78859d;overflow-wrap:anywhere}
+.sf-page-popup-about .sf-status-pill{display:inline-flex;white-space:nowrap}
+.sf-page-popup-row>.button-row{justify-content:flex-end;flex:0 1 auto;flex-wrap:wrap}
+.sf-page-popup-row .btn{min-height:30px}
+@media(max-width:620px){.sf-page-popup-row{flex-direction:column}.sf-page-popup-row>.button-row{width:100%;justify-content:flex-start}}

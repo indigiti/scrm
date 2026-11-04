@@ -54,7 +54,7 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         'var script=document.createElement("script");script.async=true;'."\n".
         'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
-        '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button","data-schoolflow-popup-campaign"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
         'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
@@ -128,6 +128,7 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $g=sf_public_group($s,$guid);
             if(!$g)sf_fail(404,'Form unavailable');
             return [200,['name'=>$g['name'],'schools'=>array_map(static fn($v)=>['code'=>$v['code'],'name'=>$v['name']],sf_group_campuses($s,$g)),'popup'=>sf_popup_public($s,$g),
+                'page_popup_campaigns'=>sf_page_popup_public($s,$g),
                 'landing_pages'=>['primary_host'=>sf_landing_primary_host($g),
                     'approved_urls'=>sf_landing_settings($g)['approved_urls'],
                     'restrict_primary'=>sf_landing_settings($g)['restrict_primary']],
