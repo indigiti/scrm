@@ -39,6 +39,17 @@ try{
  marketing_ok($cfgCode===200&&($cfg['submission_settings']['thank_you_url']??'')==='https://school.test/thanks',
   'public form returns same-origin approved thank-you page');
  marketing_ok(!($cfg['submission_settings']['popup_redirect']??true),'popup keeps inline confirmation by default');
+ // Legacy clients may submit stale redirect toggles, but those flags must
+ // never reenable popup navigation or appear enabled in the admin dashboard.
+ [$legacyStatus,$normalized]=marketing_api('PATCH',$path,[
+  'thank_you_urls'=>['https://school.test/thanks'],
+  'inline_redirect'=>true,'popup_redirect'=>true,'detailed_redirect'=>true
+ ]);
+ marketing_ok($legacyStatus===200&&$normalized['popup_redirect']===false&&
+  $normalized['detailed_redirect']===false,'legacy redirect flags cannot enable popup navigation');
+ marketing_ok(marketing_api('GET',$path)[1]['popup_redirect']===false,
+  'admin settings also normalize previously saved redirect flags');
+
 
  marketing_ok(marketing_api('PATCH','/api/schools/1/enquiry-panels',[],'counsellor')[0]===403,
   'counsellor cannot change school UI settings');
