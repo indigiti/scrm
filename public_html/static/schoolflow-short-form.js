@@ -227,6 +227,7 @@ function init(){
   try{var d=await get('/config');
    pageAllowed=approvedPage(d.landing_pages);
    submissionSettings=d.submission_settings||null;
+   useOtpSettings(d.otp);
    if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
     return error('This landing page URL is not approved. Contact the school website administrator.');}
    campus.replaceChildren(new Option('Select campus',''));
@@ -268,6 +269,7 @@ function init(){
    config=d.popup||null;configLoaded=true;
    pageAllowed=approvedPage(d.landing_pages);
    submissionSettings=d.submission_settings||null;
+   useOtpSettings(d.otp);
    if(!pageAllowed){trigger.hidden=true;return;}
    if(config&&['right','bottom'].includes(config.position))outer.classList.add('sf2-position-'+config.position);
    if(config&&config.school_codes&&config.school_codes.length===0)return;
@@ -277,6 +279,10 @@ function init(){
   addEventListener('popstate',setupTriggers);
  }else campuses();
  outer.querySelector('.sf2-refresh').addEventListener('click',challenge);
+ outer.querySelector('.sf2-otp-send').addEventListener('click',requestOtp);
+ outer.querySelector('.sf2-otp-check').addEventListener('click',verifyOtp);
+ form.elements.phone.addEventListener('input',resetOtp);
+ campus.addEventListener('change',resetOtp);
  form.addEventListener('submit',async function(ev){
   ev.preventDefault();if(busy||!opened)return;clear();
   var p=form.elements;var phone=p.phone.value.trim();
@@ -286,12 +292,15 @@ function init(){
   if(!p.consent.checked)return error('Consent is required.');
   if(!token){await challenge();if(token)error('Please answer the security question to complete your enquiry.');return;}
   if(!/^\d+$/.test(p.captcha_answer.value.trim()))return error('Enter the security answer.');
+  if(otpSettings.required&&(!otpId||!otpProof||otpPhone!==phone||otpCampus!==campus.value))
+   return error('Verify your WhatsApp number before submitting the enquiry.');
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
    student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
    school_code:campus.value,form_display:mode,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),utm_source:query.get('utm_source')||'',
+   otp_id:otpSettings.required?otpId:'',otp_proof:otpSettings.required?otpProof:'',
    utm_medium:query.get('utm_medium')||'',utm_campaign:query.get('utm_campaign')||'',
    utm_term:query.get('utm_term')||'',utm_content:query.get('utm_content')||''};
   busy=true;submit.disabled=true;submit.textContent='Submitting…';
@@ -300,7 +309,7 @@ function init(){
    status.textContent='Thank you. Your admission enquiry has been received.';
    completed=true;remember('completed');clearTriggers();
    completeSubmission(body);
-   form.reset();verify.hidden=true;token='';attemptId='';
+   form.reset();verify.hidden=true;token='';attemptId='';resetOtp();
   }catch(e){error(e.message);await challenge();}
   finally{busy=false;submit.disabled=false;submit.textContent='Request Admission Callback';}
  });
