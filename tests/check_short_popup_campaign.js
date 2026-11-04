@@ -70,7 +70,7 @@ function fixture(options={}){
  const config={...defaults,...options.config};
  const fetch=async url=>({ok:true,json:async()=>url.endsWith('/config')?{
    schools:[{code:'campus-1',name:'Campus One'}],popup:config,
-   page_popup_campaigns:options.campaigns||[],otp:options.otp||{required:false},landing_pages:options.landingPages
+   page_popup_campaigns:options.campaigns||[],form_surfaces:options.surfaces||{},otp:options.otp||{required:false},landing_pages:options.landingPages
   }: {token:'test',question:'1 + 1'}});
  class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const context={
@@ -115,6 +115,15 @@ function fixture(options={}){
  const deleted=fixture({pagePopupGuid:pageGuid,campaigns:[]});await deleted.ready();
  assert.equal(deleted.trigger().hidden,true,'disabled or removed popup hides its button');
  deleted.manual();assert.equal(deleted.isOpen(),false,'removed campaign cannot open manually');
+ const disabledPopup=fixture({surfaces:{group_popup_enabled:false}});await disabledPopup.ready();
+ assert.equal(disabledPopup.trigger().hidden,true,'disabled group popup trigger hidden on old script');
+ disabledPopup.manual();
+ assert.equal(disabledPopup.isOpen(),false,'disabled group popup cannot be manually reopened');
+ const stillActivePage=fixture({
+  pagePopupGuid:pageGuid,campaigns:[specific],
+  surfaces:{group_popup_enabled:false}
+ });await stillActivePage.ready();
+ assert.equal(stillActivePage.trigger().hidden,false,'disabling group popup does not delete independent page popup');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');
