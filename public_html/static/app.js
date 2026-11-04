@@ -305,17 +305,42 @@ function groupSchoolChecks(chosen=[]){
  return `<fieldset class="group-school-choice"><legend>Schools served by the group website</legend>${admins.map(sc=>`<label><input type="checkbox" name="school_ids" value="${Number(sc.id)}" ${chosen.includes(sc.id)?'checked':''}> ${esc(sc.name)}</label>`).join('')}</fieldset>`;
 }
 function sfGroupEmbed(guid){
- return '<script defer src="'+window.location.origin+'/scrm/embed/'+encodeURIComponent(guid)+'"></script>';
+ return '<script defer src="'+window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(guid)+'"></script>';
 }
 function sfGroupShortEmbed(guid,mode='inline'){
- const src=window.location.origin+'/scrm/embed/'+encodeURIComponent(guid);
+ const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(guid);
  const tag='<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="'+mode+'"'+(mode==='inline'?' data-schoolflow-target="#schoolflow-admissions"':'')+'></script>';
  return mode==='inline'?'<div id="schoolflow-admissions"></div>\n'+tag:tag;
 }
 
+function sfGroupConversionEmbed(guid){
+ return '<script defer src="'+window.location.origin+APP_BASE+'/static/schoolflow-conversion.js" data-schoolflow-group="'+encodeURIComponent(guid)+'"></script>';
+}
+function sfGroupEmbedGuide(group){
+ if(!group.guid)return '<p class="muted-note">This group has no public Form ID. Create the group before copying embed codes.</p>';
+ const id=Number(group.id);
+ const snippet=(label,note,code,action)=>
+  '<div class="sf-embed-guide-item"><div class="sf-embed-guide-item-top"><div><strong>'+esc(label)+'</strong><p>'+esc(note)+'</p></div>'+
+  btn('Copy code',action,'small','type="button" data-id="'+id+'" aria-label="Copy '+esc(label)+' embed code"')+
+  '</div><pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(code)+'</code></pre></div>';
+ return '<details class="sf-embed-guide"><summary><span><strong>Website embed codes</strong><small>Copy short popup, inline form, detailed popup or conversion tracking</small></span><span class="sf-embed-guide-count">4 codes</span></summary>'+
+ '<div class="sf-embed-guide-body">'+
+ '<p class="sf-embed-guide-intro">These snippets use this group’s current public Form ID. Paste the selected form script into the intended website page. Never paste a private group API key into HTML.</p>'+
+ snippet('Short popup','Compact admission popup with manual or configured automatic triggers.',
+  sfGroupShortEmbed(group.guid,'popup'),'copy-group-short-popup')+
+ snippet('Short inline form','Paste both lines where the enquiry form should appear. Only inline redirects to the approved thank-you page when enabled.',
+  sfGroupShortEmbed(group.guid,'inline'),'copy-group-inline')+
+ snippet('Detailed popup','The plain script loads the legacy full enquiry popup. Popup success stays on the current page.',
+  sfGroupEmbed(group.guid),'copy-group-embed')+
+ snippet('Thank-you conversion tracking','Install only on the approved thank-you page, not alongside a popup. Configure Google Ads/Meta tags separately.',
+  sfGroupConversionEmbed(group.guid),'copy-group-conversion')+
+ '<p class="sf-embed-guide-intro">Use one form variant per placement. The primary website and any additional landing-page URL must be approved in SchoolFlow. Embed codes are public; API credentials are not.</p>'+
+ '</div></details>';
+}
 function popupSettingsModal(group){
  const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
  return modalFrame('Popup campaign · '+esc(group.name),'Configure automatic popup behavior. Save once; installed embed scripts need no changes.',
+ sfGroupEmbedGuide(group)+
  '<form id="popupSettingsForm" data-id="'+Number(group.id)+'">'+
  '<div class="form-field"><label><input type="checkbox" name="enabled" '+(v('enabled',false)?'checked':'')+'> Enable automatic admission popup</label></div>'+
  '<div class="two-cols">'+
@@ -459,6 +484,7 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('Copy inline code','copy-group-inline','small','type="button" data-id="'+Number(g.id)+'"')+
    btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
    btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
@@ -476,6 +502,7 @@ function popupCampaignsPage(){
     '<div class="sf-management-meta"><span>Trigger: '+esc(trigger)+'</span><span>Repeat: '+esc(p.repeat_after||'7')+' days / sessions</span></div>'+
     '<p class="sf-management-empty">Manual enquiry button stays available even if automatic triggers are disabled.</p>'+
     '<div class="button-row">'+btn('Configure campaign','edit-popup-settings','primary small','data-id="'+Number(g.id)+'"')+
+    btn('Copy popup code','copy-group-short-popup','small','type="button" data-id="'+Number(g.id)+'"')+
     btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -1562,11 +1589,15 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });
    return;
  }
- if(['copy-group-embed','copy-group-inline','copy-group-short-popup'].includes(action)){
+ if(['copy-group-embed','copy-group-inline','copy-group-short-popup','copy-group-conversion'].includes(action)){
    const group=ext.groupSites.find(x=>x.id===Number(el.dataset.id));if(!group?.guid){toast('Group GUID not available yet',true);return;}
    const code=action==='copy-group-inline'?sfGroupShortEmbed(group.guid,'inline'):
-      action==='copy-group-short-popup'?sfGroupShortEmbed(group.guid,'popup'):sfGroupEmbed(group.guid);
-   navigator.clipboard.writeText(code).then(()=>toast('SchoolFlow embed copied')).catch(()=>toast('Copy blocked by the browser; select the code on the card',true));return;
+      action==='copy-group-short-popup'?sfGroupShortEmbed(group.guid,'popup'):
+      action==='copy-group-conversion'?sfGroupConversionEmbed(group.guid):sfGroupEmbed(group.guid);
+   if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){
+     toast('Clipboard unavailable. Select the visible code and copy it manually.',true);return;
+   }
+   navigator.clipboard.writeText(code).then(()=>toast('Embed code copied')).catch(()=>toast('Clipboard blocked. Select the visible code and copy it manually.',true));return;
  }
  if(action==='copy-group-key'){navigator.clipboard.writeText(ext.groupKey).then(()=>toast('Group website key copied'));return;}
  if(action==='dismiss-group-key'){ext.groupKey='';render();return;}
