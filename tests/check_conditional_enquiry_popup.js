@@ -134,7 +134,7 @@ console.log('PASS: delayed form, exit intent, chat suppression, after-chat grace
 
 async function assertPopupConfirmation(settings,duplicate=false){
  const t=fixture({autoOff:true,settings,duplicate});await t.ready();
- t.context.window.openLeadPopup();
+ t.context.window.openLeadPopup();await t.ready();
  const d=t.byId;
  d.lf_name.value='Test Student';d.lf_parent.value='Test Guardian';
  d.lf_email.value='test@example.invalid';d.lf_phone.value='9876543210';
