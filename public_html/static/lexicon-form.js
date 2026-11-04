@@ -195,13 +195,79 @@ function init(){
   option.disabled=true;option.hidden=true;
   return option;
  }
+ // The original approved detailed form is shared by legacy and school campaigns.
+ // Campaign rules affect eligibility only; no changes to its visual markup.
+ function campaignEligible(data){
+  if(!campaignGuid)return true;
+  var row=(data.page_popup_campaigns||[]).find(function(x){return x&&x.guid===campaignGuid;});
+  if(!row||!row.popup||!row.popup.enabled)return false;
+  try{
+   var target=new URL(row.landing_page),current=new URL(location.href);
+   if(target.origin!==current.origin||target.protocol!=='https:')return false;
+   var path=current.pathname.replace(/\/+$/,'')||'/';
+   var exact=target.pathname.replace(/\/+$/,'')||'/';
+   var matches=function(prefix){return prefix==='/'||path===prefix||path.startsWith(prefix+'/');};
+   if(row.scope==='page'&&path!==exact)return false;
+   if(row.scope==='website'){
+    var yes=row.popup.include_paths||[],no=row.popup.exclude_paths||[];
+    if((yes.length&&!yes.some(matches))||no.some(matches))return false;
+   }else if(row.scope!=='page')return false;
+   var thanks=data.submission_settings&&data.submission_settings.thank_you_url;
+   if(thanks){var dest=new URL(thanks,current.origin);
+    if(dest.origin===current.origin&&(dest.pathname.replace(/\/+$/,'')||'/')===path)return false;}
+  }catch(e){return false;}
+  campaignRules=row.popup;
+  return true;
+ }
+ function campaignScheduleAllows(){
+  if(!campaignRules)return false;
+  if(!campaignRules.mobile_enabled&&matchMedia('(max-width:767px)').matches)return false;
+  var day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  if(campaignRules.start_date&&day<campaignRules.start_date)return false;
+  if(campaignRules.end_date&&day>campaignRules.end_date)return false;
+  if(campaignRules.start_time&&campaignRules.end_time){
+   var parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+    hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+   var hour=parts.find(function(p){return p.type==='hour';});
+   var minute=parts.find(function(p){return p.type==='minute';});
+   var now=(hour?hour.value:'00')+':'+(minute?minute.value:'00');
+   if(now<campaignRules.start_time||now>campaignRules.end_time)return false;
+  }
+  return true;
+ }
+ function startCampaignTriggers(){
+  if(!campaignGuid||!campaignRules||campaignTriggersReady)return;
+  campaignTriggersReady=true;
+  autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off';
+  var t=campaignRules.trigger||'manual';
+  if(t==='delay'||t==='either'){
+   autoDelay=Math.max(0,Math.min(60000,Number(campaignRules.delay_seconds||0)*1000));
+   setTimeout(function(){promptIfEligible('timer');},autoDelay);
+  }
+  if(t==='scroll'||t==='either'){
+   window.addEventListener('scroll',function(){
+    var maximum=document.documentElement.scrollHeight-innerHeight;
+    if(maximum>0&&window.scrollY/maximum*100>=Number(campaignRules.scroll_percent||40))
+     promptIfEligible('scroll');
+   },{passive:true});
+  }
+  if(t==='exit'||campaignRules.exit_intent){
+   document.addEventListener('mouseout',function(event){
+    if(event.relatedTarget||event.toElement||event.clientY>10)return;
+    promptIfEligible('exit');
+   });
+  }
+ }
  function loadSchools(force){
   if(!force && loadedAt>0 && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
   var selected=campus.value;campus.disabled=true;
   campus.replaceChildren(campusPlaceholder('Loading campuses...'));
   return get('/config').then(function(data){
    submissionSettings=data.submission_settings||null;
-   detailedEnabled=!(data.form_surfaces&&data.form_surfaces.detailed_popup_enabled===false);
+   detailedEnabled=campaignGuid?campaignEligible(data):
+    !(data.form_surfaces&&data.form_surfaces.detailed_popup_enabled===false);
+   otpRequired=!!(campaignGuid&&data.otp&&data.otp.required);
+   $('lf_otp').hidden=!otpRequired;
    trigger.hidden=!detailedEnabled;
    if(!detailedEnabled){
     if(popup.classList.contains('lf-visible'))close();
@@ -212,6 +278,8 @@ function init(){
    var seen=new Set();
    (Array.isArray(data.schools)?data.schools:[]).forEach(function(item){
     if(!item||typeof item.code!=='string'||typeof item.name!=='string')return;
+    if(campaignGuid&&campaignRules&&Array.isArray(campaignRules.school_codes)&&
+       !campaignRules.school_codes.includes(item.code))return;
     var code=item.code.trim(),name=item.name.trim();
     if(!code||!name||seen.has(code))return;
     seen.add(code);campus.add(new Option(name,code));
@@ -222,6 +290,7 @@ function init(){
    else campus.value='';
    if(campus.disabled)feedback('No campus is available for this website.');
    loadedAt=Date.now();
+   if(campaignGuid)startCampaignTriggers();
   }).catch(function(){
    campus.replaceChildren(campusPlaceholder('Campuses unavailable'));
    campus.disabled=true;feedback('Cannot load campuses. Please try again.');
