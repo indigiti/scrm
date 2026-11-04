@@ -2254,14 +2254,22 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    if(campaign&&!group.page_popup_campaigns?.some(c=>c.guid===campaign))return;
    const chosen=Array.from(f.querySelectorAll('input[name="popup_school_ids"]:checked'))
     .map(x=>Number(x.value));
+   const scope=String(fd.scope||'website');
+   const paths=k=>String(fd[k]||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+   if(!chosen.length)return toast('Choose at least one school to receive these enquiries.',true);
+   if(scope==='page'&&!String(fd.landing_page||'').trim())
+     return toast('Enter the exact page URL or select Entire website.',true);
    const payload={
-    name:String(fd.name||'').trim(),landing_page:String(fd.landing_page||'').trim(),
+    name:String(fd.name||'').trim(),scope,
+    landing_page:scope==='page'?String(fd.landing_page||'').trim():'',
     settings:{
      enabled:!!f.elements.enabled.checked,trigger:String(fd.trigger),
      delay_seconds:Number(fd.delay_seconds),scroll_percent:Number(fd.scroll_percent),
      repeat_after:String(fd.repeat_after),position:String(fd.position),
      exit_intent:!!f.elements.exit_intent.checked,mobile_enabled:!!f.elements.mobile_enabled.checked,
      start_date:String(fd.start_date||''),end_date:String(fd.end_date||''),
+     include_paths:scope==='website'?paths('include_paths'):[],
+     exclude_paths:scope==='website'?paths('exclude_paths'):[],
      school_ids:chosen
     }
    };
