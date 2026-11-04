@@ -352,7 +352,9 @@ function sfGroupEmbedGuide(group){
 }
 function sfPagePopupEmbed(groupGuid,campaignGuid){
  const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(groupGuid);
- return '<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="popup" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
+ // School-site campaigns reuse the original balanced detailed-popup UI. Explicit
+ // short popup embeds remain backwards compatible when requested separately.
+ return '<script defer src="'+src+'" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
 }
 function websitePopupSourceModal(){
  const sites=state.sites.filter(s=>!s.is_group_route&&s.enabled!==false&&!s.removed_at&&
