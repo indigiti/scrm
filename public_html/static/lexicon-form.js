@@ -94,7 +94,7 @@ function init(){
  '<option value="">Loading campuses...</option></select></div>',
  '<div class="lf-captcha"><span id="lf_captcha_label">Loading math CAPTCHA...</span>',
  '<input id="lf_captcha" class="lf-input" type="text" placeholder="Answer" autocomplete="off" inputmode="numeric" maxlength="3" required></div>',
- '<div id="lf_otp" class="lf-otp" hidden><strong>Verify your WhatsApp number</strong>',
+ '<div id="lf_otp" class="lf-otp lf-captcha" hidden><strong>Verify your WhatsApp number</strong>',
  '<small>A verification code is required for this enquiry.</small>',
  '<button type="button" id="lf_otp_send">Request WhatsApp code</button>',
  '<div id="lf_otp_pin" hidden><input id="lf_otp_code" class="lf-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="Six-digit code">',
