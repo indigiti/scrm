@@ -200,8 +200,11 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);
         $referrer=sf_text($p,'referrer',500);
-        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code))
+        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code)){
+            if(empty($p['popup_campaign_guid'])&&!sf_landing_page_approved($group,$origin,$page))
+                sf_fail(422,'Landing page URL is not approved for this form');
             sf_fail(403,'This form is not enabled for the selected website, school or page');
+        }
         $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
         $ipKey=substr(hash('sha256',$ip),0,20);
         $otpSecret=$store->publicFormKey();
@@ -272,8 +275,11 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code))
+        if(!sf_short_surface_allowed($group,$p,$origin,$page,$code)){
+            if(empty($p['popup_campaign_guid'])&&!sf_landing_page_approved($group,$origin,$page))
+                sf_fail(422,'Landing page URL is not approved for this form');
             sf_fail(403,'This form is not enabled for the selected website, school or page');
+        }
         $ipKey=substr(hash('sha256',$ip),0,20);
         return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
             $g=sf_public_group($s,$guid);
