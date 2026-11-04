@@ -25,7 +25,7 @@ function fixture(opts={}){
   return e;
  }
  const popup=el(),logo=el('img');
- for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close','lf_complete','lf_complete_text','lf_done','lf_parent','lf_email','lf_class','lf_consent','lf_website'])byId[key]=el();
+ for(const key of ['lf_form','lf_submit','lf_campus','lf_pincode','lf_state','lf_city','lf_phone','lf_captcha','lf_feedback','lf_captcha_label','lf_name','lf_close','lf_complete','lf_complete_text','lf_done','lf_parent','lf_email','lf_class','lf_consent','lf_website','lf_otp','lf_otp_send','lf_otp_pin','lf_otp_code','lf_otp_check','lf_otp_feedback'])byId[key]=el();
  const triggerButtons=[];
  const body={classList:{add(){},remove(){}},appendChild(node){
   if(node===popup)byId.leadPopup=popup;
