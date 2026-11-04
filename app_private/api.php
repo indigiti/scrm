@@ -380,8 +380,9 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
     $display=(string)($p['form_display']??'');
     $formType=$isChat?'chat':($action==='public_group_short_received'?
         (in_array($display,['inline','popup'],true)?$display:'unknown'):
+        ($action==='public_group_website_received'&&$display==='popup'?'popup':
         ($action==='public_group_website_received'?'unknown':
-        ($sourceType==='manual'?'manual':($sourceType==='import'?'import':'api'))));
+        ($sourceType==='manual'?'manual':($sourceType==='import'?'import':'api')))));
     $formVariant=$action==='public_group_short_received'?'short':
         ($action==='public_group_website_received'?'detailed':'');
     $familyGuid=sf_family_create_profile($s,$schoolId,$guardian,$phone,sf_text($p,'email',160));
@@ -392,8 +393,8 @@ function sf_create_lead(array &$s, int $schoolId, array $p, ?int $siteId, ?int $
         'utm_medium'=>sf_text($p,'utm_medium',140),'utm_term'=>sf_text($p,'utm_term',140),'utm_content'=>sf_text($p,'utm_content',140),
         'landing_page'=>sf_text($p,'landing_page',500),'referrer'=>sf_text($p,'referrer',500),
         'source_type'=>$sourceType,'form_type'=>$formType,'form_variant'=>$formVariant,
-        'popup_trigger'=>$action==='public_group_short_received'?sf_text($p,'popup_trigger',12):'',
-        'popup_campaign_id'=>$action==='public_group_short_received'?sf_text($p,'popup_campaign_id',80):'',
+        'popup_trigger'=>in_array($action,['public_group_short_received','public_group_website_received'],true)?sf_text($p,'popup_trigger',12):'',
+        'popup_campaign_id'=>in_array($action,['public_group_short_received','public_group_website_received'],true)?sf_text($p,'popup_campaign_id',80):'',
         'landing_page_version'=>sf_lead_page_version(sf_text($p,'landing_page',500)),
         'status'=>'New','temperature'=>'Unrated','temperature_suggestion'=>'Unrated',
         'contact_state'=>'Pending Contact','contact_attempts'=>0,'last_successful_contact_at'=>'',
