@@ -157,6 +157,7 @@ function sf_group_public_view(array $s, array $group): array {
         'popup_settings'=>sf_popup_settings($group),
         'form_surface_settings'=>sf_form_surface_settings($group),
         'page_popup_campaigns'=>sf_page_popup_campaigns($group),
+        'linked_school_site_id'=>(int)($group['linked_school_site_id']??0),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
         'form_otp_settings'=>sf_form_otp_admin_view($group),
@@ -922,6 +923,47 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         }
         // Page-specific popup campaign management stays inside the existing
         // group ownership boundary; switching school never grants new rights.
+        // Provision a single-school public popup form directly from an existing
+        // school website connector. Never require an LP URL or create a second
+        // disconnected website source. The site remains the lead attribution.
+        if(preg_match('#^/api/schools/(\d+)/sites/(\d+)/public-form$#D',$path,$websiteForm)){
+            if($method!=='POST')sf_fail(405,'Unsupported school website form operation');
+            $sid=(int)$websiteForm[1];$siteId=(int)$websiteForm[2];
+            sf_membership($s,$sid,$uid,['Admin']);
+            $site=sf_source($s,$siteId);
+            if(!$site||(int)$site['school_id']!==$sid||empty($site['enabled'])||
+                !empty($site['removed_at'])||!empty($site['is_group_route']))
+                sf_fail(404,'Connect and enable a school website first');
+            $domain=trim((string)($site['domain']??''));
+            $host=sf_landing_primary_host(['domain'=>$domain]);
+            if($host===''||sf_landing_origin('https://'.$host)===''||
+               preg_replace('~^https?://~i','',$domain)!==$host&&
+               preg_replace('~^https?://~i','',$domain)!==$host.'/')
+                sf_fail(422,'The connected school website must have one valid HTTPS hostname');
+            foreach($s['group_sites']??[] as $existing){
+                if((int)($existing['linked_school_site_id']??0)!==$siteId)continue;
+                if((int)$existing['owner_id']!==$uid)
+                    sf_fail(409,'This school website form is already owned by another administrator');
+                if(count($existing['routes'])!==1||
+                   (int)$existing['routes'][0]['school_id']!==$sid)
+                    sf_fail(409,'School website form routing needs administrator review');
+                return [200,['created'=>false,'group'=>sf_group_public_view($s,$existing)]];
+            }
+            $id=sf_id($s,'group_sites');
+            $key='sfgroup_'.bin2hex(random_bytes(32));
+            $group=['id'=>$id,'guid'=>sf_uuid(),'owner_id'=>$uid,
+                'name'=>$site['name'].' · Public admission form','domain'=>$host,
+                'key_hash'=>sf_hash($key),'enabled'=>true,
+                'linked_school_site_id'=>$siteId,'linked_school_site_guid'=>$site['guid'],
+                'routes'=>[['code'=>'campus-'.$sid,'school_id'=>$sid,'site_id'=>$siteId]],
+                'form_surface_settings'=>['inline_enabled'=>false,
+                    'group_popup_enabled'=>false,'detailed_popup_enabled'=>false],
+                'created_at'=>sf_time()];
+            $s['group_sites'][]=$group;
+            sf_event($s,$sid,null,$uid,'school_website_form_created',
+                'Public form linked to registered school website GUID '.$site['guid']);
+            return [201,['created'=>true,'group'=>sf_group_public_view($s,$group)]];
+        }
         if(preg_match('#^/api/group-sites/(\d+)/page-popups(?:/([a-f0-9-]{36}))?$#iD',$path,$pm)){
             $groupId=(int)$pm[1];$target=strtolower((string)($pm[2]??''));
             $group=null;
@@ -935,7 +977,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             if($method==='POST'&&$target===''){
                 if(count($items)>=25)sf_fail(422,'Maximum 25 page-specific popup campaigns');
                 $validated=sf_page_popup_validate($payload,$group);
-                foreach($items as $row)if($row['landing_page']===$validated['landing_page'])
+                foreach($items as $row)if(($row['scope']??'page')===$validated['scope']&&
+                    $row['landing_page']===$validated['landing_page'])
                     sf_fail(409,'A popup already exists for this landing page');
                 $created=array_merge(['guid'=>sf_uuid(),'created_at'=>sf_time()],$validated);
                 $items[]=$created;
@@ -954,7 +997,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if($method==='PATCH'){
                     $validated=sf_page_popup_validate($payload,$group);
                     foreach($items as $j=>$row)
-                        if($j!==$index&&$row['landing_page']===$validated['landing_page'])
+                        if($j!==$index&&($row['scope']??'page')===$validated['scope']&&
+                            $row['landing_page']===$validated['landing_page'])
                             sf_fail(409,'A popup already exists for this landing page');
                     $items[$index]=array_replace($items[$index],$validated);
                     $result=$items[$index];
@@ -996,6 +1040,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if($group['owner_id']!==$uid)continue;
                     if($schoolFilter!==null && !array_filter($group['routes'],
                         static fn(array $route):bool=>(int)$route['school_id']===$schoolFilter))continue;
+                    $authorized=true;
+                    foreach($group['routes'] as $route){
+                        $sid=(int)$route['school_id'];
+                        if(!in_array($sid,$authorizedSchools,true)){$authorized=false;break;}
+                    }
+                    if(!$authorized)continue;
                     $visible[]=sf_group_public_view($s,$group);
                 }
                 return [200,$visible];
@@ -1035,9 +1085,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 $s['group_sites']=array_values(array_filter($s['group_sites'],
                     static fn(array $row):bool=>(int)$row['id']!==$groupId));
                 $archived=0;
+                $linkedSite=(int)($group['linked_school_site_id']??0);
+                $managedIds=array_values(array_filter($sourceIds,
+                    static fn(int $id):bool=>$id!==$linkedSite));
                 $s['sites']=array_values(array_filter($s['sites'],
-                    static function(array $site)use($sourceIds,&$s,&$archived):bool{
-                        if(!in_array((int)$site['id'],$sourceIds,true))return true;
+                    static function(array $site)use($managedIds,&$s,&$archived):bool{
+                        if(!in_array((int)$site['id'],$managedIds,true))return true;
                         foreach($s['leads'] as $lead)
                             if((int)($lead['site_id']??0)===(int)$site['id']){
                                 $archived++;return true;
@@ -1045,7 +1098,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         return false;
                     }));
                 foreach($s['sites'] as &$source)
-                    if(in_array((int)$source['id'],$sourceIds,true)){
+                    if(in_array((int)$source['id'],$managedIds,true)){
                         $source['enabled']=0;$source['removed_at']=sf_time();
                         $source['key_hash']=sf_hash(bin2hex(random_bytes(32)));
                     }
@@ -1054,7 +1107,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 // after a form is removed; leads and permanent audits remain.
                 $s['receipts']=array_values(array_filter($s['receipts']??[],
                     static fn(array $row):bool=>(int)($row['group_site_id']??0)!==$groupId
-                        && !in_array((int)($row['site_id']??0),$sourceIds,true)));
+                        && (int)($row['public_group_id']??0)!==$groupId
+                        && !in_array((int)($row['site_id']??0),$managedIds,true)));
                 $s['form_otp_challenges']=array_values(array_filter($s['form_otp_challenges']??[],
                     static fn(array $row):bool=>(int)($row['group_id']??0)!==$groupId));
                 foreach($group['routes'] as $route)
@@ -1171,6 +1225,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 return [200,sf_group_public_view($s,$group)];
             }
             if($method==='PATCH' && $operation==='') {
+                if(!empty($group['linked_school_site_id']))
+                    sf_fail(422,'This form follows its school website. Manage the connected website instead.');
                 $name=sf_text($payload,'name',140,3);
                 $domain=sf_text($payload,'domain',180,3);
                 $enabled=$payload['enabled']??true;
@@ -1516,6 +1572,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if (!$site || $site['school_id']!==$schoolId || !empty($site['removed_at'])) sf_fail(404,'Website not found');
                 if(!empty($site['is_group_route'])) sf_fail(403,'Manage group sources from Schools & Routing');
                 if($method==='DELETE'&&$sub===''){
+                    foreach($s['group_sites']??[] as $form)
+                        if((int)($form['linked_school_site_id']??0)===$itemId)
+                            sf_fail(409,'Remove the website popup form before removing this school website');
                     if(!is_string($payload['confirm_guid']??null)||
                         !hash_equals((string)$site['guid'],$payload['confirm_guid']))
                         sf_fail(422,'Confirm the exact website GUID before removal');
@@ -1552,6 +1611,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     return [200,['ok'=>true]];
                 }
                 if ($sub==='' && $method==='PATCH') {
+                        if(array_key_exists('domain',$payload)&&
+                           (string)$payload['domain']!==(string)$v['domain']){
+                            foreach($s['group_sites']??[] as $form)
+                                if((int)($form['linked_school_site_id']??0)===$itemId)
+                                    sf_fail(409,'Remove or migrate the school popup form before changing this domain');
+                        }
                         $query=parse_url($uri,PHP_URL_QUERY);
                         parse_str(is_string($query)?$query:'',$siteQuery);
                         $enabled=$siteQuery['enabled']??null;

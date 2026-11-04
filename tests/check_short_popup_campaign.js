@@ -124,6 +124,21 @@ function fixture(options={}){
   surfaces:{group_popup_enabled:false}
  });await stillActivePage.ready();
  assert.equal(stillActivePage.trigger().hidden,false,'disabling group popup does not delete independent page popup');
+ const websiteScoped={
+  guid:pageGuid,scope:'website',landing_page:'https://school.test/',
+  popup:{...defaults,enabled:true,trigger:'manual',school_codes:['campus-1']}
+ };
+ const onAnotherPage=fixture({path:'/contact',pagePopupGuid:pageGuid,campaigns:[websiteScoped]});
+ await onAnotherPage.ready();
+ assert.equal(onAnotherPage.trigger().hidden,false,'website scope works outside the original LP path');
+ onAnotherPage.manual();
+ assert.equal(onAnotherPage.isOpen(),true,'school popup works anywhere on its authorized website');
+ const restrictedSite={
+  ...websiteScoped,popup:{...websiteScoped.popup,include_paths:['/admissions']}
+ };
+ const restrictedPage=fixture({path:'/contact',pagePopupGuid:pageGuid,campaigns:[restrictedSite]});
+ await restrictedPage.ready();
+ assert.equal(restrictedPage.trigger().hidden,true,'optional page prefixes restrict website popup');
  const defaultOff=fixture({config:{enabled:false}});await defaultOff.ready();
  defaultOff.advance(60000);defaultOff.scroll(90);defaultOff.exit();
  assert.equal(defaultOff.isOpen(),false,'disabled campaign never opens automatically');

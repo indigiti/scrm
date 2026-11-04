@@ -110,26 +110,90 @@ function sf_page_popup_campaigns(array $group):array {
     $campaigns=$group['page_popup_campaigns']??[];
     return is_array($campaigns)?array_values(array_filter($campaigns,'is_array')):[];
 }
+/**
+ * A school website popup is bound to the registered group primary domain.
+ * It is not an inline/LP approval. Optional path prefixes target pages on
+ * that authorized website, without introducing a second domain-approval step.
+ * Legacy "page" campaigns remain readable and editable.
+ */
 function sf_page_popup_validate(array $payload,array $group):array {
     foreach(array_keys($payload) as $key)
-        if(!in_array($key,['name','landing_page','settings'],true))
-            sf_fail(422,'Unknown landing-page popup field');
+        if(!in_array($key,['name','scope','landing_page','settings'],true))
+            sf_fail(422,'Unknown website popup field');
     $name=sf_text($payload,'name',90,3);
-    $landing=sf_landing_normalize_url(sf_text($payload,'landing_page',300,12));
-    $origin=sf_landing_origin($landing);
-    if(!sf_landing_origin_approved($group,$origin)||
-        !sf_landing_page_approved($group,$origin,$landing))
-        sf_fail(422,'Approve the landing-page URL before attaching a popup');
-    foreach(sf_submission_settings($group)['thank_you_urls'] as $thankYou)
-        if($thankYou===$landing)sf_fail(422,'Do not show an enquiry popup on a thank-you page');
+    $scope=$payload['scope']??'page';
+    if(!in_array($scope,['website','page'],true))sf_fail(422,'Choose website or exact-page targeting');
     if(!isset($payload['settings'])||!is_array($payload['settings']))
         sf_fail(422,'Popup settings are required');
     $settings=sf_popup_validate($payload['settings'],$group);
-    // Enforce URL targeting server-side; freeform path prefixes are not allowed
-    // to broaden a page-specific campaign beyond the one approved destination.
-    $settings['include_paths']=[];
-    $settings['exclude_paths']=[];
-    return ['name'=>$name,'landing_page'=>$landing,'settings'=>$settings];
+    if($scope==='website'){
+        $host=sf_landing_primary_host($group);
+        $origin=sf_landing_origin('https://'.$host);
+        if($origin===''||$origin!=='https://'.$host)sf_fail(422,'Connect a valid HTTPS school website before creating a popup');
+        $landing=$origin.'/';
+        // A website-scoped campaign belongs to its registered domain,
+        // regardless of inline LP strict-primary path preferences.
+    }else{
+        $landing=sf_landing_normalize_url(sf_text($payload,'landing_page',300,12));
+        $origin=sf_landing_origin($landing);
+        if(!sf_landing_primary_origin($group,$origin)&&
+           (!sf_landing_origin_approved($group,$origin)||
+            !sf_landing_page_approved($group,$origin,$landing)))
+            sf_fail(422,'Authorize this external URL or use the school website popup scope');
+        $settings['include_paths']=[];
+        $settings['exclude_paths']=[];
+    }
+    foreach(sf_submission_settings($group)['thank_you_urls'] as $thankYou)
+        if($scope==='page'&&rtrim($thankYou,'/')===rtrim($landing,'/'))
+            sf_fail(422,'Do not show a popup on a thank-you page');
+    return ['name'=>$name,'scope'=>$scope,'landing_page'=>$landing,'settings'=>$settings];
+}
+function sf_popup_campaign_match(array $group,string $campaignGuid,string $origin,string $page,
+    ?string $campusCode=null):bool {
+    if(!preg_match('/^[a-f0-9-]{36}$/iD',$campaignGuid)||$page===''||
+        sf_landing_origin($page)!==$origin)return false;
+    $parts=parse_url($page);
+    if(!is_array($parts)||isset($parts['user'])||isset($parts['pass']))return false;
+    $path=(string)($parts['path']??'/');
+    if($path==='')$path='/';
+    if(strlen($path)>180||!preg_match('#^/[a-zA-Z0-9._~%/-]*$#D',$path)||
+       str_contains($path,'//')||preg_match('#(?:^|/)(?:\.|%2e){1,2}(?:/|$)#i',$path))return false;
+    $normalized=$origin.(rtrim($path,'/')?:'/');
+    foreach(sf_page_popup_campaigns($group) as $campaign){
+        if(!hash_equals((string)($campaign['guid']??''),$campaignGuid))continue;
+        $settings=$campaign['settings']??[];
+        if(!is_array($settings)||empty($settings['enabled']))return false;
+        $scope=(string)($campaign['scope']??'page');
+        $destination=(string)($campaign['landing_page']??'');
+        if($scope==='website'){
+            if(!sf_landing_primary_origin($group,$origin)||
+                sf_landing_origin($destination)!==$origin)return false;
+            $matches=static fn(string $prefix):bool=>$prefix==='/'||
+                $path===$prefix||str_starts_with($path,rtrim($prefix,'/').'/');
+            $allowed=$settings['include_paths']??[];
+            $excluded=$settings['exclude_paths']??[];
+            if($allowed&&!array_filter($allowed,$matches))return false;
+            if(array_filter($excluded,$matches))return false;
+        }elseif($scope==='page'){
+            if(rtrim($destination,'/')!==rtrim($normalized,'/')||
+                (!sf_landing_primary_origin($group,$origin)&&
+                 !sf_landing_page_approved($group,$origin,$page)))return false;
+        }else return false;
+        foreach(sf_submission_settings($group)['thank_you_urls'] as $thanks)
+            if(rtrim($thanks,'/')===rtrim($normalized,'/'))return false;
+        if($campusCode!==null){
+            $allowedSchools=$settings['school_ids']??[];
+            if($allowedSchools){
+                $schoolAllowed=false;
+                foreach($group['routes']??[] as $route)
+                    if((string)$route['code']===$campusCode&&
+                        in_array((int)$route['school_id'],$allowedSchools,true))$schoolAllowed=true;
+                if(!$schoolAllowed)return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 function sf_page_popup_public(array $s,array $group):array {
     $out=[];
@@ -137,14 +201,14 @@ function sf_page_popup_public(array $s,array $group):array {
         $settings=$campaign['settings']??[];
         if(!is_array($settings)||empty($settings['enabled']))continue;
         $landing=(string)($campaign['landing_page']??'');
-        if(!sf_landing_page_approved($group,sf_landing_origin($landing),$landing))
-            continue; // Revoking LP approval immediately disables its popup.
+        $scope=(string)($campaign['scope']??'page');
+        if($scope==='website'){
+            if(!sf_landing_primary_origin($group,sf_landing_origin($landing)))continue;
+        }elseif(!sf_landing_primary_origin($group,sf_landing_origin($landing))&&
+                  !sf_landing_page_approved($group,sf_landing_origin($landing),$landing))continue;
         $popup=sf_popup_public($s,array_replace($group,['popup_settings'=>$settings]));
-        $out[]=[
-            'guid'=>(string)$campaign['guid'],
-            'landing_page'=>$landing,
-            'popup'=>$popup
-        ];
+        $out[]=['guid'=>(string)$campaign['guid'],'scope'=>$scope,
+            'landing_page'=>$landing,'popup'=>$popup];
     }
     return $out;
 }

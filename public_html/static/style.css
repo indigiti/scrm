@@ -669,3 +669,21 @@ body{background:#f4f7fb;color:#182b43}
 .sf-page-popup-row>.button-row{justify-content:flex-end;flex:0 1 auto;flex-wrap:wrap}
 .sf-page-popup-row .btn{min-height:30px}
 @media(max-width:620px){.sf-page-popup-row{flex-direction:column}.sf-page-popup-row>.button-row{width:100%;justify-content:flex-start}}
+
+
+/* School website popup editor: wide, shallow and mobile friendly.
+   Keep the primary action visible while advanced configuration is collapsed. */
+.modal:has(#pagePopupForm){width:min(760px,calc(100vw - 28px));max-height:min(88vh,880px);overflow:auto;scrollbar-gutter:stable}
+.modal:has(#websitePopupSourceForm){width:min(590px,calc(100vw - 28px));max-height:85vh;overflow:auto}
+#pagePopupForm{display:grid;gap:10px}
+#pagePopupForm>.two-cols{align-items:end}
+#pagePopupForm .sf-popup-advanced{border:1px solid #e1e7f4;border-radius:12px;background:rgba(247,249,253,.7);margin:0;padding:0}
+#pagePopupForm .sf-popup-advanced>summary{cursor:pointer;color:#4a527e;font-size:12px;font-weight:750;padding:13px 15px;list-style-position:inside}
+#pagePopupForm .sf-popup-advanced>summary:focus-visible{outline:3px solid #8b92fa;outline-offset:2px}
+#pagePopupForm .sf-popup-advanced[open]{padding:0 14px 13px}
+#pagePopupForm .sf-popup-advanced[open]>summary{padding-left:0}
+#pagePopupForm .sf-popup-advanced .two-cols{margin-top:9px}
+#pagePopupForm .group-school-choice{margin:0}
+#pagePopupForm .sf-popup-save-bar{position:sticky;bottom:-1px;z-index:2;justify-content:flex-end;padding:13px 12px;margin:8px -12px -12px;background:rgba(255,255,255,.97);border-top:1px solid #e4e8f3;backdrop-filter:blur(12px)}
+#pagePopupForm .sf-popup-save-bar .btn{min-height:40px}
+@media(max-width:620px){.modal:has(#pagePopupForm){max-height:94vh}.modal:has(#pagePopupForm) .two-cols{grid-template-columns:1fr}#pagePopupForm .sf-popup-save-bar{margin-left:-8px;margin-right:-8px}}

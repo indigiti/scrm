@@ -127,10 +127,10 @@ function sf_form_otp_request(string $guid,string $origin,array $p,string $ip,
     $ipKey=substr(hash_hmac('sha256',$ip,$key),0,22);
     $id=sf_uuid();$code=(string)random_int(100000,999999);$expires=time()+300;
     $cfg=$store->transaction(static function(array &$s)use($guid,$origin,$campus,$page,$hashed,
-        $ipKey,$id,$code,$expires,$key,$proof):array{
+        $ipKey,$id,$code,$expires,$key,$proof,$p):array{
         $group=sf_public_group($s,$guid);
         if(!$group||!sf_public_origin_ok($group,$origin)||
-            !sf_landing_page_approved($group,$origin,$page))
+            !sf_short_surface_allowed($group,$p,$origin,$page,$campus))
             sf_fail(403,'Form unavailable');
         $config=sf_form_otp_settings($group);
         if(!$config['enabled']||!$config['short_forms'])sf_fail(409,'WhatsApp verification not enabled');
