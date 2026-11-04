@@ -57,6 +57,7 @@ jobs:
           php tests/test_staff_management.php
           php tests/test_school_staff_assignment.php
           php tests/test_public_forms.php
+          php tests/test_form_otp.php
           php tests/test_landing_page_approvals.php
           php tests/test_marketing_controls.php
           php tests/test_enquiry_interface_controls.php
