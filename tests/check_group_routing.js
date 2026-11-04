@@ -80,7 +80,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/data-schoolflow-mode=&quot;inline&quot;/,'inline has explicit inline mode');
  assert.match(html,/data-schoolflow-target/,'inline includes target element');
  assert.match(html,/schoolflow-conversion\.js/,'thank-you conversion snippet included');
- assert.match(html,/a8b5de5d-ac84-4169-9347-21144cedd39c/,'copy code uses group's current GUID');
+ assert.match(html,/a8b5de5d-ac84-4169-9347-21144cedd39c/,'copy code uses current group GUID');
  assert.match(html,/type="button" data-id="1" aria-label="Copy Short popup/,'copy buttons cannot submit settings form');
  const actions=[
   ['copy-group-short-popup','data-schoolflow-mode="popup"'],
