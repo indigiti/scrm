@@ -29,7 +29,9 @@ async function check(){
  let message='';
  const context=vm.createContext({
   campus,Option:Choice,Date,Set,Array,Promise,
-  get:async()=>config,feedback:v=>{message=v;},loadedAt:0
+  get:async()=>config,feedback:v=>{message=v;},loadedAt:0,
+  trigger:{hidden:true},detailedEnabled:false,submissionSettings:null,
+  popup:{classList:{contains:()=>false}},close:()=>{}
  });
  const helpers=src.slice(src.indexOf(' function campusPlaceholder(label){'),src.indexOf(' function open(){'));
  assert.ok(helpers.startsWith(' function campusPlaceholder'),'Campus helper is present');
@@ -55,6 +57,16 @@ async function check(){
  config={schools:[]};
  await vm.runInContext('loadSchools(true)',context);
  assert.equal(campus.disabled,true,'empty available list disables selector');
+ config={schools:[{code:'campus-1',name:'Lexicon - Hadapsar'}],
+  form_surfaces:{detailed_popup_enabled:false}};
+ await vm.runInContext('loadSchools(true)',context);
+ assert.equal(campus.disabled,true,'removed detailed popup cannot expose a campus selector');
+ assert.equal(context.trigger.hidden,true,'removed popup manual button hidden');
+ config={schools:[{code:'campus-1',name:'Lexicon - Hadapsar'}],
+  form_surfaces:{detailed_popup_enabled:true}};
+ await vm.runInContext('loadSchools(true)',context);
+ assert.equal(context.trigger.hidden,false,'admin can restore detailed popup');
+
  assert.match(message,/No campus is available/);
  assert.match(src,/campus\.disabled \|\| !campus\.value \|\| !Array\.from\(campus\.options\)\.some/,
   'submit requires a non-placeholder option');
