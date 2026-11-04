@@ -136,8 +136,9 @@ function sf_page_popup_validate(array $payload,array $group):array {
     }else{
         $landing=sf_landing_normalize_url(sf_text($payload,'landing_page',300,12));
         $origin=sf_landing_origin($landing);
-        if(!sf_landing_origin_approved($group,$origin)||
-           !sf_landing_page_approved($group,$origin,$landing))
+        if(!sf_landing_primary_origin($group,$origin)&&
+           (!sf_landing_origin_approved($group,$origin)||
+            !sf_landing_page_approved($group,$origin,$landing)))
             sf_fail(422,'Authorize this external URL or use the school website popup scope');
         $settings['include_paths']=[];
         $settings['exclude_paths']=[];
@@ -175,7 +176,8 @@ function sf_popup_campaign_match(array $group,string $campaignGuid,string $origi
             if(array_filter($excluded,$matches))return false;
         }elseif($scope==='page'){
             if(rtrim($destination,'/')!==rtrim($normalized,'/')||
-                !sf_landing_page_approved($group,$origin,$page))return false;
+                (!sf_landing_primary_origin($group,$origin)&&
+                 !sf_landing_page_approved($group,$origin,$page)))return false;
         }else return false;
         foreach(sf_submission_settings($group)['thank_you_urls'] as $thanks)
             if(rtrim($thanks,'/')===rtrim($normalized,'/'))return false;
@@ -202,7 +204,8 @@ function sf_page_popup_public(array $s,array $group):array {
         $scope=(string)($campaign['scope']??'page');
         if($scope==='website'){
             if(!sf_landing_primary_origin($group,sf_landing_origin($landing)))continue;
-        }elseif(!sf_landing_page_approved($group,sf_landing_origin($landing),$landing))continue;
+        }elseif(!sf_landing_primary_origin($group,sf_landing_origin($landing))&&
+                  !sf_landing_page_approved($group,sf_landing_origin($landing),$landing))continue;
         $popup=sf_popup_public($s,array_replace($group,['popup_settings'=>$settings]));
         $out[]=['guid'=>(string)$campaign['guid'],'scope'=>$scope,
             'landing_page'=>$landing,'popup'=>$popup];
