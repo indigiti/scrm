@@ -27,6 +27,11 @@ function init(){
   ['Nursery','LKG','UKG','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'].map(function(x){return '<option>'+x+'</option>';}).join('')+
   '</select></label><label>Campus<select name="school_code" required disabled><option value="">Loading campuses…</option></select></label></div>'+
   '<div class="sf2-verify" hidden><label class="sf2-question">Security question</label><input name="captcha_answer" inputmode="numeric" maxlength="3" placeholder="Answer" required><button type="button" class="sf2-refresh">Refresh question</button></div>'+
+  '<div class="sf2-otp" hidden><strong>Verify your WhatsApp number</strong><small>A six-digit code is required before submitting.</small>'+
+  '<button type="button" class="sf2-otp-send">Request WhatsApp code</button>'+
+  '<div class="sf2-otp-pin" hidden><label>Six-digit code<input name="otp_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>'+
+  '<button type="button" class="sf2-otp-check">Verify code</button></div>'+
+  '<p class="sf2-otp-status" role="status" aria-live="polite"></p></div>'+
   '<label class="sf2-consent"><input type="checkbox" name="consent" required> I agree to be contacted by the selected school about this admission enquiry.</label>'+
   '<input class="sf2-trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">'+
   '<p class="sf2-status" aria-live="polite"></p><button type="submit" class="sf2-submit">Request Admission Callback</button></form></div>';
