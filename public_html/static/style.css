@@ -632,3 +632,25 @@ body{background:#f4f7fb;color:#182b43}
  .sf-contact-grid .btn{font-size:11px;padding:10px 5px}
 }
 @media(max-width:420px){.sf-contact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Reusable, copy-ready school form installation snippets in Popup Settings. */
+.sf-embed-guide{margin:0 0 18px;border:1px solid #dce3f5;border-radius:13px;background:linear-gradient(145deg,#f7f9ff,#fff);overflow:hidden}
+.sf-embed-guide>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:13px;cursor:pointer;padding:15px 16px;color:#263154}
+.sf-embed-guide>summary::-webkit-details-marker{display:none}
+.sf-embed-guide>summary:focus-visible{outline:3px solid #a1a6ff;outline-offset:-3px;border-radius:12px}
+.sf-embed-guide>summary strong{display:block;font-size:13px;letter-spacing:-.02em}
+.sf-embed-guide>summary small{display:block;color:#68799b;font-size:11px;line-height:1.5;margin-top:3px}
+.sf-embed-guide-count{flex:none;border-radius:100px;padding:5px 10px;color:#4e51b5;background:#e9ebff;font-size:10px;font-weight:800}
+.sf-embed-guide[open]>summary{border-bottom:1px solid #e3e7f4;background:#f1f4ff}
+.sf-embed-guide-body{display:grid;gap:11px;padding:13px}
+.sf-embed-guide-intro{font-size:11px!important;color:#677793!important;line-height:1.65!important;margin:0 3px 2px!important}
+.sf-embed-guide-item{min-width:0;border:1px solid #e7eaf4;background:#fff;border-radius:11px;padding:13px}
+.sf-embed-guide-item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.sf-embed-guide-item-top>div{min-width:0}
+.sf-embed-guide-item-top strong{font-size:12px;display:block;color:#252d47}
+.sf-embed-guide-item-top p{font-size:11px!important;color:#747f97!important;line-height:1.5!important;margin:4px 0 0!important}
+.sf-embed-guide-item-top .btn{flex:none}
+.sf-embed-guide-code{max-width:100%;margin:0;padding:12px;border:1px solid #e6e8f2;border-radius:8px;background:#f7f8fc;color:#303b59;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;user-select:text}
+.sf-embed-guide-code:focus-visible{outline:3px solid #8e93ff;outline-offset:2px}
+@media(max-width:580px){.sf-embed-guide-item-top{flex-wrap:wrap}.sf-embed-guide-item-top .btn{margin-left:auto}.sf-embed-guide-body{padding:10px}.sf-embed-guide-item{padding:11px}}
