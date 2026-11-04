@@ -183,6 +183,45 @@ function init(){
   if(!response.ok)throw Error(data.detail||'WhatsApp verification unavailable');
   return data;
  }
+ async function requestOtp(){
+  if(otpBusy||!otpSettings.required)return;
+  var fields=form.elements,phone=fields.phone.value.trim();
+  if(!/^[6-9][0-9]{9}$/.test(phone))return error('Enter a valid 10-digit mobile number.');
+  if(!campus.value||campus.disabled)return error('Select a campus first.');
+  if(!fields.consent.checked)return error('Consent is required to request a WhatsApp code.');
+  if(!token){await challenge();return error('Solve the math question before requesting a code.');}
+  if(!/^\d+$/.test(fields.captcha_answer.value.trim()))return error('Enter the math security answer.');
+  otpBusy=true;clear();
+  var button=outer.querySelector('.sf2-otp-send');
+  button.disabled=true;otpStatus('Requesting verification code…');
+  try{
+   var result=await otpApi('request',{phone:phone,school_code:campus.value,
+    consent:true,captcha_token:token,captcha_answer:fields.captcha_answer.value.trim(),
+    landing_page:location.href.slice(0,500)});
+   otpId=result.otp_id;otpProof='';otpPhone=phone;otpCampus=campus.value;
+   outer.querySelector('.sf2-otp-pin').hidden=false;
+   otpStatus('Code request queued. Enter the code when it arrives in WhatsApp.');
+   if(otpCooldown!==null)clearTimeout(otpCooldown);
+   otpCooldown=setTimeout(function(){
+    button.disabled=false;button.textContent='Request another code';otpCooldown=null;
+   },60000);
+  }catch(e){otpStatus(e.message||'Unable to request verification.',true);button.disabled=false;}
+  finally{otpBusy=false;}
+ }
+ async function verifyOtp(){
+  if(otpBusy||!otpId)return;
+  var pin=form.elements.otp_code.value.trim();
+  if(!/^[0-9]{6}$/.test(pin))return otpStatus('Enter the six-digit code.',true);
+  otpBusy=true;var button=outer.querySelector('.sf2-otp-check');button.disabled=true;
+  try{
+   var result=await otpApi('verify',{otp_id:otpId,phone:form.elements.phone.value.trim(),
+    school_code:campus.value,code:pin});
+   if(!result.verified||!result.otp_proof)throw Error('Verification was not accepted');
+   otpProof=result.otp_proof;otpPhone=form.elements.phone.value.trim();otpCampus=campus.value;
+   otpStatus('WhatsApp number verified. You can submit your enquiry.');
+  }catch(e){otpStatus(e.message||'Invalid WhatsApp code.',true);}
+  finally{otpBusy=false;button.disabled=false;}
+ }
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
