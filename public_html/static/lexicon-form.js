@@ -145,6 +145,13 @@ function init(){
  }
  function promptIfEligible(reason){
   if(!detailedEnabled||!autoEnabled||closed()||autoShownHere||previouslyPrompted()||popup.classList.contains('lf-visible')||document.visibilityState==='hidden')return;
+  if(campaignGuid){
+   if(!campaignScheduleAllows())return;
+   var t=campaignRules.trigger||'manual';
+   if((reason==='timer'&&t!=='delay'&&t!=='either')||
+      (reason==='scroll'&&t!=='scroll'&&t!=='either')||
+      (reason==='exit'&&t!=='exit'&&!campaignRules.exit_intent))return;
+  }
   var activeChat=window.__schoolflowAdmissionsChatState;
   if(activeChat&&activeChat.guid===guid&&activeChat.leadCaptured)return;
   if(chatbotOpen()){
@@ -153,6 +160,7 @@ function init(){
   }
   if(reason==='timer' && Date.now()-pageOpenedAt<autoDelay)return;
   if(reason==='exit' && Date.now()-pageOpenedAt<8000)return;
+  popupTrigger=reason==='timer'?'delay':reason;
   open();
   rememberPrompt();
  }
