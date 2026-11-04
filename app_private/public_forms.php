@@ -287,7 +287,9 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         },true);
     }
     if($action==='enquiries' && $method==='POST') {
-        if(!sf_form_surface_settings($group)['detailed_popup_enabled'])
+        $campaign=$p['popup_campaign_guid']??'';
+        if(!is_string($campaign)||strlen($campaign)>64)sf_fail(422,'Invalid website popup campaign');
+        if($campaign===''&&!sf_form_surface_settings($group)['detailed_popup_enabled'])
             sf_fail(403,'Detailed enquiry popup has been disabled');
         $ipAttempt=substr(hash('sha256',$ip),0,20);
         $store->transaction(static function (array &$s) use ($group,$ipAttempt): void {
@@ -309,14 +311,21 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $state=sf_text($p,'state',100);$city=sf_text($p,'city',100);
         foreach(['utm_source','utm_medium','utm_campaign','utm_term','utm_content'] as $u)sf_text($p,$u,140);
         $page=sf_text($p,'landing_page',500);$referrer=sf_text($p,'referrer',500);
-        if(!sf_landing_page_approved($group,$origin,$page))
+        if($campaign!==''){
+            if(!sf_popup_campaign_match($group,$campaign,$origin,$page,$code))
+                sf_fail(403,'Website popup is not enabled on this page for the selected school');
+        }elseif(!sf_landing_page_approved($group,$origin,$page))
             sf_fail(422,'Landing page URL is not approved for this form');
         $ipKey=substr(hash('sha256',$ip),0,20);
-        return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer): array {
+        $otpSecret=$store->publicFormKey();
+        return $store->transaction(static function (array &$s) use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$phone,$student,$guardian,$pin,$grade,$state,$city,$page,$referrer,$campaign,$otpSecret): array {
             $g=sf_public_group($s,$guid);
-            if(!$g || !sf_public_origin_ok($g,$origin) ||
-                !sf_form_surface_settings($g)['detailed_popup_enabled'] ||
-                !sf_landing_page_approved($g,$origin,$page))sf_fail(403,'Form unavailable');
+            if(!$g||!sf_public_origin_ok($g,$origin)||
+                ($campaign!==''
+                    ?!sf_popup_campaign_match($g,$campaign,$origin,$page,$code)
+                    :(!sf_form_surface_settings($g)['detailed_popup_enabled']||
+                      !sf_landing_page_approved($g,$origin,$page))))
+                sf_fail(403,'Form unavailable');
             $route=null;
             foreach(sf_group_campuses($s,$g) as $choice)if(hash_equals($choice['code'],$code)){$route=$choice;break;}
             if(!$route)sf_fail(422,'Choose a valid school/campus');
@@ -324,6 +333,9 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
                 if(($receipt['school_id']??null)!==$route['school_id'])sf_fail(409,'Submission belongs to another school');
                 return [200,['success'=>true,'duplicate_submission'=>true]];
             }
+            $verified=$campaign!==''?
+                sf_form_otp_consume($s,$g,(int)$route['school_id'],$code,
+                    $phone,$origin,$p,$otpSecret):['verified'=>false];
             sf_limit($s,'public-form-ip:'.$g['id'].':'.$ipKey,10,3600);
             sf_limit($s,'public-form-group:'.$g['id'],150,3600);
             foreach($s['receipts'] as $receipt)if(($receipt['public_challenge']??'')===$proof)sf_fail(409,'This math CAPTCHA was already used');
@@ -332,7 +344,21 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['student_name']=$student;$details['parent_name']=$guardian;$details['grade']=$grade;
             $details['pincode']=$pin;$details['state']=$state;$details['city']=$city;
             $details['landing_page']=$page;$details['referrer']=$referrer;
+            if($campaign!==''){
+                $details['popup_campaign_id']=$campaign;
+                $trigger=(string)($p['popup_trigger']??'');
+                $details['popup_trigger']=in_array($trigger,['manual','delay','scroll','exit'],true)?$trigger:'manual';
+            }
             $lead=sf_create_lead($s,$route['school_id'],$details,$route['site_id'],null,null,'public_group_website_received');
+            if(!empty($verified['verified'])){
+                foreach($s['leads'] as &$savedLead)if($savedLead['id']===$lead['id']){
+                    $savedLead['whatsapp_verified']=true;
+                    $savedLead['whatsapp_verified_at']=$verified['verified_at'];
+                    $savedLead['verification_method']='wabridge_whatsapp_otp';
+                    $savedLead['verification_job_id']=$verified['provider_job_id'];
+                    break;
+                }unset($savedLead);
+            }
             $s['receipts'][]=['public_group_id'=>$g['id'],'school_id'=>$route['school_id'],
                 'idempotency_key'=>$idem,'public_challenge'=>$proof,'lead_id'=>$lead['id'],'created_at'=>sf_time()];
             return [201,['success'=>true,'guid'=>$lead['guid'],'duplicate_submission'=>false]];
