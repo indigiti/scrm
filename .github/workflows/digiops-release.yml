@@ -42,6 +42,7 @@ jobs:
           php tests/test_group_routing.php
           php tests/test_popup_settings.php
           php tests/test_page_popup_campaigns.php
+          php tests/test_form_lifecycle.php
           php tests/test_guid_form_embed.php
           php tests/test_release_audit.php
           php tests/test_admission_classification.php

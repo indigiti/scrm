@@ -148,3 +148,27 @@ function sf_page_popup_public(array $s,array $group):array {
     }
     return $out;
 }
+
+
+/**
+ * Reversible per-surface publication switches for one group form.
+ * These are not campaign scheduling flags: an OFF surface must not render
+ * even its manual enquiry button on a website carrying an old embed tag.
+ * Existing installations remain enabled until an Admin explicitly switches off.
+ */
+function sf_form_surface_settings(array $group):array {
+    $defaults=['inline_enabled'=>true,'group_popup_enabled'=>true,'detailed_popup_enabled'=>true];
+    $saved=$group['form_surface_settings']??[];
+    if(!is_array($saved))$saved=[];
+    return array_replace($defaults,array_intersect_key($saved,$defaults));
+}
+function sf_form_surface_validate(array $input,array $group):array {
+    $current=sf_form_surface_settings($group);
+    if(!$input)sf_fail(422,'Select a form surface to update');
+    foreach($input as $key=>$value){
+        if(!array_key_exists($key,$current)||!is_bool($value))
+            sf_fail(422,'Unsupported form surface setting');
+        $current[$key]=$value;
+    }
+    return $current;
+}

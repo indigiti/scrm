@@ -155,6 +155,7 @@ function sf_group_select_schools(array &$s, int $uid, int $groupId, string $name
 function sf_group_public_view(array $s, array $group): array {
     return ['id'=>$group['id'],'guid'=>$group['guid']??'', 'name'=>$group['name'],'domain'=>$group['domain'],'enabled'=>(bool)$group['enabled'],
         'popup_settings'=>sf_popup_settings($group),
+        'form_surface_settings'=>sf_form_surface_settings($group),
         'page_popup_campaigns'=>sf_page_popup_campaigns($group),
         'landing_pages'=>sf_landing_settings($group),
         'submission_settings'=>sf_submission_settings($group),
@@ -972,7 +973,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(405,'Unsupported page popup operation');
         }
         // Group website administration: owner must be an administrator of each destination school.
-        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings))?$#D',$path,$gm)) {
+        if (preg_match('#^/api/group-sites(?:/(\d+))?(?:/(rotate-key|refresh-form-id|popup-settings|landing-pages|submission-settings|otp-settings|form-surfaces))?$#D',$path,$gm)) {
             $s['group_sites']=$s['group_sites']??[];
             $groupId=isset($gm[1]) && $gm[1]!==''?(int)$gm[1]:null;
             $operation=$gm[2]??'';
@@ -1019,6 +1020,65 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             $group=null;
             foreach($s['group_sites'] as $g) if($g['id']===$groupId && $g['owner_id']===$uid) {$group=$g;break;}
             if(!$group)sf_fail(404,'Group website not found');
+            if($method==='DELETE' && $operation===''){
+                foreach($group['routes'] as $route)
+                    sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if(!is_string($payload['confirm_guid']??null)||
+                    !hash_equals((string)$group['guid'],$payload['confirm_guid']))
+                    sf_fail(422,'Confirm the exact public Form GUID to remove this group');
+                $sourceIds=array_map(static fn(array $route):int=>(int)$route['site_id'],$group['routes']);
+                $leadCount=0;
+                foreach($s['leads'] as $lead)
+                    if(in_array((int)($lead['site_id']??0),$sourceIds,true))$leadCount++;
+                // Delete only the active group configuration. Historical lead
+                // source rows survive as disabled attribution records if used.
+                $s['group_sites']=array_values(array_filter($s['group_sites'],
+                    static fn(array $row):bool=>(int)$row['id']!==$groupId));
+                $archived=0;
+                $s['sites']=array_values(array_filter($s['sites'],
+                    static function(array $site)use($sourceIds,&$s,&$archived):bool{
+                        if(!in_array((int)$site['id'],$sourceIds,true))return true;
+                        foreach($s['leads'] as $lead)
+                            if((int)($lead['site_id']??0)===(int)$site['id']){
+                                $archived++;return true;
+                            }
+                        return false;
+                    }));
+                foreach($s['sites'] as &$source)
+                    if(in_array((int)$source['id'],$sourceIds,true)){
+                        $source['enabled']=0;$source['removed_at']=sf_time();
+                        $source['key_hash']=sf_hash(bin2hex(random_bytes(32)));
+                    }
+                unset($source);
+                // Stale submission receipts and OTP state cannot be replayed
+                // after a form is removed; leads and permanent audits remain.
+                $s['receipts']=array_values(array_filter($s['receipts']??[],
+                    static fn(array $row):bool=>(int)($row['group_site_id']??0)!==$groupId
+                        && !in_array((int)($row['site_id']??0),$sourceIds,true)));
+                $s['form_otp_challenges']=array_values(array_filter($s['form_otp_challenges']??[],
+                    static fn(array $row):bool=>(int)($row['group_id']??0)!==$groupId));
+                foreach($group['routes'] as $route)
+                    sf_event($s,(int)$route['school_id'],null,$uid,'group_form_removed',
+                        'Public group form removed; historical leads retained: '.$leadCount);
+                return [200,['removed'=>true,'guid'=>$group['guid'],
+                    'historical_leads_retained'=>$leadCount,'sources_archived'=>$archived]];
+            }
+            if($operation==='form-surfaces'){
+                foreach($group['routes'] as $route)
+                    sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
+                if($method==='GET')return [200,sf_form_surface_settings($group)];
+                if($method==='PATCH'){
+                    $settings=sf_form_surface_validate($payload,$group);
+                    foreach($s['group_sites'] as &$row)if($row['id']===$groupId){
+                        $row['form_surface_settings']=$settings;break;
+                    }unset($row);
+                    foreach($group['routes'] as $route)
+                        sf_event($s,(int)$route['school_id'],null,$uid,
+                            'group_form_surfaces_changed','Form display surfaces changed for group #'.$groupId);
+                    return [200,$settings];
+                }
+                sf_fail(405,'Unsupported form surface operation');
+            }
             if($operation==='landing-pages') {
                 // The owner must still administer every campus affected by this group.
                 foreach($group['routes'] as $route)sf_membership($s,(int)$route['school_id'],$uid,['Admin']);
@@ -1139,7 +1199,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                 if (!isset($adminIds[$sid])) continue;
                 $sites=[];$leads=0;$new=0;$unassigned=0;$enrolled=0;$hot=0;$breached=0;
                 $slaMinutes=sf_sla_policy($s,$sid)['first_contact_minutes'];
-                foreach ($s['sites'] as $site) if ($site['school_id']===$sid) {
+                foreach ($s['sites'] as $site) if ($site['school_id']===$sid && empty($site['removed_at'])) {
                     $sites[]=['id'=>$site['id'],'name'=>$site['name'],'domain'=>$site['domain'],
                         'platform'=>$site['platform'],'enabled'=>(bool)$site['enabled']];
                 }
@@ -1435,7 +1495,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
         if ($area==='sites') {
             if ($itemId===null && $method==='GET') {
                 $rows=[];
-                foreach ($s['sites'] as $site) if ($site['school_id']===$schoolId) {
+                foreach ($s['sites'] as $site) if ($site['school_id']===$schoolId && empty($site['removed_at'])) {
                     $count=0;foreach ($s['leads'] as $lead) if ($lead['site_id']===$site['id'])$count++;
                     $view=$site;unset($view['key_hash']);$view['lead_count']=$count;$rows[]=$view;
                 }
@@ -1453,8 +1513,33 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             }
             if ($itemId!==null) {
                 $site=sf_source($s,$itemId);
-                if (!$site || $site['school_id']!==$schoolId) sf_fail(404,'Website not found');
+                if (!$site || $site['school_id']!==$schoolId || !empty($site['removed_at'])) sf_fail(404,'Website not found');
                 if(!empty($site['is_group_route'])) sf_fail(403,'Manage group sources from Schools & Routing');
+                if($method==='DELETE'&&$sub===''){
+                    if(!is_string($payload['confirm_guid']??null)||
+                        !hash_equals((string)$site['guid'],$payload['confirm_guid']))
+                        sf_fail(422,'Confirm the exact website GUID before removal');
+                    $leadCount=0;
+                    foreach($s['leads'] as $lead)
+                        if((int)($lead['site_id']??0)===$itemId)$leadCount++;
+                    if($leadCount===0){
+                        $s['sites']=array_values(array_filter($s['sites'],
+                            static fn(array $entry):bool=>(int)$entry['id']!==$itemId));
+                    }else{
+                        foreach($s['sites'] as &$entry)if((int)$entry['id']===$itemId){
+                            $entry['enabled']=0;$entry['removed_at']=sf_time();
+                            $entry['key_hash']=sf_hash(bin2hex(random_bytes(32)));
+                            break;
+                        }
+                        unset($entry);
+                    }
+                    $s['receipts']=array_values(array_filter($s['receipts']??[],
+                        static fn(array $row):bool=>(int)($row['site_id']??0)!==$itemId));
+                    sf_event($s,$schoolId,null,$uid,'school_website_removed',
+                        'Website connector removed; historical leads retained: '.$leadCount);
+                    return [200,['removed'=>true,'guid'=>$site['guid'],
+                        'historical_leads_retained'=>$leadCount]];
+                }
                 foreach ($s['sites'] as &$v) if ($v['id']===$itemId) {
                     if ($sub==='rotate-key' && $method==='POST') {
                         $key='sfsite_'.bin2hex(random_bytes(32));$v['key_hash']=sf_hash($key);

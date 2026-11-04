@@ -65,7 +65,7 @@ function init(){
  if(document.getElementById('leadPopup'))return;
  var tabs=document.createElement('div');tabs.className='side-tabs';
  var trigger=document.createElement('button');trigger.type='button';trigger.className='side-tab';trigger.textContent='Enquire Now';
- trigger.setAttribute('aria-haspopup','dialog');tabs.appendChild(trigger);document.body.appendChild(tabs);
+ trigger.setAttribute('aria-haspopup','dialog');trigger.hidden=true;tabs.appendChild(trigger);document.body.appendChild(tabs);
  var box=document.createElement('div');
  box.innerHTML=[
  '<div id="leadPopup" role="dialog" aria-modal="true" aria-labelledby="lf_title" aria-hidden="true">',
@@ -107,7 +107,7 @@ function init(){
  var $=function(id){return document.getElementById(id);};
  var form=$('lf_form'),submit=$('lf_submit'),campus=$('lf_campus'),pin=$('lf_pincode');
  var state=$('lf_state'),city=$('lf_city'),phone=$('lf_phone'),answer=$('lf_captcha');
- var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false,submissionComplete=false;
+ var token='',latestLookup=0,lastFocus=null,loadedAt=0,attemptId='',blocked=false,submissionComplete=false,detailedEnabled=false;
  // The enquiry form is a gentle fallback when the visitor is not using chat.
  // These optional website attributes allow site owners to opt out or tune timing.
  var autoEnabled=loader.getAttribute('data-schoolflow-auto-enquiry')!=='off';
@@ -134,7 +134,7 @@ function init(){
   return !!(chat&&chat.guid===guid&&chat.open);
  }
  function promptIfEligible(reason){
-  if(!autoEnabled||closed()||autoShownHere||previouslyPrompted()||popup.classList.contains('lf-visible')||document.visibilityState==='hidden')return;
+  if(!detailedEnabled||!autoEnabled||closed()||autoShownHere||previouslyPrompted()||popup.classList.contains('lf-visible')||document.visibilityState==='hidden')return;
   var activeChat=window.__schoolflowAdmissionsChatState;
   if(activeChat&&activeChat.guid===guid&&activeChat.leadCaptured)return;
   if(chatbotOpen()){
@@ -186,11 +186,18 @@ function init(){
   return option;
  }
  function loadSchools(force){
-  if(!force && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
+  if(!force && loadedAt>0 && Date.now()-loadedAt<60000 && !campus.disabled)return Promise.resolve();
   var selected=campus.value;campus.disabled=true;
   campus.replaceChildren(campusPlaceholder('Loading campuses...'));
   return get('/config').then(function(data){
    submissionSettings=data.submission_settings||null;
+   detailedEnabled=!(data.form_surfaces&&data.form_surfaces.detailed_popup_enabled===false);
+   trigger.hidden=!detailedEnabled;
+   if(!detailedEnabled){
+    if(popup.classList.contains('lf-visible'))close();
+    campus.replaceChildren(campusPlaceholder('Form disabled'));
+    return;
+   }
    campus.replaceChildren(campusPlaceholder('Select Campus'));
    var seen=new Set();
    (Array.isArray(data.schools)?data.schools:[]).forEach(function(item){
@@ -211,6 +218,7 @@ function init(){
   });
  }
  function open(){
+  if(!detailedEnabled)return;
   lastFocus=document.activeElement;
   popup.classList.add('lf-visible');popup.setAttribute('aria-hidden','false');document.body.classList.add('lf-popup-open');
   feedback('');

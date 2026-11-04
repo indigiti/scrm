@@ -132,6 +132,7 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
                 'landing_pages'=>['primary_host'=>sf_landing_primary_host($g),
                     'approved_urls'=>sf_landing_settings($g)['approved_urls'],
                     'restrict_primary'=>sf_landing_settings($g)['restrict_primary']],
+                'form_surfaces'=>sf_form_surface_settings($g),
                 'submission_settings'=>sf_submission_public($g,$origin),
                 'otp'=>sf_form_otp_public_view($g)]];
         });
