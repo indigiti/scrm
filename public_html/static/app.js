@@ -341,38 +341,70 @@ function sfPagePopupEmbed(groupGuid,campaignGuid){
  const src=window.location.origin+APP_BASE+'/embed/'+encodeURIComponent(groupGuid);
  return '<script defer src="'+src+'" data-schoolflow-form="short" data-schoolflow-mode="popup" data-schoolflow-popup-campaign="'+encodeURIComponent(campaignGuid)+'"></script>';
 }
+function websitePopupSourceModal(){
+ const sites=state.sites.filter(s=>!s.is_group_route&&s.enabled!==false&&!s.removed_at);
+ const groups=ext.groupSites.filter(g=>g.enabled&&g.schools.some(s=>Number(s.school_id)===state.schoolId));
+ const items=[
+  ...sites.map(s=>({value:'site:'+s.id,name:s.name+' · '+s.domain,info:'Connected school website'})),
+  ...groups.map(g=>({value:'group:'+g.id,name:g.name+' · '+g.domain,info:g.linked_school_site_id?'School-specific public form':'Existing group form'}))
+ ];
+ return modalFrame('Create school website popup','Select a connected website. Landing-page approval is not required for its registered domain.',
+  '<form id="websitePopupSourceForm">'+
+  (items.length?'<div class="form-field"><label>Website to install the popup on<select name="website_target" required>'+
+    items.map(i=>'<option value="'+esc(i.value)+'">'+esc(i.name)+' ('+esc(i.info)+')</option>').join('')+
+    '</select></label></div>'+
+   '<div class="sf-help-panel"><strong>Next step: Configure popup</strong><p>The popup is linked to the selected website. You can show it throughout that site or limit it to specific paths. Existing admission leads and inline LP forms are unaffected.</p></div>'+
+   '<div class="button-row">'+btn('Cancel','close-modal')+
+    '<button type="submit" class="btn primary">Continue to popup settings</button></div>':
+   '<div class="sf-help-panel"><p>No connected website is available for this school. Connect and enable a school website first.</p></div>'+
+   '<div class="button-row">'+btn('Cancel','close-modal')+
+   btn('Connect website','nav','primary','data-page="Websites & Forms"')+'</div>')+
+  '</form>');
+}
 function pagePopupModal(group,campaign){
  const saved=campaign?.settings||{},get=(key,fallback)=>saved[key]??fallback;
- const chosen=Array.isArray(get('school_ids',[]))?get('school_ids',[]):[];
- const existing=!!campaign;
- return modalFrame((existing?'Edit landing-page popup':'Add landing-page popup')+' · '+esc(group.name),
-  'One popup campaign per approved website page, with a separate schedule and school targeting.',
+ const existing=!!campaign,scope=campaign?.scope||'website';
+ const chosen=Array.isArray(get('school_ids',existing?[]:[state.schoolId]))
+   ?get('school_ids',existing?[]:[state.schoolId]):[state.schoolId];
+ const otherSchools=(group.schools||[]).filter(s=>Number(s.school_id)!==state.schoolId);
+ const websiteOrigin='https://'+String(group.domain||'').replace(/^https?:\/\//,'').replace(/\/+$/,'');
+ return modalFrame((existing?'Edit website popup':'Create website popup')+' · '+esc(group.name),
+  'A school popup belongs to a connected website, not to the inline landing-page approval list.',
   '<form id="pagePopupForm" data-id="'+Number(group.id)+'" data-campaign="'+esc(campaign?.guid||'')+'">'+
-  '<div class="form-field"><label>Campaign name<input name="name" maxlength="90" required placeholder="November Admissions Campaign" value="'+esc(campaign?.name||'')+'"></label></div>'+
-  '<div class="form-field"><label>Full landing-page URL<input name="landing_page" type="url" maxlength="300" required placeholder="https://school.example/admissions/" value="'+esc(campaign?.landing_page||'')+'"></label>'+
-  '<small>The exact HTTPS page must belong to your group domain or be approved under Landing Pages. Do not enter a thank-you page.</small></div>'+
+  '<div class="sf-info-row"><strong>Connected website</strong><span>'+esc(websiteOrigin)+'</span></div>'+
+  '<div class="form-field"><label>Popup name<input name="name" maxlength="90" required placeholder="Admissions enquiry popup" value="'+esc(campaign?.name||'Admission enquiry')+'"></label></div>'+
+  select('Placement','scope',[
+   option('website','Entire registered school website',scope),
+   option('page','One exact page (advanced)',scope)].join(''))+
+  '<div class="form-field"><label>Specific page URL (only for exact-page targeting)<input name="landing_page" type="url" maxlength="300" placeholder="'+esc(websiteOrigin+'/admissions/')+'" value="'+esc(scope==='page'?(campaign?.landing_page||''):'')+'"></label>'+
+  '<small>For the whole website, leave this blank. On the connected domain, no extra LP approval is needed. External campaign domains still require authorization.</small></div>'+
   '<label class="sf-check-row"><input type="checkbox" name="enabled" '+(get('enabled',false)?'checked':'')+'>'+
-  '<span><strong>Enable this page popup</strong><small>Off by default until you install and test its unique embed code.</small></span></label>'+
+  '<span><strong>Enable popup after installation</strong><small>Off by default. When disabled, the copied script will not display a popup.</small></span></label>'+
   '<div class="two-cols">'+
   select('Popup trigger','trigger',[['manual','Button only'],['delay','Time delay'],['scroll','Scroll depth'],['either','Time or scroll'],['exit','Exit intent']].map(([v,label])=>option(v,label,get('trigger','manual'))).join(''))+
   input('Delay (seconds)','delay_seconds','number',get('delay_seconds',8),true)+
-  input('Scroll depth (%)','scroll_percent','number',get('scroll_percent',40),true)+
   select('Repeat after dismissal','repeat_after',[['session','Next session'],['1','1 day'],['7','7 days'],['30','30 days'],['never','Never']].map(([v,label])=>option(v,label,get('repeat_after','7'))).join(''))+
   select('Position','position',[['center','Center'],['right','Right'],['bottom','Bottom']].map(([v,label])=>option(v,label,get('position','center'))).join(''))+
-  input('Start date (optional)','start_date','date',get('start_date',''))+
-  input('End date (optional)','end_date','date',get('end_date',''))+'</div>'+
+  '</div>'+
+  '<details class="sf-popup-advanced"><summary>Advanced schedule & targeting</summary><div class="two-cols">'+
+  input('Scroll depth (%)','scroll_percent','number',get('scroll_percent',40),true)+
+  input('Start date','start_date','date',get('start_date',''))+
+  input('End date','end_date','date',get('end_date',''))+'</div>'+
   '<label class="sf-check-row"><input type="checkbox" name="exit_intent" '+(get('exit_intent',false)?'checked':'')+'> Allow desktop exit intent</label>'+
   '<label class="sf-check-row"><input type="checkbox" name="mobile_enabled" '+(get('mobile_enabled',true)?'checked':'')+'> Allow on mobile</label>'+
-  '<fieldset class="group-school-choice"><legend>Campuses available in this popup (none checked = all connected)</legend>'+
-  (group.schools||[]).map(s=>'<label><input type="checkbox" name="popup_school_ids" value="'+Number(s.school_id)+'" '+(chosen.includes(s.school_id)?'checked':'')+'> '+esc(s.name)+'</label>').join('')+
+  '<div class="form-field"><label>Only these page paths (optional, one prefix per line)<textarea name="include_paths" rows="2" placeholder="/admissions">'+esc((get('include_paths',[])).join('\n'))+'</textarea></label></div>'+
+  '<div class="form-field"><label>Exclude page paths (optional)<textarea name="exclude_paths" rows="2" placeholder="/thank-you">'+esc((get('exclude_paths',[])).join('\n'))+'</textarea></label></div></details>'+
+  '<fieldset class="group-school-choice"><legend>School(s) receiving this popup</legend>'+
+  (group.schools||[]).filter(s=>Number(s.school_id)===state.schoolId).map(s=>'<label><input type="checkbox" name="popup_school_ids" value="'+Number(s.school_id)+'" '+(chosen.includes(s.school_id)?'checked':'')+'> '+esc(s.name)+' (selected school)</label>').join('')+
+  (otherSchools.length?'<details class="sf-popup-advanced"><summary>Include other campuses (optional)</summary>'+
+   otherSchools.map(s=>'<label><input type="checkbox" name="popup_school_ids" value="'+Number(s.school_id)+'" '+(chosen.includes(s.school_id)?'checked':'')+'> '+esc(s.name)+'</label>').join('')+'</details>':'')+
   '</fieldset>'+
-  (existing?'<div class="sf-embed-guide-item"><strong>Install on this landing page</strong>'+
+  (existing?'<div class="sf-embed-guide-item"><strong>Install popup on the selected website</strong>'+
    '<pre class="sf-embed-guide-code" tabindex="0"><code>'+esc(sfPagePopupEmbed(group.guid,campaign.guid))+'</code></pre>'+
-   '<div class="button-row" style="margin-top:9px">'+btn('Copy this popup code','copy-page-popup','small','type="button" data-id="'+Number(group.id)+'" data-campaign="'+esc(campaign.guid)+'"')+'</div></div>':
-   '<div class="sf-help-panel"><p>The copy-ready script will appear after saving. It is tied to this exact landing page and will not open on other pages.</p></div>')+
-  '<p class="muted-note">A separate group-wide popup may still be installed elsewhere. Remove or disable that embed on this page to avoid duplicate enquiry buttons.</p>'+
-  '<div class="button-row">'+btn('Cancel','close-modal')+
-  '<button type="submit" class="btn primary">'+(existing?'Save popup changes':'Create popup')+'</button></div></form>');
+   '<div class="button-row" style="margin-top:9px">'+btn('Copy popup script','copy-page-popup','small','type="button" data-id="'+Number(group.id)+'" data-campaign="'+esc(campaign.guid)+'"')+'</div></div>':
+   '<div class="sf-help-panel"><p>After saving, copy the new popup script to your school website. It will not replace the inline form or its thank-you redirect.</p></div>')+
+  '<div class="button-row sf-popup-save-bar">'+btn('Cancel','close-modal')+
+  '<button type="submit" class="btn primary">'+(existing?'Save popup':'Create popup')+'</button></div></form>');
 }
 function popupSettingsModal(group){
  const p=group.popup_settings||{},v=(k,f)=>p[k]??f;
