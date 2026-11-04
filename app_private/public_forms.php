@@ -29,11 +29,22 @@ function sf_public_allowed_origin_path(SchoolFlowStore $store, string $path, str
 function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publicRoot):string {
     if(!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD',$guid))
         sf_fail(404,'Public form not found');
-    $enabled=$store->transaction(static function(array $s)use($guid):bool {
+    $embedInfo=$store->transaction(static function(array $s)use($guid):array {
         $group=sf_public_group($s,strtolower($guid));
-        return $group!==null && count(sf_group_campuses($s,$group))>0;
+        if($group===null||count(sf_group_campuses($s,$group))===0)
+            return ['enabled'=>false,'schoolSitePopup'=>false,'campaigns'=>[]];
+        $linked=!empty($group['linked_school_site_id']);
+        $campaigns=[];
+        if($linked)foreach(sf_page_popup_public($s,$group) as $campaign){
+            // Only public, enabled campaign metadata; never private site API keys.
+            $campaigns[]=['guid'=>$campaign['guid'],'scope'=>$campaign['scope'],
+                'landing_page'=>$campaign['landing_page'],
+                'include_paths'=>$campaign['popup']['include_paths']??[],
+                'exclude_paths'=>$campaign['popup']['exclude_paths']??[]];
+        }
+        return ['enabled'=>true,'schoolSitePopup'=>$linked,'campaigns'=>$campaigns];
     });
-    if(!$enabled)sf_fail(404,'Public form not found');
+    if(!$embedInfo['enabled'])sf_fail(404,'Public form not found');
     $assets=['static/lexicon-form.js','static/lexicon-form.css',
         'static/admissions-chat.js','static/admissions-chat.css',
         'static/schoolflow-short-form.js','static/schoolflow-short-form.css'];
@@ -45,16 +56,37 @@ function sf_public_embed_script(SchoolFlowStore $store,string $guid,string $publ
         if(!is_string($hash))throw new RuntimeException('Public form asset unreadable');
         $versions[]=substr($hash,0,16);
     }
-    $data=json_encode(['guid'=>strtolower($guid),'versions'=>$versions],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
+    $data=json_encode(['guid'=>strtolower($guid),'versions'=>$versions,
+        'schoolSitePopup'=>$embedInfo['schoolSitePopup'],'campaigns'=>$embedInfo['campaigns']],
+        JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
     return '(function(){'."\n".
         'var current=document.currentScript;if(!current)return;'."\n".
         'var meta='.$data.';'."\n".
         'var base=new URL(current.src).origin+"/scrm";'."\n".
-        'var shortForm=current.getAttribute("data-schoolflow-form")==="short";'."\n".
+        // A plain legacy embed on a newly connected school website must not
+        // render a disabled detailed popup. Resolve the single matching active
+        // website campaign and use its short-popup GUID automatically. For zero
+        // or ambiguous matches, fail closed; admin can copy a specific campaign.
+        'var autoCampaign="";'."\n".
+        'if(meta.schoolSitePopup&&!current.hasAttribute("data-schoolflow-form")&&!current.hasAttribute("data-schoolflow-mode")&&!current.hasAttribute("data-schoolflow-popup-campaign")){'."\n".
+        'var here=new URL(location.href),path=here.pathname.replace(/\\/+$/,"")||"/";'."\n".
+        'var matches=function(prefix){return prefix==="/"||path===prefix||path.indexOf(prefix+"/")===0;};'."\n".
+        'var eligible=meta.campaigns.filter(function(x){try{var site=new URL(x.landing_page),page=site.pathname.replace(/\\/+$/,"")||"/";'."\n".
+        'if(site.origin!==here.origin)return false;'."\n".
+        'if(x.scope==="page")return path===page;'."\n".
+        'if(x.scope!=="website")return false;'."\n".
+        'var allowed=x.include_paths||[],blocked=x.exclude_paths||[];'."\n".
+        'return(!allowed.length||allowed.some(matches))&&!blocked.some(matches);'."\n".
+        '}catch(e){return false;}});'."\n".
+        'if(eligible.length!==1){console.warn("SchoolFlow: expected one eligible active website popup; use a specific campaign embed when none or multiple match.");return;}'."\n".
+        'autoCampaign=eligible[0].guid;'."\n".
+        '}'."\n".
+        'var shortForm=current.getAttribute("data-schoolflow-form")==="short"||!!autoCampaign;'."\n".
         'var script=document.createElement("script");script.async=true;'."\n".
         'script.src=shortForm?base+"/static/schoolflow-short-form.js?v="+meta.versions[4]:base+"/static/lexicon-form.js?v="+meta.versions[0];'."\n".
         'script.setAttribute("data-schoolflow-group",meta.guid);'."\n".
         '["data-schoolflow-mode","data-schoolflow-target","data-schoolflow-button","data-schoolflow-popup-campaign"].forEach(function(attr){var value=current.getAttribute(attr);if(value)script.setAttribute(attr,value);});'."\n".
+        'if(autoCampaign){script.setAttribute("data-schoolflow-mode","popup");script.setAttribute("data-schoolflow-popup-campaign",autoCampaign);}'."\n".
         'script.setAttribute("data-schoolflow-short-css-version",meta.versions[5]);'."\n".
         'script.setAttribute("data-schoolflow-form-css-version",meta.versions[1]);'."\n".
         'script.setAttribute("data-schoolflow-chat-version",meta.versions[2]);'."\n".
