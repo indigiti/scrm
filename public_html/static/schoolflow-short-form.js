@@ -263,8 +263,6 @@ function init(){
     campus.replaceChildren(new Option('Form unavailable on this page',''));
     if(mode==='popup'){
      outer.classList.remove('sf2-open');opened=false;
-     var existingButton=document.querySelector('[data-schoolflow-popup-guid="'+guid+'"]');
-     if(existingButton){/* Leave the mounted host intact for future authorised refreshes. */}
     }
     return error('This enquiry popup is not enabled for this website or page.');
    }
