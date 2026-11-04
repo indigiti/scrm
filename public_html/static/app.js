@@ -484,6 +484,7 @@ function landingPagesPage(){
     '<p class="sf-management-empty">No additional URLs approved. Visitors on the original registered domain can still use this form.</p>')+
    '<div class="button-row">'+btn('Manage approved URLs','edit-landing-pages','primary small','data-id="'+Number(g.id)+'"')+
    btn('Popup settings','edit-popup-settings','small','data-id="'+Number(g.id)+'"')+
+   btn('Copy inline code','copy-group-inline','small','type="button" data-id="'+Number(g.id)+'"')+
    btn('Submission & tracking','edit-submission-settings','small','data-id="'+Number(g.id)+'"')+
    btn('WhatsApp OTP','edit-form-otp-settings','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+
@@ -501,6 +502,7 @@ function popupCampaignsPage(){
     '<div class="sf-management-meta"><span>Trigger: '+esc(trigger)+'</span><span>Repeat: '+esc(p.repeat_after||'7')+' days / sessions</span></div>'+
     '<p class="sf-management-empty">Manual enquiry button stays available even if automatic triggers are disabled.</p>'+
     '<div class="button-row">'+btn('Configure campaign','edit-popup-settings','primary small','data-id="'+Number(g.id)+'"')+
+    btn('Copy popup code','copy-group-short-popup','small','type="button" data-id="'+Number(g.id)+'"')+
     btn('Approved landing pages','edit-landing-pages','small','data-id="'+Number(g.id)+'"')+'</div></section>';
   }).join('')+(!groups.length?'<div class="sf-management-card"><h3>No campaigns to configure</h3><p>Connect a group website to create its popup campaign.</p>'+btn('Connect group website','nav','primary small','data-page="Schools & Routing"')+'</div>':'')+'</div>';
 }
@@ -1587,11 +1589,15 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });
    return;
  }
- if(['copy-group-embed','copy-group-inline','copy-group-short-popup'].includes(action)){
+ if(['copy-group-embed','copy-group-inline','copy-group-short-popup','copy-group-conversion'].includes(action)){
    const group=ext.groupSites.find(x=>x.id===Number(el.dataset.id));if(!group?.guid){toast('Group GUID not available yet',true);return;}
    const code=action==='copy-group-inline'?sfGroupShortEmbed(group.guid,'inline'):
-      action==='copy-group-short-popup'?sfGroupShortEmbed(group.guid,'popup'):sfGroupEmbed(group.guid);
-   navigator.clipboard.writeText(code).then(()=>toast('SchoolFlow embed copied')).catch(()=>toast('Copy blocked by the browser; select the code on the card',true));return;
+      action==='copy-group-short-popup'?sfGroupShortEmbed(group.guid,'popup'):
+      action==='copy-group-conversion'?sfGroupConversionEmbed(group.guid):sfGroupEmbed(group.guid);
+   if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){
+     toast('Clipboard unavailable. Select the visible code and copy it manually.',true);return;
+   }
+   navigator.clipboard.writeText(code).then(()=>toast('Embed code copied')).catch(()=>toast('Clipboard blocked. Select the visible code and copy it manually.',true));return;
  }
  if(action==='copy-group-key'){navigator.clipboard.writeText(ext.groupKey).then(()=>toast('Group website key copied'));return;}
  if(action==='dismiss-group-key'){ext.groupKey='';render();return;}
