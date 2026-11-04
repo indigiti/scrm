@@ -20,6 +20,7 @@ function init(){
  if(mode==='popup')host.setAttribute('data-schoolflow-popup-guid',guid);
  if(mode==='popup')document.body.appendChild(host);
  var outer=document.createElement('div');outer.className='sf2 '+(mode==='popup'?'sf2-popup':'sf2-inline');
+ if(mode==='inline')outer.style.display='none';
  outer.innerHTML='<div class="sf2-panel" role="group" aria-label="Admission enquiry">'+
   (mode==='popup'?'<button type="button" class="sf2-close" aria-label="Close">×</button>':'')+
   '<h2>Admission Enquiry</h2><p>Get a call back from our admissions team.</p>'+
@@ -110,6 +111,11 @@ function init(){
    };
    document.addEventListener('mouseout',exitListener);
   }
+ }
+ function allowedSurface(data){
+  var policy=data.form_surfaces||{};
+  return mode==='inline'?policy.inline_enabled!==false:
+    (pagePopupGuid?true:policy.group_popup_enabled!==false);
  }
  function configurePagePopup(data){
   if(mode!=='popup')return true;
@@ -241,7 +247,8 @@ function init(){
  async function campuses(){
   campus.disabled=true;campus.replaceChildren(new Option('Loading campuses…',''));
   try{var d=await get('/config');
-   pageAllowed=approvedPage(d.landing_pages)&&configurePagePopup(d);
+   pageAllowed=approvedPage(d.landing_pages)&&allowedSurface(d)&&configurePagePopup(d);
+   if(mode==='inline')outer.style.display=pageAllowed?'':'none';
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
    if(!pageAllowed){campus.replaceChildren(new Option('Not approved on this page',''));
@@ -268,7 +275,7 @@ function init(){
  }
  if(mode==='popup'){
   var trigger=document.createElement('button');trigger.className='sf2-trigger';trigger.textContent=loader.dataset.schoolflowButton||'Enquire Now';
-  trigger.hidden=!!pagePopupGuid;
+  trigger.hidden=true;
   document.body.appendChild(trigger);trigger.addEventListener('click',function(){popupTrigger='manual';open();});
   outer.querySelector('.sf2-close').addEventListener('click',close);
   outer.addEventListener('click',function(e){if(e.target===outer)close();});
@@ -284,7 +291,7 @@ function init(){
   });
   get('/config').then(function(d){
    configLoaded=true;
-   pageAllowed=approvedPage(d.landing_pages)&&configurePagePopup(d);
+   pageAllowed=approvedPage(d.landing_pages)&&allowedSurface(d)&&configurePagePopup(d);
    submissionSettings=d.submission_settings||null;
    useOtpSettings(d.otp);
    trigger.hidden=!pageAllowed;
