@@ -2,8 +2,8 @@
 'use strict';
 const root=document.getElementById('root');
 const APP_BASE=(window.SCHOOLFLOW_BASE_PATH||'/scrm').replace(/\/$/,'');
-const PAGES=['Dashboard','My Work','Enquiries','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Admission Register','Schools & Routing','Team','Import Enquiries','Seat Planning','Enquiry Interface'];
-const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Admission Register':'▦','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦','Enquiry Interface':'⚙'};
+const PAGES=['Dashboard','My Work','Enquiries','Master Leads','Pipeline','Follow-ups','Tasks','School Visits','Families','Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads','Communications','Email Templates','Automations','Admissions AI','Reports','Admission Register','Schools & Routing','Team','Import Enquiries','Seat Planning','Enquiry Interface'];
+const ICONS={'Dashboard':'▦','My Work':'☑','Enquiries':'♧','Master Leads':'▦','Chatbot Leads':'☏','Pipeline':'▥','Follow-ups':'▣','Tasks':'☷','Websites & Forms':'◉','Landing Pages':'▤','Popup Campaigns':'◧','Schools & Routing':'▤','School Visits':'▣','Families':'♧','Email Templates':'✉','Communications':'☏','Automations':'⏰','Team':'♙','Reports':'◫','Admission Register':'▦','Import Enquiries':'⇧','Seat Planning':'▤','Admissions AI':'✦','Enquiry Interface':'⚙'};
 const STAGES=['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
 
 const PHASES=['Enquiry','Engagement','Application','Admission','Exceptions'];
@@ -21,14 +21,14 @@ const NAV_SECTIONS=[
  ['LEAD CAPTURE',['Websites & Forms','Landing Pages','Popup Campaigns','Chatbot Leads']],
  ['ENGAGEMENT',['Communications','Email Templates','Admissions AI','Automations']],
  ['INSIGHTS',['Reports','Admission Register']],
- ['ADMINISTRATION',['Schools & Routing','Team','Enquiry Interface','Seat Planning','Import Enquiries']]
+ ['ADMINISTRATION',['Master Leads','Schools & Routing','Team','Enquiry Interface','Seat Planning','Import Enquiries']]
 ];
 
 const TEMPERATURES=['Unrated','Hot','Warm','Cold'];
 const CONTACT_STATES=['Pending Contact','Attempted','Connected','Awaiting Parent Response','Callback Requested','Unresponsive','No Action Required'];
 const LOST_REASONS=['','Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Other'];
 const state={stagingResetPreview:null,token:sessionStorage.getItem('schoolflow_session')||'',setup:null,me:null,schoolId:null,page:PAGES.includes(sessionStorage.getItem('schoolflow_last_page'))?sessionStorage.getItem('schoolflow_last_page'):'Dashboard',leads:[],sites:[],members:[],modal:'',detail:null,demo:null,audit:null,search:'',status:'All',siteFilter:'All',key:'',error:'',notice:'',loading:false};
-const ext={navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,enquirySettingsTab:'communication',detailTab:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
+const ext={masterReport:null,masterFilters:{},masterPage:1,masterLoading:false,masterRequest:0,navExpanded:{'ADMISSIONS':true},messaging:{email:{connected:false,provider:'off',from:''},whatsapp:{connected:false,provider:'off',template:'',phone_number_id:'',language:'en_US'}},schoolsOverview:[],groupSites:[],groupKey:'',editGroupId:null,autoPolicy:{enabled:false,email:false,whatsapp:false,task_kinds:['Follow-up','Campus Visit'],max_daily:10},autoQueue:[],workQueue:{items:[],summary:{},total:0},followupPolicy:{retry_days:[1,2,4]},tasks:[],applications:[],visits:[],families:[],templates:[],analytics:{},enquiryPanels:null,enquirySettingsTab:'communication',detailTab:null,campaignReport:null,campaignFilters:{},registerReport:null,registerView:'enquiries',registerFilters:{},registerPage:1,registerLoading:false,registerRequest:0,detailOpen:{},detailAudit:null,schoolAuditOpen:false,assignment:{mode:'least_loaded'},assignedFilter:'All',dueFilter:'All',contactFilter:'All',temperatureFilter:'All',sourceTypeFilter:'All',formTypeFilter:'All',importUpload:null,importPreview:null,lastImport:null,seatPlans:[],responseSla:{first_contact_minutes:120},resetResult:null,editMemberId:null,linkCandidates:[],editSiteId:null,editSchoolId:null,visitMonth:new Date().toISOString().slice(0,7),chatSettings:null,chatProvider:null,chatProviderTest:null,chatQueue:[],chatGroups:[]};
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const initials=(str)=>String(str||'?').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase();
 const dateFmt=(s)=>s?new Date(s+'T12:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not scheduled';
@@ -37,6 +37,7 @@ const day=()=>{let d=new Date();return `${d.getFullYear()}-${String(d.getMonth()
 const school=()=>state.me?.schools.find(s=>s.id===state.schoolId)||state.me?.schools[0];
 const role=()=>school()?.role||'';
 const isAdmin=()=>role()==='Admin';
+const canMaster=()=>!!state.me?.schools?.some(x=>x.role==='Admin');
 const canImport=()=>['Admin','Admissions'].includes(role());
 const canManageSchools=()=>isAdmin();
 const userName=id=>state.members.find(m=>m.id===id)?.name||'Unassigned';
@@ -77,7 +78,8 @@ async function initialize(){
  if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
  if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();
  if(state.page==='Reports')await loadCampaignReport();
- if(state.page==='Admission Register')await loadAdmissionRegister();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
+ if(state.page==='Admission Register')await loadAdmissionRegister();
+ if(state.page==='Master Leads')await loadMasterLeads();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
  if(!state.schoolId){render();return;}
@@ -107,8 +109,10 @@ function loginPage(){const isSetup=state.setup?.needs_setup;
 }
 const NAV_SVG={"Dashboard":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"1\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"1\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"1\"/>","My Work":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h8M8 12h4m-4 4 2 2 4-4\"/>","Enquiries":"<path d=\"M5 21h14M7 17v-3a5 5 0 0 1 10 0v3M9 7a3 3 0 0 1 6 0\"/>","Chatbot Leads":"<rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"3\"/><path d=\"M12 3v4M8 13h.01M16 13h.01M8 17h8\"/>","Pipeline":"<rect x=\"2\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"9.5\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/><rect x=\"17\" y=\"4\" width=\"5\" height=\"16\" rx=\"1\"/>","Follow-ups":"<path d=\"M21 12a9 9 0 1 1-3-6.7M21 4v6h-6M12 7v5l3 2\"/>","Tasks":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8M14 9h3m-9 7 1.5 1.5L12 15m2 1h3\"/>","Websites & Forms":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18M12 3c4 4 4 14 0 18M12 3c-4 4-4 14 0 18\"/>","Landing Pages":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 9h8M8 13h5M9 17h6\"/>","Popup Campaigns":"<path d=\"M3 11l15-6v14L3 13zM3 11v2M7 14l2 6h3l-2-5\"/>","Sign out":"<path d=\"M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6\"/>","Schools & Routing":"<path d=\"m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8\"/>","School Visits":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18M8 15h3m-3 3h3\"/>","Families":"<path d=\"M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 20v-2a4 4 0 0 0-3-3.9M16 4.2a3 3 0 0 1 0 5.6\"/>","Email Templates":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 7 9 7 9-7\"/>","Communications":"<path d=\"M21 11a8 8 0 0 1-8 8H8l-5 3v-6a8 8 0 1 1 18-5z\"/>","Automations":"<path d=\"m4 4 4 0 0 4M20 20h-4v-4M7 17a8 8 0 0 0 13-4M17 7A8 8 0 0 0 4 11M12 8v4l3 2\"/>","Team":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6M20 20v-2a5 5 0 0 0-3-4.6\"/>","Reports":"<path d=\"M4 20V10M10 20V4M16 20v-8M22 20v-5M2 20h21\"/>","Import Enquiries":"<path d=\"M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4\"/>","Seat Planning":"<path d=\"M4 21v-7m16 7v-7M4 18h16M6 14V7a3 3 0 0 1 6 0v7M12 14V7a3 3 0 0 1 6 0v7\"/>","Admissions AI":"<path d=\"m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z\"/>","Enquiry Interface":"<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/><path d=\"M8 9h8m-8 4h8m-8 4h5\"/>"};
 NAV_SVG['Admission Register']=NAV_SVG['Enquiries'];
+NAV_SVG['Master Leads']=NAV_SVG['Enquiries'];
 function navIcon(page){return `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_SVG[page]||NAV_SVG.Dashboard}</svg>`;}
 function canSeePage(p){
+ if(p==='Master Leads')return canMaster();
  return !((['Schools & Routing','Landing Pages','Popup Campaigns'].includes(p)&&!canManageSchools())||
   (['Automations','Seat Planning','Admissions AI'].includes(p)&&!isAdmin())||
   (p==='Import Enquiries'&&!canImport())||(p==='Enquiry Interface'&&!isAdmin()));
@@ -223,6 +227,49 @@ function dashboard(){
 function enquiries(){let leads=state.leads.filter(l=>(state.status==='All'||l.status===state.status)&&(state.siteFilter==='All'||String(l.site_id)===state.siteFilter)&&(ext.sourceTypeFilter==='All'||(l.source_type||'other')===ext.sourceTypeFilter)&&(ext.formTypeFilter==='All'||(l.form_type||'unknown')===ext.formTypeFilter)&&(ext.temperatureFilter==='All'||(l.temperature||'Unrated')===ext.temperatureFilter)&&(!state.search||[l.name,l.guardian,l.phone,l.grade,l.email].join(' ').toLowerCase().includes(state.search.toLowerCase()))&&(ext.assignedFilter==='All'||(ext.assignedFilter==='Unassigned'?!l.assigned_to:String(l.assigned_to)===ext.assignedFilter))&&(ext.contactFilter==='All'||(ext.contactFilter==='Pending'?!l.last_successful_contact_at:!!l.last_successful_contact_at))&&(ext.dueFilter==='All'||(ext.dueFilter==='Overdue'?!!l.followup_date&&l.followup_date<day():ext.dueFilter==='Today'?l.followup_date===day():ext.dueFilter==='Upcoming'?l.followup_date>day():!l.followup_date)));
  return `${pageHead('Enquiries', 'Search, assign and track school admissions enquiries.',btn('＋ Add enquiry','new-lead','primary')+btn('⇩ Export Excel','export-xlsx','primary')+btn('CSV','export-csv','small'))}<div class="filters button-row"><input id="q" type="search" placeholder="Search name, guardian, phone or class" value="${esc(state.search)}"><select id="statusFilter">${['All',...STAGES].map(s=>option(s,s==='All'?'All stages':s,state.status)).join('')}</select><select id="siteFilter">${option('All','All sources',state.siteFilter)}${state.sites.map(s=>option(s.id,s.name,state.siteFilter)).join('')}</select><select id="sourceTypeFilter">${option('All','All origin types',ext.sourceTypeFilter)}${[['group_website','Group website'],['individual_website','Individual website'],['chatbot','AI chatbot'],['manual','Manual'],['import','Imported'],['other','Other']].map(([v,t])=>option(v,t,ext.sourceTypeFilter)).join('')}</select><select id="formTypeFilter">${option('All','All form surfaces',ext.formTypeFilter)}${[['inline','Inline'],['popup','Popup'],['chat','Chat'],['api','Website API'],['manual','Manual'],['unknown','Unknown / legacy']].map(([v,t])=>option(v,t,ext.formTypeFilter)).join('')}</select><select id="assignedFilter">${option('All','All counsellors',ext.assignedFilter)}${option('Unassigned','Unassigned',ext.assignedFilter)}${state.members.map(m=>option(m.id,m.name,ext.assignedFilter)).join('')}</select><select id="dueFilter">${['All','Overdue','Today','Upcoming','Unscheduled'].map(x=>option(x,x==='All'?'All follow-ups':x,ext.dueFilter)).join('')}</select><select id="temperatureFilter">${['All',...TEMPERATURES].map(t=>option(t,t==='All'?'All temperatures':t,ext.temperatureFilter)).join('')}</select><select id="contactFilter">${option('All','All contact status',ext.contactFilter)}${option('Pending','Never contacted',ext.contactFilter)}${option('Contacted','Previously contacted',ext.contactFilter)}</select><span class="muted-note">${leads.length} result(s)</span></div>${leadTable(leads)}`;
 }
+
+async function loadMasterLeads(){
+ if(!canMaster())return;
+ const request=++ext.masterRequest;
+ ext.masterLoading=true;
+ try{
+  const query=new URLSearchParams({page:String(ext.masterPage),per_page:'50'});
+  for(const k of ['school_id','assigned_to','status','search','from','to','due']){
+   const v=ext.masterFilters[k];if(v&&v!=='all')query.set(k,String(v));
+  }
+  const result=await api('/api/admin/master-leads?'+query.toString());
+  if(ext.masterRequest===request)ext.masterReport=result;
+ }finally{if(ext.masterRequest===request){ext.masterLoading=false;render();}}
+}
+function masterLeadsPage(){
+ if(!canMaster())return pageHead('Master Leads','Administrator access required');
+ const r=ext.masterReport, f=ext.masterFilters, summary=r?.summary||{};
+ const choose=(name,title,items)=>'<label class="sf-master-field">'+esc(title)+'<select name="'+name+'">'+
+  items.map(v=>option(v[0],v[1],f[name]||'all')).join('')+'</select></label>';
+ const fields=choose('school_id','Campus',[['all','All authorized campuses'],...(r?.schools||[]).map(v=>[v.id,v.name])])+
+  choose('assigned_to','Salesperson',[['all','All salespeople'],['unassigned','Unassigned'],...(r?.staff||[]).map(v=>[v.id,v.name])])+
+  choose('status','Stage',[['all','All stages'],...STAGES.map(v=>[v,v])])+
+  choose('due','Follow-up',[['all','All follow-ups'],['overdue','Overdue'],['today','Today'],['upcoming','Upcoming'],['unscheduled','Unscheduled']])+
+  '<label class="sf-master-field">Search<input type="search" name="search" maxlength="180" placeholder="Student, guardian, phone or lead ID" value="'+esc(f.search||'')+'"></label>'+
+  '<label class="sf-master-field">From<input type="date" name="from" value="'+esc(f.from||'')+'"></label>'+
+  '<label class="sf-master-field">To<input type="date" name="to" value="'+esc(f.to||'')+'"></label>';
+ const rows=(r?.rows||[]).map(l=>'<tr><td><strong>'+esc(l.name)+'</strong><small>#'+Number(l.id)+' · '+esc(l.grade||'')+
+  '</small></td><td>'+esc(l.guardian||'')+'<small>'+esc(l.phone||'')+'</small></td><td>'+esc(l.school_name)+
+  '</td><td>'+esc(l.assigned_name||'Unassigned')+'</td><td>'+stageBadge(l.status)+'</td><td>'+esc(dateFmt(l.followup_date))+
+  '</td><td><button type="button" class="btn small" data-action="master-open-lead" data-school-id="'+Number(l.school_id)+
+  '" data-id="'+Number(l.id)+'">View →</button></td></tr>').join('');
+ return pageHead('Master Leads','Consolidated enquiries across campuses you administer. Open any lead in the existing detail drawer.')+
+  '<div class="stats sf-master-stats">'+[['Total',r?.total??'—'],['New',summary.new??'—'],['Unassigned',summary.unassigned??'—'],['Follow-ups due',summary.followups_due??'—'],['Converted',summary.converted??'—']].map(v=>stat(v[0],v[1],'Filtered results','▦')).join('')+'</div>'+
+  '<form id="masterLeadFilters" class="panel sf-master-filters"><div class="sf-master-filter-grid">'+fields+'</div>'+
+  '<div class="button-row"><button type="submit" class="btn primary">Apply filters</button>'+
+  btn('Clear','master-clear','small')+btn('Refresh','master-refresh','small')+'</div></form>'+
+  '<div class="panel"><div class="table-scroll"><table class="lead-table sf-master-table"><thead><tr><th>Student</th><th>Guardian / phone</th><th>Campus</th><th>Salesperson</th><th>Stage</th><th>Follow-up</th><th>Action</th></tr></thead><tbody>'+
+  (rows||'<tr><td colspan="7">'+(ext.masterLoading?'Loading leads…':'No matching leads')+'</td></tr>')+'</tbody></table></div></div>'+
+  '<div class="sf-master-pager"><span>'+(ext.masterLoading?'Loading…':String(r?.total??0)+' leads · Page '+String(r?.page??1)+' of '+String(r?.pages??1))+
+  '</span><div class="button-row"><button type="button" class="btn small" data-action="master-prev" '+(!r||r.page<=1||ext.masterLoading?'disabled':'')+'>Previous</button>'+
+  '<button type="button" class="btn small" data-action="master-next" '+(!r||r.page>=r.pages||ext.masterLoading?'disabled':'')+'>Next</button></div></div>';
+}
+
 function chatbotLeads(){
  const all=state.leads.filter(l=>!!l.chatbot_lead ||
    ['admissions_guided_chat','public_admissions_chat'].includes(l.utm_source));
@@ -1329,7 +1376,7 @@ function render(){if(state.setup===null){root.innerHTML='<div class="login-wrap"
   input('Confirm new password','confirm_password','password','',true)+
   '<button class="btn primary full-btn" type="submit">Save new password</button></form><button class="btn small" data-action="logout">Sign out</button></div></div>';return;
  }
- const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Admission Register':admissionRegisterPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
+ const pages={'Dashboard':dashboard,'My Work':myWork,'Enquiries':enquiries,'Master Leads':masterLeadsPage,'Chatbot Leads':chatbotLeads,'Pipeline':pipeline,'Follow-ups':followups,'Tasks':tasksPage,'Websites & Forms':sitesPage,'Landing Pages':landingPagesPage,'Popup Campaigns':popupCampaignsPage,'Schools & Routing':routingPage,'School Visits':schoolVisits,'Families':familyPage,'Email Templates':templatesPage,'Communications':communicationsPage,'Automations':automationsPage,'Team':teamPage,'Enquiry Interface':enquiryInterfacePage,'Reports':reportsPage,'Admission Register':admissionRegisterPage,'Import Enquiries':importPage,'Seat Planning':seatPlanning,'Admissions AI':publicChatPage};
  root.innerHTML=`<div class="app">${nav()}<button type="button" class="nav-scrim" data-action="close-menu" aria-label="Close navigation"></button><div class="main">${topbar()}<main class="content">${(pages[state.page]||dashboard)()}</main></div></div>${modal()}${detailDrawer()}`;
 }
 async function loadRouting(){
@@ -1664,6 +1711,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
   if((el.dataset.page||'Enquiries')!=='Team')ext.resetResult=null;state.page=el.dataset.page||'Enquiries';sessionStorage.setItem('schoolflow_last_page',state.page);state.search='';state.status='All';state.modal='';state.detail=null;
    if(state.page==='Reports'){ext.campaignReport=null;perform(loadCampaignReport);}
    if(state.page==='Admission Register'){ext.registerReport=null;ext.registerPage=1;perform(loadAdmissionRegister);}
+   if(state.page==='Master Leads'){ext.masterReport=null;ext.masterPage=1;perform(loadMasterLeads);}
    if(state.page==='Reports' && isAdmin()){state.audit=null;ext.schoolAuditOpen=false;}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
@@ -1868,6 +1916,24 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    const next=await api(`/api/schools/${state.schoolId}/leads/${leadId}/audit?before=${ext.detailAudit.next_before}`);
    ext.detailAudit={forLeadId:leadId,events:[...ext.detailAudit.events,...next.events],has_more:next.has_more,next_before:next.next_before};render();
  });return;}
+ if(action==='master-refresh'){perform(loadMasterLeads);return;}
+ if(action==='master-clear'){ext.masterFilters={};ext.masterPage=1;ext.masterReport=null;perform(loadMasterLeads);return;}
+ if(action==='master-prev'||action==='master-next'){
+  if(!ext.masterReport||ext.masterLoading)return;
+  const p=ext.masterPage+(action==='master-next'?1:-1);
+  if(p<1||p>ext.masterReport.pages)return;
+  ext.masterPage=p;perform(loadMasterLeads);return;
+ }
+ if(action==='master-open-lead'){
+  const sid=Number(el.dataset.schoolId),lid=Number(el.dataset.id);
+  if(!state.me?.schools?.some(x=>x.id===sid&&x.role==='Admin'))return toast('Campus access denied',true);
+  perform(async()=>{
+   if(state.schoolId!==sid){state.schoolId=sid;sessionStorage.setItem('schoolflow_school',String(sid));state.detail=null;await reload();}
+   ext.detailOpen={};ext.detailAudit=null;
+   const url='/api/schools/'+sid+'/leads/'+lid;
+   await api(url+'/view','POST',{});state.detail=await api(url);render();
+  });return;
+ }
  if(action==='register-refresh'){perform(loadAdmissionRegister);return;}
  if(action==='register-view'){
   const v=el.dataset.view;if(!['enquiries','history','performance'].includes(v))return;
@@ -2000,7 +2066,7 @@ root.addEventListener('change',e=>{
  if(e.target.id==='schoolSelect'){ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));
   ext.groupSites=[];ext.schoolsOverview=[];ext.editGroupId=null;ext.chatGroups=[];
   state.key='';state.detail=null;state.modal='';
-  state.page='Dashboard';perform(reload);}
+  state.page='Dashboard';ext.masterReport=null;ext.masterRequest++;perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
@@ -2013,6 +2079,11 @@ root.addEventListener('input',e=>{
  if(e.target.id==='q'){const p=e.target.selectionStart;state.search=e.target.value;render();const q=root.querySelector('#q');q?.focus();q?.setSelectionRange(p,p);}
 });
 root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Object.fromEntries(new FormData(f));
+ if(f.id==='masterLeadFilters'){
+  if(!canMaster())return;
+  ext.masterFilters=Object.fromEntries(Object.entries(fd).filter(([,v])=>String(v).trim()!==''));
+  ext.masterPage=1;ext.masterReport=null;perform(loadMasterLeads);return;
+ }
  if(f.id==='admissionRegisterFilters'){
   ext.registerFilters=Object.fromEntries(Object.entries(fd).filter(([,v])=>String(v).trim()!==''));
   ext.registerPage=1;ext.registerReport=null;perform(loadAdmissionRegister);return;

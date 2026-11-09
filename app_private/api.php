@@ -617,6 +617,132 @@ function sf_github_owner_verified(string $token): bool {
 }
 
 /** Route return form: [HTTP status, data]. All mutations run inside exclusive file lock. */
+
+/**
+ * Unified read-only lead register for administrators of one or more campuses.
+ * Admin permissions are resolved on the server for every request; this is not
+ * a platform-wide superuser and never includes unrelated school records.
+ */
+function sf_master_leads_report(array $s, int $uid, string $uri): array {
+    $rawQuery=parse_url($uri,PHP_URL_QUERY)?:'';
+    if(strlen($rawQuery)>2400)sf_fail(422,'Too many lead filters');
+    parse_str($rawQuery,$raw);
+    $accepted=['school_id','assigned_to','status','search','from','to','due','page','per_page','sort','direction'];
+    foreach($raw as $key=>$value){
+        if(!in_array($key,$accepted,true)||!is_string($value)||strlen($value)>180)
+            sf_fail(422,'Invalid master lead filter');
+    }
+    $home=sf_staff_counsellor_school($s,$uid);
+    $allowed=[];
+    foreach($s['memberships'] as $membership){
+        if((int)$membership['user_id']!==$uid||($membership['role']??'')!=='Admin'||
+           !sf_staff_enabled($membership))continue;
+        $sid=(int)$membership['school_id'];
+        if($home!==null&&$home!==$sid)continue;
+        $school=sf_find($s['schools'],$sid);
+        if($school)$allowed[$sid]=(string)$school['name'];
+    }
+    if(!$allowed)sf_fail(403,'Only authorized school administrators can view master leads');
+    $campus=$raw['school_id']??'all';
+    if($campus!=='all'){
+        if(!ctype_digit($campus)||!isset($allowed[(int)$campus]))
+            sf_fail(403,'You cannot view this campus');
+        $allowed=[(int)$campus=>$allowed[(int)$campus]];
+    }
+    $assigned=$raw['assigned_to']??'all';
+    if($assigned!=='all'&&$assigned!=='unassigned'&&
+       (!ctype_digit($assigned)||(int)$assigned<=0))sf_fail(422,'Invalid salesperson');
+    $status=$raw['status']??'all';
+    if($status!=='all'&&!in_array($status,SF_STAGES,true))sf_fail(422,'Invalid enquiry stage');
+    $due=$raw['due']??'all';
+    if(!in_array($due,['all','overdue','today','upcoming','unscheduled'],true))
+        sf_fail(422,'Invalid follow-up filter');
+    $from=$raw['from']??'';$to=$raw['to']??'';
+    if($from!=='')sf_date($from);
+    if($to!=='')sf_date($to);
+    if($from!==''&&$to!==''&&$from>$to)sf_fail(422,'Invalid date range');
+    $search=trim($raw['search']??'');
+    $sort=$raw['sort']??'created';
+    if(!in_array($sort,['created','followup','name'],true))sf_fail(422,'Invalid sorting');
+    $direction=$raw['direction']??'desc';
+    if(!in_array($direction,['asc','desc'],true))sf_fail(422,'Invalid sorting direction');
+    foreach(['page','per_page'] as $key)if(isset($raw[$key])&&!preg_match('/^[1-9][0-9]{0,5}$/D',$raw[$key]))
+        sf_fail(422,'Invalid pagination');
+    $page=(int)($raw['page']??1);$perPage=(int)($raw['per_page']??50);
+    if($perPage>100||$page>100000)sf_fail(422,'Pagination out of range');
+    $today=(new DateTimeImmutable('now',new DateTimeZone('Asia/Kolkata')))->format('Y-m-d');
+    $matches=[];$summary=['new'=>0,'unassigned'=>0,'followups_due'=>0,'converted'=>0];
+    foreach($s['leads'] as $lead){
+        $sid=(int)($lead['school_id']??0);
+        if(!isset($allowed[$sid]))continue;
+        $owner=(int)($lead['assigned_to']??0);
+        if($assigned==='unassigned'&&$owner!==0)continue;
+        if($assigned!=='all'&&$assigned!=='unassigned'&&$owner!==(int)$assigned)continue;
+        if($status!=='all'&&($lead['status']??'')!==$status)continue;
+        $created=sf_register_ist_date((string)($lead['created_at']??''));
+        if($from!==''&&$created<$from)continue;
+        if($to!==''&&$created>$to)continue;
+        $followup=(string)($lead['followup_date']??'');
+        if($due==='unscheduled'&&$followup!=='')continue;
+        if($due==='today'&&$followup!==$today)continue;
+        if($due==='overdue'&&($followup===''||$followup>=$today))continue;
+        if($due==='upcoming'&&($followup===''||$followup<=$today))continue;
+        if($due!=='all'&&$due!=='unscheduled'&&
+           in_array($lead['status']??'', ['Enrolled','Lost','Not Eligible','Duplicate / Invalid','Admission Confirmed'],true))continue;
+        if($search!==''){
+            $haystack=implode(' ',array_map('strval',[
+                $lead['name']??'', $lead['guardian']??'', $lead['phone']??'',
+                $lead['email']??'', $lead['grade']??'', $lead['id']??''
+            ]));
+            if(stripos($haystack,$search)===false)continue;
+        }
+        $matches[]=$lead;
+        if(in_array($lead['status']??'',['New','New Enquiry'],true))$summary['new']++;
+        if($owner===0)$summary['unassigned']++;
+        if(in_array($lead['status']??'',['Enrolled','Admission Confirmed'],true))$summary['converted']++;
+        if($followup!==''&&$followup<=$today&&
+           !in_array($lead['status']??'',['Enrolled','Lost','Not Eligible','Duplicate / Invalid','Admission Confirmed'],true))
+            $summary['followups_due']++;
+    }
+    $sortField=['created'=>'created_at','followup'=>'followup_date','name'=>'name'][$sort];
+    usort($matches,static function(array $a,array $b)use($sortField,$direction):int{
+        $value=strcmp((string)($a[$sortField]??''),(string)($b[$sortField]??''));
+        if($value===0)$value=((int)$a['id'])<=>((int)$b['id']);
+        return $direction==='asc'?$value:-$value;
+    });
+    $total=count($matches);
+    $rows=[];
+    foreach(array_slice($matches,($page-1)*$perPage,$perPage) as $lead){
+        $view=sf_lead_view($s,$lead);
+        $rows[]=[
+            'id'=>$view['id'],'guid'=>$view['guid']??null,
+            'school_id'=>$view['school_id'],'school_name'=>$allowed[(int)$view['school_id']],
+            'name'=>$view['name'],'guardian'=>$view['guardian']??'',
+            'phone'=>$view['phone']??'','grade'=>$view['grade']??'',
+            'status'=>$view['status']??'','source_name'=>$view['source_name']??'',
+            'assigned_to'=>$view['assigned_to']??null,'assigned_name'=>$view['assigned_name']??null,
+            'followup_date'=>$view['followup_date']??'','created_at'=>$view['created_at']??''
+        ];
+    }
+    $staffIds=[];
+    foreach($s['memberships'] as $m)if(isset($allowed[(int)$m['school_id']])&&
+        sf_staff_enabled($m))$staffIds[(int)$m['user_id']]=true;
+    foreach($s['leads'] as $l)if(isset($allowed[(int)($l['school_id']??0)])&&
+        !empty($l['assigned_to']))$staffIds[(int)$l['assigned_to']]=true;
+    $staff=[];
+    foreach(array_keys($staffIds) as $id){
+        $member=sf_user($s,$id);
+        if($member)$staff[]=['id'=>$id,'name'=>$member['name']];
+    }
+    usort($staff,static fn(array $a,array $b):int=>strnatcasecmp($a['name'],$b['name']));
+    $schools=[];
+    foreach($allowed as $id=>$name)$schools[]=['id'=>$id,'name'=>$name];
+    usort($schools,static fn(array $a,array $b):int=>strnatcasecmp($a['name'],$b['name']));
+    return ['rows'=>$rows,'total'=>$total,'page'=>$page,'per_page'=>$perPage,
+        'pages'=>max(1,(int)ceil($total/$perPage)),'summary'=>$summary,
+        'schools'=>$schools,'staff'=>$staff];
+}
+
 function sf_handle(string $method, string $uri, array $payload, array $headers, string $ip, SchoolFlowStore $store, ?callable $ownerVerifier = null, ?callable $messageTransport = null): array {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     if ($path === '/health/ready' && $method === 'GET')return $store->transaction(static function(array $s):array {
@@ -799,6 +925,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(403,'Change your temporary password before using the CRM');
         if($path==='/api/me/password' && $method==='POST')return [200,sf_staff_change_own_password($s,$uid,$payload)];
         if($path==='/api/admin/staging-reset')return sf_web_stage_handle($s,$user,$method,$payload,$store);
+        if($path==='/api/admin/master-leads'){
+            if($method!=='GET')sf_fail(405,'Master leads is read-only');
+            return [200,sf_master_leads_report($s,$uid,$uri)];
+        }
         // School URLs accept GUIDs without changing legacy numeric IDs or internal relations.
         if(preg_match('#^/api/schools/([0-9a-f-]{36})(/.*)?$#iD',$path,$sr)){
             $canonical=sf_record_id($s,'schools',$sr[1]);
