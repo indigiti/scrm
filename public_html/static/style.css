@@ -687,3 +687,14 @@ body{background:#f4f7fb;color:#182b43}
 #pagePopupForm .sf-popup-save-bar{position:sticky;bottom:-1px;z-index:2;justify-content:flex-end;padding:13px 12px;margin:8px -12px -12px;background:rgba(255,255,255,.97);border-top:1px solid #e4e8f3;backdrop-filter:blur(12px)}
 #pagePopupForm .sf-popup-save-bar .btn{min-height:40px}
 @media(max-width:620px){.modal:has(#pagePopupForm){max-height:94vh}.modal:has(#pagePopupForm) .two-cols{grid-template-columns:1fr}#pagePopupForm .sf-popup-save-bar{margin-left:-8px;margin-right:-8px}}
+
+/* Master Admin: consolidated leads, scoped to authorized campuses. */
+.sf-master-filters{padding:18px;margin:0 0 20px}
+.sf-master-filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:14px}
+.sf-master-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--muted,#56627a)}
+.sf-master-field input,.sf-master-field select{width:100%;min-width:0;max-width:100%;height:40px;padding:8px 10px;border:1px solid #d5dce8;border-radius:8px;background:#fff;color:#1c2738;font:inherit;font-size:13px}
+.sf-master-field input:focus,.sf-master-field select:focus{outline:2px solid #5c81e8;outline-offset:1px}
+.sf-master-stats{margin:0 0 18px}
+.sf-master-table td small{display:block;margin-top:4px;color:#68758d}
+.sf-master-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 24px;font-size:13px;color:#56627a}
+@media(max-width:620px){.sf-master-filters{padding:12px}.sf-master-filter-grid{grid-template-columns:1fr}.sf-master-pager{align-items:flex-start;flex-direction:column}}
