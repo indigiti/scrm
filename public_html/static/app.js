@@ -1130,6 +1130,45 @@ function enquirySnapshot(l){
   <div class="sf-lead-landing"><span>Landing URL</span> ${landingHref?`<a href="${landingHref}" target="_blank" rel="noopener noreferrer" title="${esc(landing)}">${esc(landing)}</a>`:`<span title="${esc(landing)}">${esc(landing)}</span>`}</div>
  </section>`;
 }
+/** Follow-up V2: one atomic save instead of a call + separate temperature PATCH. */
+function followupWorkspace(d){
+ const l=d.lead;
+ const active=l.status==='Not Eligible'?'Disqualified':
+   (['Hot','Warm','Cold'].includes(l.temperature)?l.temperature:'');
+ const outcomes=['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'];
+ const outcomesMarkup=outcomes.map(value=>'<label class="sf-outcome-option"><input type="radio" name="outcome" value="'+esc(value)+'" required><span>'+esc(value)+'</span></label>').join('');
+ const dispositions=['Hot','Warm','Cold','Disqualified'];
+ const emojis={Hot:'♨',Warm:'☀',Cold:'❄',Disqualified:'⊘'};
+ const dispositionMarkup=dispositions.map(value=>'<button type="button" class="sf-disposition-choice'+(value===active?' selected':'')+'" data-action="followup-pick-disposition" data-value="'+value+'" aria-pressed="'+String(value===active)+'"><span aria-hidden="true">'+emojis[value]+'</span>'+esc(value)+'</button>').join('');
+ const reasons=['Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Not eligible','Other'];
+ const currentReason=l.status==='Not Eligible'?(l.disqualification_reason||''):'';
+ const reasonOptions='<option value="">Select reason</option>'+reasons.map(value=>'<option value="'+esc(value)+'"'+(value===currentReason?' selected':'')+'>'+esc(value)+'</option>').join('');
+ const previousCalls=(d.calls||[]).slice(0,6).map(call=>'<div class="sf-call-entry"><strong>'+esc(call.outcome)+'</strong><span>'+esc(auditStamp(call.created_at))+'</span><p>'+esc(call.note||'No summary (historical call)')+'</p></div>').join('');
+ const visits=(d.visits||[]).map(v=>'<div class="sf-call-entry">'+esc(v.starts_at?.replace('T',' ')||'')+' · '+esc(v.purpose||'Campus visit')+' · '+esc(v.status||'')+'</div>').join('');
+ return '<section class="sf-followup-v2" aria-label="Follow-up call and lead disposition">'+
+   '<form id="followupV2Form">'+
+   '<fieldset class="sf-v2-fieldset"><legend>Call outcome <span class="sf-required">*</span></legend><div class="sf-call-options">'+outcomesMarkup+'</div></fieldset>'+
+   '<div class="sf-followup-field"><label for="sfCallSummary">Call summary <span class="sf-required">*</span></label><textarea id="sfCallSummary" name="note" required minlength="8" maxlength="1000" rows="3" placeholder="Record the conversation, parent response and next action…"></textarea><small>At least 8 characters. Saved in the call history.</small></div>'+
+   '<div class="sf-followup-field"><label for="sfNextFollowup">Next follow-up date</label><input id="sfNextFollowup" name="followup_date" type="date" value="'+esc(l.followup_date||'')+'"></div>'+
+   '<fieldset class="sf-v2-fieldset"><legend>Lead temperature / disposition <span class="sf-required">*</span></legend><div class="sf-disposition-grid">'+dispositionMarkup+'</div></fieldset>'+
+   '<input type="hidden" name="disposition" value="'+esc(active)+'">'+
+   '<input type="hidden" name="disqualification_reason" value="'+esc(currentReason)+'">'+
+   '<input type="hidden" name="disqualification_note" value="'+esc(l.status==='Not Eligible'?(l.disqualification_note||''):'')+'">'+
+   '<div id="sfDisqualChosen" class="sf-disqual-chosen"'+(active==='Disqualified'?'':' hidden')+'>Disqualified: <strong id="sfDisqualChosenText">'+esc(currentReason||'Choose reason')+'</strong> <button type="button" data-action="followup-pick-disposition" data-value="Disqualified">Edit reason</button></div>'+
+   '<div class="sf-followup-feedback" role="alert" hidden></div>'+
+   '<button class="btn primary full-btn" type="submit">Save follow-up</button>'+
+   '<div class="sf-disqual-dialog" id="sfDisqualDialog" role="dialog" aria-modal="true" aria-labelledby="sfDisqualTitle" hidden><div class="sf-disqual-card">'+
+   '<h3 id="sfDisqualTitle">Disqualification reason <span class="sf-required">*</span></h3>'+
+   '<p>Explain why this lead is not eligible. This change is recorded in the audit trail.</p>'+
+   '<label for="sfDisqualReason">Reason</label><select id="sfDisqualReason">'+reasonOptions+'</select>'+
+   '<label for="sfDisqualExplanation">Additional explanation</label><textarea id="sfDisqualExplanation" rows="3" maxlength="500" placeholder="Add context (required when Other is selected)">'+esc(l.status==='Not Eligible'?(l.disqualification_note||''):'')+'</textarea>'+
+   '<div class="sf-disqual-error" role="alert" hidden></div>'+
+   '<div class="sf-disqual-actions"><button type="button" class="btn" data-action="followup-cancel-disqualified">Cancel</button><button type="button" class="btn primary" data-action="followup-confirm-disqualified">Confirm reason</button></div>'+
+   '</div></div></form>'+
+   '<details class="sf-followup-history"><summary>Recent calls ('+Number((d.calls||[]).length)+')</summary>'+ (previousCalls||'<p>No calls recorded yet.</p>')+'</details>'+
+   '<details class="sf-followup-history"><summary>Campus visits ('+Number((d.visits||[]).length)+')</summary><div class="button-row">'+btn('＋ Book visit','book-visit','small','data-id="'+Number(l.id)+'"')+'</div>'+(visits||'<p>No campus visits booked.</p>')+'</details>'+
+   '</section>';
+}
 function detailDrawer(){
  const d=state.detail;if(!d)return '';
  const l=d.lead;
@@ -1150,14 +1189,14 @@ function detailDrawer(){
   '" role="tabpanel" id="sf-detail-panel-'+key+'" aria-labelledby="sf-detail-tab-'+key+
   '" '+(selected===key?'':'hidden')+'>';
  const endPanel='</section>';
- return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name||'Student name pending')}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(state.me?.schools?.find(sc=>Number(sc.id)===Number(state.schoolId))?.name||'School not specified')} · ${esc(l.assigned_name||'Unassigned')}</p></div>${isAdmin()&&prefs.admin_shortcut!==false?'<button class="sf-detail-settings" type="button" data-action="open-enquiry-settings" aria-label="Configure school enquiry interface">⚙ Settings</button>':''}<button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body">${enquirySnapshot(l)}<div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="sf-detail-tabs" role="tablist" aria-label="Enquiry workspace tabs">${tabButtons}</nav><div class="sf-lead-received" id="sf-contact">Received ${esc(auditStamp(l.created_at))}</div>${l.duplicate_of?`<div class="sf-lead-notice"><strong>Potential duplicate:</strong> Same contact as enquiry #${Number(l.duplicate_of)}</div>`:''}${l.message?`<details class="sf-lead-message"><summary>Enquiry message</summary><p>${esc(l.message)}</p></details>`:''}${beginPanel('followup')}${drawerPanelStart('communication','Parent communication')}${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${drawerPanelEnd()}${callVisitDetails(d)}${endPanel}${beginPanel('admission')}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<div class="sf-save-feedback" role="status" aria-live="polite" hidden></div><button class="btn primary full-btn" type="submit">Save changes</button></form>${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
+ return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name||'Student name pending')}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(state.me?.schools?.find(sc=>Number(sc.id)===Number(state.schoolId))?.name||'School not specified')} · ${esc(l.assigned_name||'Unassigned')}</p></div>${isAdmin()&&prefs.admin_shortcut!==false?'<button class="sf-detail-settings" type="button" data-action="open-enquiry-settings" aria-label="Configure school enquiry interface">⚙ Settings</button>':''}<button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body">${enquirySnapshot(l)}<div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="sf-detail-tabs" role="tablist" aria-label="Enquiry workspace tabs">${tabButtons}</nav><div class="sf-lead-received" id="sf-contact">Received ${esc(auditStamp(l.created_at))}</div>${l.duplicate_of?`<div class="sf-lead-notice"><strong>Potential duplicate:</strong> Same contact as enquiry #${Number(l.duplicate_of)}</div>`:''}${l.message?`<details class="sf-lead-message"><summary>Enquiry message</summary><p>${esc(l.message)}</p></details>`:''}${beginPanel('followup')}${followupWorkspace(d)}${endPanel}${beginPanel('admission')}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<div class="sf-save-feedback" role="status" aria-live="polite" hidden></div><button class="btn primary full-btn" type="submit">Save changes</button></form>${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
 <div class="page-card"><p class="muted-note">Record documents received or verified. No student document files are uploaded to this CRM.</p>
 ${(d.documents||[]).map(doc=>`<div class="doc-status-row"><strong>${esc(doc.type)}</strong><span>${esc(doc.status)}</span>
 ${doc.status==='Verified'&&role()==='Counsellor'?'':`<form class="documentStatusForm">
 <input type="hidden" name="type" value="${esc(doc.type)}">
 ${select('Status','status',['Pending','Received','Verified','Rejected'].filter(v=>v!=='Verified'||role()!=='Counsellor').map(v=>option(v,v,doc.status)).join(''))}
 ${input('Internal checklist note','note','text',doc.note||'')}
-<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div>${drawerPanelEnd()}${endPanel}${beginPanel('family')}${drawerPanelStart('family','Parent & sibling profile')}${familyDetails(d)}${drawerPanelEnd()}${drawerPanelStart('consent','Parent messaging consent')}<form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form>${drawerPanelEnd()}${endPanel}${beginPanel('history')}<h3 class="section-title">Calling history</h3>${(d.calls||[]).map(c=>`<div class="timeline-item"><strong>Call · ${esc(c.outcome)}</strong><p>${esc(c.note||'No notes')}</p><small>${esc(auditStamp(c.created_at))}</small></div>`).join('')||'<p class="muted-note">No calls recorded.</p>'}<h3 class="section-title">Campus visit history</h3>${(d.visits||[]).map(v=>`<div class="timeline-item"><strong>Campus visit · ${esc(v.status)}</strong><small>${esc(v.starts_at?.replace('T',' ')||'')}</small></div>`).join('')||'<p class="muted-note">No visits recorded.</p>'}<h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}${endPanel}${beginPanel('more')}${drawerPanelStart('attribution','Lead attribution')}<section class="panel" style="padding:16px;margin:14px 0">
+<button class="btn small" type="submit">Update</button></form>`}</div>`).join('')}</div>${drawerPanelEnd()}${endPanel}${beginPanel('family')}${drawerPanelStart('family','Parent & sibling profile')}${familyDetails(d)}${drawerPanelEnd()}${drawerPanelStart('consent','Parent messaging consent')}<form id="channelConsentForm"><label><input type="checkbox" name="consent_email" ${l.consent_email?"checked":""}> Parent explicitly opted in to email reminders</label><label><input type="checkbox" name="consent_whatsapp" ${l.consent_whatsapp?"checked":""}> Parent explicitly opted in to WhatsApp reminders</label>${input("Consent evidence/source","consent_source","text","",true)}<p class="muted-note">Only mark consent when you have valid parent authorization. The change is recorded in the audit log.</p><button class="btn small" type="submit">Record consent</button></form>${drawerPanelEnd()}${endPanel}${beginPanel('history')}<h3 class="section-title">Calling history</h3>${(d.calls||[]).map(c=>`<div class="timeline-item"><strong>Call · ${esc(c.outcome)}</strong><p>${esc(c.note||'No notes')}</p><small>${esc(auditStamp(c.created_at))}</small></div>`).join('')||'<p class="muted-note">No calls recorded.</p>'}<h3 class="section-title">Campus visit history</h3>${(d.visits||[]).map(v=>`<div class="timeline-item"><strong>Campus visit · ${esc(v.status)}</strong><small>${esc(v.starts_at?.replace('T',' ')||'')}</small></div>`).join('')||'<p class="muted-note">No visits recorded.</p>'}<h3 class="section-title">Stage history</h3>${(d.stage_history||[]).map(h=>`<p class="muted-note">${esc(h.from_stage)} → ${esc(h.to_stage)} · ${esc(auditStamp(h.occurred_at))}</p>`).join("")||"<p class=muted-note>No recorded transitions yet</p>"}<h3 class="section-title">Conversation notes</h3><form id="noteForm"><div class="form-field"><textarea name="text" required placeholder="e.g. Parent requested school fees and campus visit..."></textarea></div><button class="btn small" type="submit">＋ Add note</button></form><h3 class="section-title" id="sf-history">Conversation history</h3>${d.activities.filter(a=>a.action==='note').map(a=>`<div class="timeline-item"><strong>Note added</strong>${a.details?`<div class="tiny" style="margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(a.details)}</div>`:''}<small>${esc(a.actor_name||'Website / system')} · ${esc(auditStamp(a.created_at))}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'}${endPanel}${beginPanel('more')}${drawerPanelStart('communication','Parent communication')}${contactActions(l)}${(d.messages||[]).length?`<div class="page-card"><b>Message delivery attempts</b>${d.messages.map(x=>`<div class="muted-note">${esc(x.channel)} — ${esc(x.status)} · ${esc(auditStamp(x.created_at))} (provider receipt not guaranteed)</div>`).join('')}</div>`:''}${drawerPanelEnd()}${drawerPanelStart('attribution','Lead attribution')}<section class="panel" style="padding:16px;margin:14px 0">
  <div class="detail-meta"><div><small>Origin</small><strong>${esc((l.source_type||'other').replaceAll('_',' '))}</strong></div>
  <div><small>Form surface</small><strong>${esc(l.form_type||'unknown')} ${esc(l.form_variant||'')}</strong></div>
  <div><small>Source website</small><strong>${esc(l.source_name||'Manual entry')}</strong></div>
@@ -1505,6 +1544,61 @@ async function xlsxExport(){
 async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POST',{event:'export_enquiries'});const lines=[['ID','Student','Guardian','Phone','Email','Class','Source','Status','Assigned','Follow-up','Created','Potential Duplicate','Origin Type','Form Surface','Form Variant','Landing Version','Landing URL','Campaign Source','Campaign Name','First Touch Source','Latest Touch Source','Popup Campaign ID','Popup Trigger'],...state.leads.map(l=>[l.id,l.name,l.guardian,l.phone,l.email,l.grade,l.source_name||'Manual',l.status,l.assigned_name||'',l.followup_date,l.created_at,l.duplicate_of||'',l.source_type||'',l.form_type||'',l.form_variant||'',l.landing_page_version||'',l.landing_page||'',l.utm_source||'',l.utm_campaign||'',l.first_touch?.utm_source||'',l.latest_touch?.utm_source||'',l.popup_campaign_id||'',l.popup_trigger||''])];
  const csv='\ufeff'+lines.map(r=>r.map(v=>'"'+( /^[\s]*[=+\-@]/.test(String(v??'')) ? "\'"+String(v??'') : String(v??'') ).replaceAll('"','""')+'"').join(',')).join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=url;a.download=`schoolflow-school-${state.schoolId}-enquiries.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported');}
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
+ if(action==='followup-pick-disposition'){
+  const form=el.closest('#followupV2Form');if(!form)return;
+  const choice=el.dataset.value;
+  if(choice==='Disqualified'){
+   const dialog=form.querySelector('#sfDisqualDialog');
+   dialog.hidden=false;
+   dialog.querySelector('.sf-disqual-error').hidden=true;
+   dialog.querySelector('#sfDisqualReason').focus();
+   return;
+  }
+  if(form.elements.disposition.value==='Disqualified' &&
+     !confirm('Reopen this disqualified enquiry when saving the follow-up?'))return;
+  form.elements.disposition.value=choice;
+  form.elements.disqualification_reason.value='';
+  form.elements.disqualification_note.value='';
+  const chosen=form.querySelector('#sfDisqualChosen');if(chosen)chosen.hidden=true;
+  form.querySelectorAll('[data-action="followup-pick-disposition"][aria-pressed]').forEach(button=>{
+   const selected=button.dataset.value===choice;
+   button.classList.toggle('selected',selected);
+   button.setAttribute('aria-pressed',String(selected));
+  });
+  return;
+ }
+ if(action==='followup-cancel-disqualified'){
+  const dialog=el.closest('#sfDisqualDialog');if(dialog)dialog.hidden=true;
+  el.closest('#followupV2Form')?.querySelector('[data-action="followup-pick-disposition"][aria-pressed="true"]')?.focus();
+  return;
+ }
+ if(action==='followup-confirm-disqualified'){
+  const form=el.closest('#followupV2Form'),dialog=form?.querySelector('#sfDisqualDialog');
+  if(!dialog)return;
+  const reason=dialog.querySelector('#sfDisqualReason').value;
+  const explanation=dialog.querySelector('#sfDisqualExplanation').value.trim();
+  const error=dialog.querySelector('.sf-disqual-error');
+  if(!reason||(reason==='Other'&&explanation.length<8)){
+   error.hidden=false;
+   error.textContent=!reason?'Select a disqualification reason.':'Explain Other in at least 8 characters.';
+   dialog.querySelector(!reason?'#sfDisqualReason':'#sfDisqualExplanation').focus();
+   return;
+  }
+  form.elements.disposition.value='Disqualified';
+  form.elements.disqualification_reason.value=reason;
+  form.elements.disqualification_note.value=explanation;
+  form.querySelector('#sfDisqualChosen').hidden=false;
+  form.querySelector('#sfDisqualChosenText').textContent=reason;
+  form.querySelectorAll('[data-action="followup-pick-disposition"][aria-pressed]').forEach(button=>{
+   const selected=button.dataset.value==='Disqualified';
+   button.classList.toggle('selected',selected);
+   button.setAttribute('aria-pressed',String(selected));
+  });
+  dialog.hidden=true;
+  form.querySelector('[data-action="followup-pick-disposition"][data-value="Disqualified"][aria-pressed]')?.focus();
+  return;
+ }
+
 
  if(action==='chat-add-fact'){
    const container=root.querySelector('#sfSchoolFacts');
@@ -1930,8 +2024,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    });return;
  }
  if(['new-lead','new-site','new-member','new-school'].includes(action)){state.modal=action;state.detail=null;render();return;}
- if(action==='open-task-lead'){ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
- if(action==='view-lead'){if(ext.enquiryPanels?.preferences?.remember_tab===false)ext.detailTab=null;
+ if(action==='open-task-lead'){ext.detailTab='followup';ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const id=Number(el.dataset.id);state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+id);render();});return;}
+ if(action==='view-lead'){ext.detailTab='followup';
   ext.detailOpen={};ext.detailAudit=null;perform(async()=>{const url=`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`;
    await api(url+'/view','POST',{});state.detail=await api(url);render();});return;}
  if(action==='done-followup'){perform(async()=>{await api(`/api/schools/${state.schoolId}/leads/${Number(el.dataset.id)}`,'PATCH',{followup_date:''});await reload();toast('Follow-up marked complete');});return;}
@@ -2284,6 +2378,49 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
  if(f.id==='autoReconcileForm'){perform(async()=>{await api('/api/schools/'+state.schoolId+'/automation/queue/'+Number(fd.queue_id)+'/reconcile','POST',{status:fd.status,provider_evidence_reference:fd.provider_evidence_reference});await reload();toast('Provider evidence recorded');});return;}
  if(f.id==='channelConsentForm'){perform(async()=>{const leadId=state.detail.lead.id;await api('/api/schools/'+state.schoolId+'/leads/'+leadId,'PATCH',{consent_email:!!f.querySelector('input[name="consent_email"]:checked'),consent_whatsapp:!!f.querySelector('input[name="consent_whatsapp"]:checked'),consent_source:fd.consent_source});await reload();state.detail=await api('/api/schools/'+state.schoolId+'/leads/'+leadId);render();toast('Channel-specific consent recorded');});return;}
  if(f.id==='assignmentForm'){perform(async()=>{ext.assignment=await api(`/api/schools/${state.schoolId}/assignment`,'PATCH',{mode:fd.mode});toast('Assignment policy saved');render();});return;}
+
+ if(f.id==='followupV2Form'){
+  if(f.dataset.saving==='true')return;
+  const feedback=f.querySelector('.sf-followup-feedback');
+  const showError=message=>{feedback.hidden=false;feedback.textContent=message;};
+  const note=String(fd.note||'').trim();
+  const disposition=String(fd.disposition||'');
+  if(!fd.outcome)return showError('Select the call outcome.');
+  if(note.length<8)return showError('Call summary must contain at least 8 characters.');
+  if(!['Hot','Warm','Cold','Disqualified'].includes(disposition))
+   return showError('Select Hot, Warm, Cold or Disqualified.');
+  if(disposition==='Disqualified'&&!fd.disqualification_reason){
+   showError('Confirm the disqualification reason before saving.');
+   f.querySelector('[data-action="followup-pick-disposition"][data-value="Disqualified"][aria-pressed]')?.click();
+   return;
+  }
+  const id=state.detail?.lead?.id,school=state.schoolId;
+  if(!id||!school)return showError('Enquiry is unavailable. Reopen it and try again.');
+  if(!f.dataset.submissionId){
+   f.dataset.submissionId=(typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function')
+     ?crypto.randomUUID():'followup-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  }
+  const body={outcome:fd.outcome,note,followup_date:fd.followup_date||'',
+    disposition,disqualification_reason:fd.disqualification_reason||'',
+    disqualification_note:fd.disqualification_note||'',submission_id:f.dataset.submissionId};
+  const button=f.querySelector('button[type="submit"]');
+  f.dataset.saving='true';feedback.hidden=true;
+  if(button){button.disabled=true;button.textContent='Saving…';}
+  (async()=>{
+   try{
+    await api('/api/schools/'+school+'/leads/'+id+'/followup','POST',body);
+    const latest=await api('/api/schools/'+school+'/leads/'+id);
+    state.detail=latest;
+    try{await reload();}catch(refreshError){console.warn('Follow-up saved; dashboard refresh failed',refreshError);}
+    state.detail=latest;render();toast('Follow-up saved');
+   }catch(error){showError(error?.message||'Could not save follow-up. Try again.');}
+   finally{
+    f.dataset.saving='false';
+    if(button){button.disabled=false;button.textContent='Save follow-up';}
+   }
+  })();
+  return;
+ }
  if(f.id==='callForm'){if(!fd.outcome)return toast('Select a call outcome before saving',true);perform(async()=>{const lid=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${lid}/calls`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${lid}`);render();toast('Call outcome recorded');});return;}
  if(f.id==='siblingForm'){perform(async()=>{const lid=state.detail.lead.id;const result=await api(`/api/schools/${state.schoolId}/families/${lid}/siblings`,'POST',fd);await reload();state.detail=await api(`/api/schools/${state.schoolId}/leads/${result.id}`);render();toast('Sibling enquiry added');});return;}
  if(f.id==='visitForm'){perform(async()=>{const body={lead_id:Number(fd.lead_id),starts_at:fd.starts_at,purpose:fd.purpose};if(fd.staff_id)body.staff_id=Number(fd.staff_id);await api(`/api/schools/${state.schoolId}/visits`,'POST',body);state.modal='';await reload();if(state.detail){state.detail=await api(`/api/schools/${state.schoolId}/leads/${state.detail.lead.id}`);render();}toast('School visit booked');});return;}
