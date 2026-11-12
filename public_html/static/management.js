@@ -36,7 +36,7 @@ async function loadLeads(api,repaint){
 }
 async function click(action,dataset,api,repaint){
  if(action==='management-tab'){S.tab=dataset.tab;S.detail=null;if(S.tab==='Leads')await loadLeads(api,repaint);else repaint();return true;}
- if(action==='management-period'){S.filters.period=dataset.period;delete S.filters.from;delete S.filters.to;S.filters.page=1;S.leads=null;await load(api,repaint);return true;}
+ if(action==='management-period'){S.filters.period=dataset.period;if(dataset.period==='custom'){S.filters.from=S.report?.filters?.from||'';S.filters.to=S.report?.filters?.to||'';}else{delete S.filters.from;delete S.filters.to;}S.filters.page=1;S.leads=null;await load(api,repaint);return true;}
  if(action==='management-refresh'){await load(api,repaint);return true;}
  if(action==='management-prev'||action==='management-next'){
   if(!S.leads)return true;
