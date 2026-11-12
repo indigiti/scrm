@@ -36,7 +36,7 @@ function sf_staff_link_candidates(array $s,int $targetSchool,int $actor):array{
     foreach($s['memberships'] as $m){
         $uid=(int)$m['user_id'];$sid=(int)$m['school_id'];
         if($sid===$targetSchool||!isset($adminSchools[$sid])||isset($already[$uid])||
-            !in_array($m['role'],['Counsellor','Admissions'],true))continue;
+            !in_array($m['role'],['Counsellor','Admissions','Management'],true))continue;
         $user=sf_user($s,$uid);
         if(!$user||empty($user['active']))continue;
         $canCounsellor=!sf_staff_has_active_other_school($s,$uid,$targetSchool);
@@ -61,7 +61,7 @@ function sf_staff_link_existing(array &$s,int $targetSchool,int $actor,array $pa
     $uid=$payload['user_id']??null;
     if(!is_int($uid)||$uid<=0)sf_fail(422,'Invalid staff selection');
     $role=$payload['role']??null;
-    if(!is_string($role)||!in_array($role,['Counsellor','Admissions'],true))
+    if(!is_string($role)||!in_array($role,['Counsellor','Admissions','Management'],true))
         sf_fail(422,'Linked staff may only be Counsellor or Admissions');
     foreach($s['memberships'] as $m)if((int)$m['school_id']===$targetSchool&&(int)$m['user_id']===$uid)
         sf_fail(409,'Staff member already belongs to this school; edit or reactivate their existing membership');
