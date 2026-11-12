@@ -2441,7 +2441,8 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
    });return;
  }
  if(f.id==='memberForm'){perform(async()=>{await api(`/api/schools/${state.schoolId}/members`,'POST',fd);state.modal='';await reload();toast('Team member added');});return;}
- if(f.id==='schoolForm'){perform(async()=>{let result=await api('/api/schools','POST',fd);state.me=await api('/api/me');state.schoolId=result.id;sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.modal='';state.pa if(f.id==='editLeadForm'){
+ if(f.id==='schoolForm'){perform(async()=>{let result=await api('/api/schools','POST',fd);state.me=await api('/api/me');state.schoolId=result.id;sessionStorage.setItem('schoolflow_school',String(state.schoolId));state.modal='';state.page='Dashboard';await reload();toast('School workspace created');});return;}
+ if(f.id==='editLeadForm'){
   if(f.dataset.saving==='true')return;
   const button=f.querySelector('button[type="submit"]');
   const feedback=f.querySelector('.sf-save-feedback');
@@ -2490,7 +2491,6 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   })();
   return;
  }
-e.schoolId}/leads/${leadId}`);render();toast('Enquiry updated');});return;}
  if(f.id==='noteForm'){perform(async()=>{let leadId=state.detail.lead.id;await api(`/api/schools/${state.schoolId}/leads/${leadId}/notes`,'POST',{text:fd.text});state.detail=await api(`/api/schools/${state.schoolId}/leads/${leadId}`);render();toast('Note added');});}
 });
 let dragged=null;
