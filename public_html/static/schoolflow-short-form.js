@@ -25,7 +25,7 @@ function init(){
   (mode==='popup'?'<button type="button" class="sf2-close" aria-label="Close">×</button>':'')+
   '<h2>Admission Enquiry</h2><p>Get a call back from our admissions team.</p>'+
   '<form novalidate><label>Parent / Guardian name<input name="parent_name" maxlength="140" autocomplete="name" required placeholder="Your full name"></label>'+
-  '<label>Email address<input type="email" name="email" maxlength="160" autocomplete="email" required placeholder="you@example.com"></label>'+
+  (mode==='inline'?'<label>Email address<input type="email" name="email" maxlength="160" autocomplete="email" required placeholder="you@example.com"></label>':'')+
   '<label>Mobile number<input name="phone" inputmode="numeric" autocomplete="tel" maxlength="10" required placeholder="10-digit mobile"></label>'+
   '<div class="sf2-row"><label>Class<select name="grade" required><option value="">Select class</option>'+
   ['Nursery','LKG','UKG','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'].map(function(x){return '<option>'+x+'</option>';}).join('')+
@@ -328,8 +328,8 @@ function init(){
   ev.preventDefault();if(busy||!opened)return;clear();
   var p=form.elements;var phone=p.phone.value.trim();
   if(p.parent_name.value.trim().length<2)return error('Enter parent or guardian name.');
-  var email=p.email.value.trim();
-  if(!email||email.length>160||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return error('Enter a valid email address.');
+  var email=(mode==='inline'&&p.email)?p.email.value.trim():'';
+  if(mode==='inline'&&(!email||email.length>160||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))return error('Enter a valid email address.');
   if(!/^[6-9][0-9]{9}$/.test(phone))return error('Enter a valid 10-digit mobile number.');
   if(!p.grade.value||!campus.value||campus.disabled)return error('Select class and an available campus.');
   if(!p.consent.checked)return error('Consent is required.');
