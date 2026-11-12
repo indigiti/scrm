@@ -14,16 +14,27 @@ if (!is_string($html) || !is_string($gateway)) throw new RuntimeException('Unabl
 if (!preg_match_all('~<script\b([^>]*)>(.*?)</script\s*>~is', $html, $scripts, PREG_SET_ORDER)) {
     throw new RuntimeException('Expected an external JavaScript entrypoint');
 }
-if (count($scripts) !== 1) throw new RuntimeException('Unexpected number of script tags');
-foreach ($scripts as $script) {
-    if (trim($script[2]) !== '') throw new RuntimeException('Inline script body is not CSP-compliant');
-    if (!preg_match('~\bsrc\s*=\s*(["\'])/scrm/static/app\.js\?v=([0-9a-f]{12})\1~i', $script[1], $jsMatch)) {
-        throw new RuntimeException('JavaScript must use a content-versioned /scrm/static/app.js URL');
-    }
-    $jsHash = hash_file('sha256', $root . '/dist/digiops-release/static/app.js');
-    if (!is_string($jsHash) || $jsMatch[2] !== substr($jsHash, 0, 12)) throw new RuntimeException('JavaScript cache version is stale');
+$expected=['app.js'=>false,'management.js'=>false];
+if(count($scripts)!==count($expected))throw new RuntimeException('Expected exactly two same-origin versioned script tags');
+foreach($scripts as $script){
+    if(trim($script[2])!=='')throw new RuntimeException('Inline script body is not CSP-compliant');
+    if(!preg_match('~\bsrc\s*=\s*(["\'])/scrm/static/(app|management)\.js\?v=([0-9a-f]{12})\1~i',$script[1],$match))
+        throw new RuntimeException('Unexpected or unversioned JavaScript');
+    $name=$match[2].'.js';
+    if(!array_key_exists($name,$expected)||$expected[$name])
+        throw new RuntimeException('Duplicate JavaScript entrypoint');
+    $hash=hash_file('sha256',$root.'/dist/digiops-release/static/'.$name);
+    if(!is_string($hash)||substr($hash,0,12)!==$match[3])
+        throw new RuntimeException('Stale JavaScript asset hash: '.$name);
+    $expected[$name]=true;
 }
+if(in_array(false,$expected,true))throw new RuntimeException('Missing expected script entrypoint');
 if (preg_match('~\s(?:on[a-z]+)\s*=~i', $html)) throw new RuntimeException('Inline event handler found');
+if(!preg_match('~href=(["\'])/scrm/static/management\.css\?v=([0-9a-f]{12})\1~i',$html,$mgCss))
+    throw new RuntimeException('Management stylesheet must be versioned and same-origin');
+$mgHash=hash_file('sha256',$root.'/dist/digiops-release/static/management.css');
+if(!is_string($mgHash)||substr($mgHash,0,12)!==$mgCss[2])
+    throw new RuntimeException('Management stylesheet cache version is stale');
 if (!preg_match('~href=(["\'])/scrm/static/style\.css\?v=([0-9a-f]{12})\1~i', $html, $cssMatch)) {
     throw new RuntimeException('Stylesheet must use a content-versioned URL');
 }

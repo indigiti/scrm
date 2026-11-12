@@ -25,13 +25,14 @@ require_once __DIR__ . '/export_xlsx.php';
 require_once __DIR__ . '/import_enquiries.php';
 require_once __DIR__ . '/admissions_operations.php';
 require_once __DIR__ . '/staff_management.php';
+require_once __DIR__ . '/management_reporting.php';
 require_once __DIR__ . '/staging_web_reset.php';
 require_once __DIR__ . '/work_queue.php';
 require_once __DIR__ . '/ai_quality.php';
 require_once __DIR__ . '/provider_webhooks.php';
 
 const SF_STAGES = ['New','Contacted','Counselling','Visit Scheduled','Applied','Enrolled','Lost','New Enquiry','Contact Attempted','Contact Established','Visit Planned','Visit Completed','Application Started','Application Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','On Hold / Deferred','Waitlisted','Not Eligible','Duplicate / Invalid'];
-const SF_ROLES = ['Admin','Admissions','Counsellor'];
+const SF_ROLES = ['Admin','Admissions','Counsellor','Management'];
 const SF_TTL = 43200;
 
 class SFError extends RuntimeException {
@@ -95,6 +96,7 @@ function sf_membership(array $s, int $schoolId, int $userId, array $roles = []):
         sf_fail(403,'Counsellor access is restricted to their assigned school');
     foreach ($s['memberships'] as $m) if ($m['school_id'] === $schoolId && $m['user_id'] === $userId) {
         if(!sf_staff_enabled($m) || !(sf_user($s,$userId)['active']??false))sf_fail(403,'This school account is disabled');
+        if (($m['role']??'')==='Management') sf_fail(403,'Management has read-only reporting access only');
         if ($roles && !in_array($m['role'], $roles, true)) sf_fail(403, 'Your role does not permit this action');
         return $m['role'];
     }
@@ -921,6 +923,17 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
     $write=$method !== 'GET';
     return $store->transaction(function (&$s) use ($path,$method,$payload,$auth,$uri,$store) {
         $user=sf_session($s,$auth);$uid=$user['id'];
+        // Management-only accounts cannot reach legacy endpoints that assume any member is an operator.
+        $hasManagement=false;$hasOperational=false;
+        foreach($s['memberships']??[] as $m)if((int)($m['user_id']??0)===$uid&&sf_staff_enabled($m)){
+            if(($m['role']??'')==='Management')$hasManagement=true;
+            else $hasOperational=true;
+        }
+        if($hasManagement&&!$hasOperational && !str_starts_with($path,'/api/management/') &&
+           !in_array($path,['/api/me','/api/me/password','/api/auth/logout'],true))
+            sf_fail(403,'Management accounts can only view authorized reports');
+        if(str_starts_with($path,'/api/management/'))
+            return sf_management_handle($s,$uid,$path,$uri,$method);
         if(!empty($user['must_change_password']) && !in_array($path,['/api/me','/api/me/password','/api/auth/logout'],true))
             sf_fail(403,'Change your temporary password before using the CRM');
         if($path==='/api/me/password' && $method==='POST')return [200,sf_staff_change_own_password($s,$uid,$payload)];

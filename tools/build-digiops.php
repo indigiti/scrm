@@ -25,6 +25,7 @@ $xlsx = phpBody($root . '/app_private/export_xlsx.php');
 $import = phpBody($root . '/app_private/import_enquiries.php');
 $operations = phpBody($root . '/app_private/admissions_operations.php');
 $staff = phpBody($root . '/app_private/staff_management.php');
+$management = phpBody($root . '/app_private/management_reporting.php');
 $workQueue = phpBody($root . '/app_private/work_queue.php');
 $stagingResetWeb = phpBody($root . '/app_private/staging_web_reset.php');
 $aiQuality = phpBody($root . '/app_private/ai_quality.php');
@@ -60,6 +61,7 @@ $api = preg_replace('~^require_once __DIR__ \. \'/export_xlsx\.php\';\s*~m', '',
 $api = preg_replace('~^require_once __DIR__ \. \'/import_enquiries\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_operations\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/staff_management\.php\';\s*~m', '', $api, 1);
+$api = str_replace("require_once __DIR__ . '/management_reporting.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/work_queue.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/staging_web_reset.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/ai_quality.php';", '', $api);
@@ -128,9 +130,9 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $formOtp . "\n" . $publicForms . "\n" . $popupSettings . "\n" . $landingPages . "\n" . $marketingControls . "\n" . $enquiryRegister . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $stagingResetWeb . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $formOtp . "\n" . $publicForms . "\n" . $popupSettings . "\n" . $landingPages . "\n" . $marketingControls . "\n" . $enquiryRegister . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $management . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $stagingResetWeb . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
-foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/schoolflow-conversion.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
+foreach (['.htaccess','static/app.js','static/management.js','static/management.css','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/schoolflow-conversion.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
 }
 // The public URL remains stable (/scrm/), but JavaScript/CSS must be versioned.
@@ -138,7 +140,7 @@ foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.c
 $htmlPath = $output . '/static/index.html';
 $html = file_get_contents($htmlPath);
 if (!is_string($html)) throw new RuntimeException('Cannot read packaged HTML');
-foreach (['static/app.js', 'static/style.css'] as $asset) {
+foreach (['static/app.js', 'static/management.js', 'static/style.css', 'static/management.css'] as $asset) {
     $hash = hash_file('sha256', $output . '/' . $asset);
     if (!is_string($hash)) throw new RuntimeException('Cannot hash asset: ' . $asset);
     $unversioned = '/scrm/' . $asset . '"';
@@ -151,5 +153,5 @@ $exposedFiles = [];
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($output, FilesystemIterator::SKIP_DOTS));
 foreach($iterator as $file) $exposedFiles[] = str_replace($output.'/','',$file->getPathname());
 sort($exposedFiles);
-if ($exposedFiles !== ['.htaccess','index.php','static/admissions-chat.css','static/admissions-chat.js','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-conversion.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
+if ($exposedFiles !== ['.htaccess','index.php','static/admissions-chat.css','static/admissions-chat.js','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/management.css','static/management.js','static/schoolflow-conversion.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/style.css']) throw new RuntimeException('Unexpected public payload contents: '.implode(', ',$exposedFiles));
 echo "DigiOps public-only payload: ".implode(', ',$exposedFiles)."\n";

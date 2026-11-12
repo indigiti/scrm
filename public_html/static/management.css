@@ -1,0 +1,50 @@
+/* Management Intelligence — restrained executive layout */
+.sf-mgmt{--mg-green:#247e73;--mg-soft:#e7f4f0;color:#202c33}
+.sf-mgmt .mg-hero{background:linear-gradient(112deg,#e4f4f0,#f9fbfb 73%);border:1px solid #ddece9;border-radius:22px;padding:25px 27px;margin-bottom:18px}
+.sf-mgmt .mg-kicker{font-size:10px;letter-spacing:.17em;font-weight:800;color:#52877e}
+.sf-mgmt h1{font-size:clamp(25px,3vw,34px);letter-spacing:-.045em;font-weight:700;margin:7px 0 6px;color:#192e31}
+.sf-mgmt .mg-sub{font-size:13px;color:#658079;margin:0}
+.sf-mgmt .mg-periods{display:flex;flex-wrap:wrap;gap:6px;margin-top:17px}
+.sf-mgmt .mg-periods button{border:1px solid #d5e6e3;background:#fff;padding:8px 12px;border-radius:10px;font-size:12px;color:#435c59;cursor:pointer}
+.sf-mgmt .mg-periods button[aria-pressed=true]{background:#247e73;color:#fff;border-color:#247e73}
+.sf-mgmt .mg-filter{display:flex;flex-wrap:wrap;gap:9px;align-items:end;margin:0 0 20px}
+.sf-mgmt .mg-filter label{font-size:11px;font-weight:700;color:#60716f;display:grid;gap:5px;flex:1;min-width:145px}
+.sf-mgmt .mg-filter select,.sf-mgmt .mg-filter input{min-height:36px;border:1px solid #dde5e3;border-radius:10px;background:#fff;padding:7px 10px;width:100%;color:#263938;font-size:12px}
+.sf-mgmt .mg-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:16px}
+.sf-mgmt .mg-card{background:#fff;border:1px solid #e3eae8;border-radius:18px;padding:18px;min-width:0;box-shadow:0 8px 28px rgba(42,95,83,.035)}
+.sf-mgmt .mg-card small{color:#738580;font-size:11px;display:block}
+.sf-mgmt .mg-card strong{font-weight:700;font-size:30px;letter-spacing:-.05em;display:block;margin:12px 0 5px;font-variant-numeric:tabular-nums;color:#163f3c}
+.sf-mgmt .mg-card span{font-size:11px;color:#64837b}
+.sf-mgmt .mg-panels{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:15px;margin-bottom:16px}
+.sf-mgmt .mg-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.sf-mgmt .mg-head h2{font-size:16px;margin:0;letter-spacing:-.02em}
+.sf-mgmt .mg-head small{font-size:11px;color:#778985}
+.sf-mgmt .mg-chart{display:flex;align-items:end;gap:5px;height:140px;border-bottom:1px solid #e8eeed;overflow:hidden}
+.sf-mgmt .mg-bar{flex:1;min-width:4px;max-width:35px;background:linear-gradient(#358e7e,#a8d9c9);border-radius:6px 6px 0 0;position:relative}
+.sf-mgmt .mg-chart-label{font-size:11px;color:#7e8c89;margin-top:8px}
+.sf-mgmt .mg-table-wrap{overflow-x:auto}
+.sf-mgmt .mg-table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+.sf-mgmt .mg-table th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#82908c;font-weight:700;padding:10px 9px;border-bottom:1px solid #e9eeec}
+.sf-mgmt .mg-table td{padding:11px 9px;border-bottom:1px solid #f0f3f2;color:#41504d}
+.sf-mgmt .mg-table tr:last-child td{border-bottom:0}
+.sf-mgmt .mg-table td:first-child{font-weight:650;color:#273b38}
+.sf-mgmt .mg-meter{height:7px;background:#edf4f1;border-radius:20px;min-width:55px;overflow:hidden}
+.sf-mgmt .mg-meter i{display:block;height:100%;background:#459f8d;border-radius:20px}
+.sf-mgmt .mg-attention{display:grid;gap:8px}
+.sf-mgmt .mg-alert{padding:10px 12px;border:1px solid #edf0ed;border-radius:11px;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;background:#fff;color:#40514e;font-size:12px;width:100%}
+.sf-mgmt button.mg-alert{cursor:pointer}
+.sf-mgmt .mg-alert b{font-size:12px;color:#314d48}
+.sf-mgmt .mg-chip{display:inline-flex;padding:4px 8px;border-radius:7px;font-size:10px;background:#e9f5f0;color:#167466;font-weight:700}
+.sf-mgmt .mg-chip.critical{background:#fff0ef;color:#bd4e4b}
+.sf-mgmt .mg-tabbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.sf-mgmt .mg-tabbar button{border:1px solid #dce7e3;border-radius:10px;background:white;padding:9px 13px;font-size:12px;color:#58716b;cursor:pointer}
+.sf-mgmt .mg-tabbar button[aria-pressed=true]{background:#247e73;color:#fff;border-color:#247e73}
+.sf-mgmt .mg-empty{font-size:12px;color:#84918e;padding:18px;text-align:center}
+.sf-mgmt .mg-link{border:0;background:transparent;color:#207d70;cursor:pointer;text-decoration:underline;font-size:12px;padding:3px}
+.sf-mgmt .mg-detail{display:grid;gap:12px}
+.sf-mgmt .mg-note{font-size:11px;color:#788b85;line-height:1.6}
+.sf-mgmt .mg-detail .mg-data{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sf-mgmt .mg-detail .mg-data div{border:1px solid #e7eeeb;border-radius:11px;padding:11px;font-size:12px}
+.sf-mgmt .mg-detail .mg-data small{display:block;color:#82908c;margin-bottom:5px}
+@media(max-width:1024px){.sf-mgmt .mg-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sf-mgmt .mg-panels{grid-template-columns:1fr}}
+@media(max-width:560px){.sf-mgmt .mg-hero{padding:19px}.sf-mgmt .mg-grid{gap:9px}.sf-mgmt .mg-card{padding:13px;border-radius:13px}.sf-mgmt .mg-card strong{font-size:24px}.sf-mgmt .mg-grid,.sf-mgmt .mg-panels{margin-bottom:12px}.sf-mgmt .mg-filter label{min-width:120px}}
