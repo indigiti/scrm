@@ -25,6 +25,7 @@ $xlsx = phpBody($root . '/app_private/export_xlsx.php');
 $import = phpBody($root . '/app_private/import_enquiries.php');
 $operations = phpBody($root . '/app_private/admissions_operations.php');
 $staff = phpBody($root . '/app_private/staff_management.php');
+$management = phpBody($root . '/app_private/management_reporting.php');
 $workQueue = phpBody($root . '/app_private/work_queue.php');
 $stagingResetWeb = phpBody($root . '/app_private/staging_web_reset.php');
 $aiQuality = phpBody($root . '/app_private/ai_quality.php');
@@ -60,6 +61,7 @@ $api = preg_replace('~^require_once __DIR__ \. \'/export_xlsx\.php\';\s*~m', '',
 $api = preg_replace('~^require_once __DIR__ \. \'/import_enquiries\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/admissions_operations\.php\';\s*~m', '', $api, 1);
 $api = preg_replace('~^require_once __DIR__ \. \'/staff_management\.php\';\s*~m', '', $api, 1);
+$api = str_replace("require_once __DIR__ . '/management_reporting.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/work_queue.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/staging_web_reset.php';", '', $api);
 $api = str_replace("require_once __DIR__ . '/ai_quality.php';", '', $api);
@@ -128,7 +130,7 @@ CLI;
 $built = "<?php\ndeclare(strict_types=1);\n" .
     "// Generated DigiOps payload. Editable PHP source resides in /app_private.\n" .
     "define('SCHOOLFLOW_DEFAULT_DATA_DIR', dirname(__DIR__, 2) . '/private_html/scrm/data');\n\n" .
-    $store . "\n" . $messaging . "\n" . $formOtp . "\n" . $publicForms . "\n" . $popupSettings . "\n" . $landingPages . "\n" . $marketingControls . "\n" . $enquiryRegister . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $stagingResetWeb . "\n" . $api . "\n" . $cli . "\n" . $gateway;
+    $store . "\n" . $messaging . "\n" . $formOtp . "\n" . $publicForms . "\n" . $popupSettings . "\n" . $landingPages . "\n" . $marketingControls . "\n" . $enquiryRegister . "\n" . $publicKnowledge . "\n" . $publicCallback . "\n" . $publicSession . "\n" . $publicReturn . "\n" . $publicCounsellor . "\n" . $publicSources . "\n" . $publicFileKnowledge . "\n" . $publicProvider . "\n" . $publicChat . "\n" . $admissions . "\n" . $tasks . "\n" . $analytics . "\n" . $automation . "\n" . $xlsx . "\n" . $import . "\n" . $operations . "\n" . $staff . "\n" . $management . "\n" . $workQueue . "\n" . $aiQuality . "\n" . $providerWebhooks . "\n" . $stagingResetWeb . "\n" . $api . "\n" . $cli . "\n" . $gateway;
 if (file_put_contents($output . '/index.php', $built) === false) throw new RuntimeException('Cannot write release gateway');
 foreach (['.htaccess','static/app.js','static/index.html','static/lexicon-form.css','static/lexicon-form.js','static/schoolflow-short-form.css','static/schoolflow-short-form.js','static/schoolflow-conversion.js','static/admissions-chat.js','static/admissions-chat.css','static/style.css'] as $asset) {
     if (!copy($root . '/public_html/' . $asset,$output . '/' . $asset)) throw new RuntimeException('Failed to package '.$asset);
