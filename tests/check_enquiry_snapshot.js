@@ -13,7 +13,7 @@ assert(css.includes('.sf-lead-snapshot'), 'Enquiry snapshot styles should be pre
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, ch =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scope = vm.runInNewContext(source.slice(start,end)+
-  '\n({enquiryOriginLabel,enquirySafeLandingHref,enquirySnapshot})', {URL, esc});
+  '\n({enquiryOriginLabel,enquirySafeLandingHref,enquirySnapshot})', {URL, esc, auditStamp:(stamp)=>'12 Nov 2026, 10:19 am'});
 assert.equal(scope.enquiryOriginLabel('individual_website'), 'School website');
 assert.equal(scope.enquiryOriginLabel('group_website'), 'Group website');
 assert.equal(scope.enquiryOriginLabel('campaign'), 'Campaign');
@@ -26,13 +26,17 @@ const snapshot = scope.enquirySnapshot({
   city:'Pune', state:'Maharashtra', pincode:'411001',
   source_type:'group_website', source_name:'Group Admissions',
   source_domain:'school.example.test', utm_campaign:'Admissions 2026',
-  landing_page:'https://school.example.test/entry?src=email'
+  landing_page:'https://school.example.test/entry?src=email',
+  created_at:'2026-11-12T04:49:00+00:00'
 });
 for(const item of ['Guardian Example','Pune, Maharashtra','411001','Group website',
   'Group Admissions','Admissions 2026','Landing URL']) {
   assert(snapshot.includes(item), 'Missing expected content: '+item);
 }
 assert(snapshot.includes('rel="noopener noreferrer"'), 'External landing links must be safe');
+assert(snapshot.includes('Received'), 'Enquiry received timestamp must appear in lead details');
+assert(snapshot.includes('12 Nov 2026, 10:19 am IST'), 'Enquiry timestamp is India-local and labelled IST');
+assert(snapshot.includes('<time datetime="2026-11-12T04:49:00+00:00">'), 'Timestamp should retain server ISO value');
 const unsafe = scope.enquirySnapshot({guardian:'<img src=x>', phone:'0', landing_page:'javascript:alert(1)'});
 assert(!unsafe.includes('<img src=x>'), 'Escaped guardian name expected');
 assert(!unsafe.includes('href="javascript:'), 'Javascript landing URL must not link');
