@@ -1624,7 +1624,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             }
             sf_fail(404,'Not found');
         }
-        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|[0-9a-fA-F-]{36}|seed|clear))?(?:/(rotate-key|notes|audit|view|calls|contact-action))?$#D',$path,$m)) sf_fail(404,'Not found');
+        if (!preg_match('#^/api/schools/(\d+)/(members|sites|leads|demo-data|audit)(?:/(\d+|[0-9a-fA-F-]{36}|seed|clear))?(?:/(rotate-key|notes|audit|view|calls|followup|contact-action))?$#D',$path,$m)) sf_fail(404,'Not found');
         $schoolId=(int)$m[1];$area=$m[2];
         $itemRef=$m[3]??'';
         $itemId=$itemRef!==''&&ctype_digit($itemRef)?(int)$itemRef:null;
@@ -1843,6 +1843,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
 
                     if (!$changes) sf_fail(422,'Nothing to update');
                     if (array_key_exists('status',$changes) && !in_array($changes['status'],SF_STAGES,true)) sf_fail(422,'Invalid stage');
+                    if(($changes['status']??null)==='Not Eligible' && $lead['status']!=='Not Eligible')
+                        sf_fail(422,'Use Follow-up → Disqualified and select a reason');
                     if (($changes['status']??'')==='On Hold / Deferred' && empty($changes['deferred_until']) && empty($lead['deferred_until']))sf_fail(422,'Deferred review date required');
                     if(($lead['status']??'')==='Enrolled' && array_key_exists('academic_year',$changes) && $changes['academic_year']!==($lead['academic_year']??''))sf_fail(409,'Reopen admission before changing an enrolled academic year');
                     if (($changes['status']??'')==='Lost' && $lead['status']!=='Lost' && empty($changes['lost_reason']) && empty($lead['lost_reason']))sf_fail(422,'Lost reason required');
@@ -1866,6 +1868,97 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     if(in_array($updated['status'],['Lost','Enrolled','Not Eligible','Duplicate / Invalid'],true))sf_task_cancel_for_closed_lead($s,$schoolId,$itemId,$uid);
                     return [200,sf_lead_view($s,$updated)];
                 }
+                // Follow-up V2 commits the call, classification and any disposition change
+                // in one locked JSON transaction: no partially saved enquiry state.
+                if ($sub==='followup' && $method==='POST') {
+                    $outcome=sf_text($payload,'outcome',30,2);
+                    if(!in_array($outcome,['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'],true))
+                        sf_fail(422,'Select a valid call outcome');
+                    $note=sf_text($payload,'note',1000,8);
+                    $next=sf_date($payload['followup_date']??null);
+                    $disposition=sf_text($payload,'disposition',20,3);
+                    if(!in_array($disposition,['Hot','Warm','Cold','Disqualified'],true))
+                        sf_fail(422,'Select a lead temperature or Disqualified');
+                    if(in_array($lead['status'],['Enrolled','Lost'],true))
+                        sf_fail(409,'Reopen this closed enquiry before recording a new follow-up');
+                    $reason='';$explanation='';
+                    if($disposition==='Disqualified'){
+                        $reason=sf_text($payload,'disqualification_reason',60,2);
+                        if(!in_array($reason,['Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Not eligible','Other'],true))
+                            sf_fail(422,'Select a valid disqualification reason');
+                        $explanation=sf_text($payload,'disqualification_note',500);
+                        if($reason==='Other' && strlen(trim($explanation))<8)
+                            sf_fail(422,'Explain the other disqualification reason (at least 8 characters)');
+                    }
+                    // A stable client submission ID makes retries safe after network failures.
+                    $requestId=sf_text($payload,'submission_id',64,16);
+                    if(!preg_match('/^[a-zA-Z0-9-]{16,64}$/D',$requestId))
+                        sf_fail(422,'Invalid follow-up submission identifier');
+                    foreach($s['followup_submissions']??[] as $entry)
+                        if(($entry['school_id']??null)===$schoolId && ($entry['lead_id']??null)===$itemId
+                            && ($entry['submission_id']??'')===$requestId)
+                            return [200,['ok'=>true,'duplicate'=>true,'lead'=>sf_lead_view($s,sf_find($s['leads'],$itemId))]];
+                    $now=sf_time();
+                    $s['calls']=$s['calls']??[];
+                    $call=['id'=>sf_id($s,'calls'),'school_id'=>$schoolId,'lead_id'=>$itemId,'actor_id'=>$uid,
+                        'outcome'=>$outcome,'note'=>$note,'created_at'=>$now,'followup_date'=>$next];
+                    $s['calls'][]=$call;
+                    foreach($s['leads'] as &$v)if($v['id']===$itemId){
+                        $previousStage=$v['status'];
+                        $previousTemp=$v['temperature']??'Unrated';
+                        $v['last_call_outcome']=$outcome;
+                        sf_admission_call_update($v,$outcome,$now);
+                        if($outcome==='Interested')sf_admission_recommend($v,'Warm','Parent confirmed interest','call');
+                        if($outcome==='Not Interested')sf_admission_recommend($v,'Cold','Parent explicitly declined interest','call');
+                        if($outcome==='Callback Requested')sf_admission_recommend($v,'Warm','Parent requested a callback','call');
+                        // A disqualification is an admissions disposition, NOT a new temperature.
+                        if($disposition==='Disqualified'){
+                            $v['status']='Not Eligible';
+                            $v['disqualification_reason']=$reason;
+                            $v['disqualification_note']=$explanation;
+                            $v['disqualified_at']=$now;
+                            $v['disqualified_by']=$uid;
+                            sf_audit($s,$schoolId,$itemId,$uid,'lead_disqualified','Reason: '.$reason.($explanation!==''?' · '.$explanation:''));
+                        }else{
+                            if(($v['status']??'')==='Not Eligible'){
+                                $v['status']='Contact Attempted';
+                                sf_audit($s,$schoolId,$itemId,$uid,'lead_reopened','Disqualified enquiry reopened for follow-up');
+                            }
+                            if($previousTemp!==$disposition){
+                                $v['temperature']=$disposition;
+                                $v['temperature_reason']=substr($note,0,240);
+                                sf_audit($s,$schoolId,$itemId,$uid,'update_temperature',$previousTemp.' → '.$disposition.' · Call summary recorded');
+                            }
+                            // Previous disqualification remains in audit, but is no longer active.
+                            $v['disqualification_reason']='';
+                            $v['disqualification_note']='';
+                        }
+                        $v['followup_date']=$next;
+                        $v['updated_at']=$now;
+                        sf_stage_history_add($s,$v,$previousStage,$v['status'],$uid);
+                        $updated=$v;
+                        break;
+                    }unset($v);
+                    if(!isset($updated))sf_fail(404,'Enquiry not found');
+                    if($disposition==='Disqualified'){
+                        sf_task_cancel_for_closed_lead($s,$schoolId,$itemId,$uid);
+                    }else{
+                        if(!empty($updated['last_successful_contact_at']))
+                            sf_task_complete_kind($s,$schoolId,$itemId,'First Contact',$uid);
+                        if($next!=='')sf_task_sync_followup($s,$updated,$uid);
+                        elseif(in_array($outcome,['No Answer','Busy'],true))
+                            sf_task_auto_retry($s,$schoolId,$itemId,$uid);
+                        else sf_task_sync_followup($s,$updated,$uid);
+                    }
+                    sf_event($s,$schoolId,$itemId,$uid,'call_logged',$outcome.($next?' · next '.$next:'').' · Follow-up V2');
+                    $s['followup_submissions']=$s['followup_submissions']??[];
+                    $s['followup_submissions'][]=['school_id'=>$schoolId,'lead_id'=>$itemId,
+                        'submission_id'=>$requestId,'created_at'=>$now];
+                    // Keep a bounded idempotency ledger for the JSON storage backend.
+                    if(count($s['followup_submissions'])>2000)
+                        $s['followup_submissions']=array_slice($s['followup_submissions'],-2000);
+                    return [201,['ok'=>true,'lead'=>sf_lead_view($s,$updated),'call'=>$call]];
+                }
                 if ($sub==='contact-action' && $method==='POST') {
                     $channel=sf_text($payload,'channel',16,3);
                     if(!in_array($channel,['phone','whatsapp','email'],true))sf_fail(422,'Invalid communication channel');
@@ -1881,7 +1974,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     $outcome=sf_text($payload,'outcome',30,2);
                     if(!in_array($outcome,['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'],true))sf_fail(422,'Invalid call outcome');
                     $next=sf_date($payload['followup_date']??null);
-                    $note=sf_text($payload,'note',1000);
+                    $note=sf_text($payload,'note',1000,8);
                     $s['calls']=$s['calls']??[];
                     $entry=['id'=>sf_id($s,'calls'),'school_id'=>$schoolId,'lead_id'=>$itemId,
                         'actor_id'=>$uid,'outcome'=>$outcome,'note'=>$note,'created_at'=>sf_time(), 'followup_date'=>$next];
