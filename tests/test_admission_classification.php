@@ -26,13 +26,13 @@ try{
  ac(arun('PATCH',$path,['temperature'=>'Hot'])[0]===422,'temperature reason is mandatory');
  [$ok,$updated]=arun('PATCH',$path,['temperature'=>'Hot','temperature_reason'=>'Confirmed admission intent','academic_year'=>'2027-28']);
  ac($ok===200 && $updated['temperature']==='Hot' && $updated['academic_year']==='2027-28','classification set with reason');
- for($i=0;$i<3;$i++)ac(arun('POST',$path.'/calls',['outcome'=>'No Answer'])[0]===201,'no answer saved');
+ for($i=0;$i<3;$i++)ac(arun('POST',$path.'/calls',['outcome'=>'No Answer','note'=>'No answer on attempted call '.$i])[0]===201,'no answer saved');
  $lead=arun('GET',$path)[1]['lead'];
  ac(empty($lead['last_successful_contact_at'])&&empty($lead['last_contact_at']),'unanswered calls never count as connected');
  ac($lead['contact_state']==='Unresponsive' && $lead['contact_attempts']===3,'three documented attempts');
  ac($lead['temperature']==='Hot','no answers must not downgrade Hot');
  ac($lead['followup_status']==='Unresponsive','unresponsive distinct from temperature');
- ac(arun('POST',$path.'/calls',['outcome'=>'Callback Requested'])[0]===201,'callback logged');
+ ac(arun('POST',$path.'/calls',['outcome'=>'Callback Requested','note'=>'Parent requested a callback tomorrow'])[0]===201,'callback logged');
  $lead=arun('GET',$path)[1]['lead'];
  ac($lead['contact_state']==='Callback Requested' && !empty($lead['last_successful_contact_at']),'connected callback status');
  ac($lead['followup_status']==='Callback Requested','callback followup derived');
