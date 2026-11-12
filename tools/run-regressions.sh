@@ -41,7 +41,7 @@ echo "::endgroup::"
 echo "::group::Public-only DigiOps artifact"
 php tools/build-digiops.php
 php -l dist/digiops-release/index.php
-for asset in .htaccess static/app.js static/management.css static/index.html \
+for asset in .htaccess static/app.js static/management.js static/management.css static/index.html \
   static/lexicon-form.js static/lexicon-form.css \
   static/schoolflow-short-form.js static/schoolflow-short-form.css \
   static/admissions-chat.js static/admissions-chat.css; do
