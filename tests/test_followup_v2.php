@@ -40,7 +40,7 @@ try{
         array_merge($base,['note'=>'short']),$admin);
     fuv2_check($code===422,'summary must be mandatory on follow-up endpoint');
     [$legacyCode,$legacyData]=fuv2_request('POST',$path.'/calls',
-        ['outcome'=>'Answered','note'=>'']);
+        ['outcome'=>'Answered','note'=>''],$admin);
     fuv2_check($legacyCode===422,'legacy calls must reject empty summary; got '.(string)$legacyCode.' '.json_encode($legacyData));
     [$code,$saved]=fuv2_request('POST',$path.'/followup',$base,$admin);
     fuv2_check($code===201 && ($saved['lead']['temperature']??'')==='Hot','save call and hot temperature');
