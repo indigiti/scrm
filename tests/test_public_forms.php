@@ -61,6 +61,9 @@ try {
     pf(req('POST',$base.'/short-enquiries',[...$short,'school_code'=>'Campus'],'https://lexiconedu.in','short-bad-campus-id')[0]===422,'short form rejects placeholder campus');
     pf(req('POST',$base.'/short-enquiries',[...$short,'consent'=>false],'https://lexiconedu.in','short-consent-test')[0]===422,'short form requires consent');
     pf(req('POST',$base.'/short-enquiries',[...$short,'captcha_answer'=>'999'],'https://lexiconedu.in','short-wrong-captcha')[0]===422,'short form rejects wrong captcha');
+    pf(req('POST',$base.'/short-enquiries',[...$short,'email'=>'invalid-address'],'https://lexiconedu.in','short-email-invalid-123')[0]===422,
+        'short form rejects invalid email');
+    $short['email']='inline.parent@example.org';
     [$shortCode,$shortCreated]=req('POST',$base.'/short-enquiries',$short,'https://lexiconedu.in','short-unique-123456');
     pf($shortCode===201 && !empty($shortCreated['guid']),'short form creates parent-only enquiry');
     pf(req('POST',$base.'/short-enquiries',$short,'https://lexiconedu.in','short-unique-123456')[1]['duplicate_submission']===true,'short form idempotent');
@@ -69,6 +72,14 @@ try {
         return null;
     });
     pf($shortStored!==null && $shortStored['name']==='' && $shortStored['guardian']==='Example Parent','no fabricated student name');
+    pf($shortStored['email']==='inline.parent@example.org','short form saves supplied email');
+    $familyEmail=$store->transaction(static function(array $s)use($shortStored){
+        foreach($s['parent_profiles'] as $profile)if(($profile['guid']??null)===$shortStored['family_guid'])return $profile['email']??'';
+        return null;
+    });
+    pf($familyEmail==='inline.parent@example.org','inline email stored in parent profile');
+    pf(!empty($shortStored['created_at'])&&strtotime($shortStored['created_at'])!==false,
+        'lead retains server-issued submission timestamp');
     pf($shortStored['school_id']===1 && $shortStored['grade']==='Nursery','short form campus and class routed');
     pf($shortStored['source_type']==='group_website' && $shortStored['form_type']==='inline' && $shortStored['form_variant']==='short',
         'server source routing with short inline display');
@@ -76,6 +87,20 @@ try {
     pf($shortStored['first_touch']['utm_source']==='google' && $shortStored['latest_touch']['source_type']==='group_website',
         'first/latest touch captured');
     pf(!isset($shortStored['source_type_override']),'public clients cannot override trusted origin');
+    // Old cached popup/inline embeds do not send email; the server remains compatible.
+    [$legacyStatus,$legacyChallenge]=req('GET',$base.'/challenge');
+    pf($legacyStatus===200,'legacy short form challenge issued');
+    preg_match('/Solve: (\\d+) \\+ (\\d+)/',$legacyChallenge['question'],$legacyParts);
+    $oldShort=[...$short,'parent_name'=>'Legacy Popup Parent','phone'=>'9988776655',
+        'captcha_token'=>$legacyChallenge['token'],
+        'captcha_answer'=>(string)((int)$legacyParts[1]+(int)$legacyParts[2]),'form_display'=>'popup'];
+    unset($oldShort['email']);
+    // A popup without a configured campaign is not a valid surface by default;
+    // use approved inline mode to test the backwards-compatible payload shape.
+    $oldShort['form_display']='inline';
+    [$legacyCode,$legacyCreated]=req('POST',$base.'/short-enquiries',$oldShort,
+        'https://lexiconedu.in','short-legacy-no-email');
+    pf($legacyCode===201 && !empty($legacyCreated['guid']),'legacy short form still accepted without email');
 
     [$code,$another]=req('GET',$base.'/challenge');
     preg_match('/Solve: (\d+) \+ (\d+)/',$another['question'],$next);
