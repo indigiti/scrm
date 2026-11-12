@@ -33,7 +33,7 @@ try{
  cc(cr('GET','/api/schools/2/families',[],'other')[1]===[],'family isolation');
  [$code,$changed]=cr('PATCH',$base.'/leads/'.$a['id'],['temperature'=>'Hot','temperature_reason'=>'Parent confirmed next week admission','status'=>'Counselling']);
  cc($code===200 && $changed['temperature']==='Hot','override captured');
- cr('POST',$base.'/leads/'.$a['id'].'/calls',['outcome'=>'Not Interested']);
+ cr('POST',$base.'/leads/'.$a['id'].'/calls',['outcome'=>'Not Interested','note'=>'Parent declined the admission offer']);
  $after=cr('GET',$base.'/leads/'.$a['id'])[1]['lead'];
  cc($after['temperature']==='Hot'&&$after['temperature_suggestion']==='Cold','suggestion never overrides manual classification');
  cc(str_contains($after['temperature_suggestion_reason'],'declined'),'explainable recommendation');
