@@ -767,3 +767,23 @@ body{background:#f4f7fb;color:#182b43}
   .sf-lead-snapshot {padding:11px 12px}
   .sf-lead-contact-grid {column-gap:10px;row-gap:9px}
 }
+
+.sf-lead-notice {
+  background:#fff6e8;
+  border:1px solid #f6ddb5;
+  border-radius:8px;
+  padding:9px 11px;
+  font-size:12px;
+  color:#815524;
+  margin-bottom:8px;
+}
+.sf-lead-message {
+  margin-bottom:10px;
+  border:1px solid #e6e9f2;
+  border-radius:8px;
+  padding:8px 11px;
+  font-size:12px;
+  color:#53627b;
+}
+.sf-lead-message summary{cursor:pointer;font-weight:650}
+.sf-lead-message p{margin:8px 0 2px;white-space:pre-wrap;overflow-wrap:anywhere}
