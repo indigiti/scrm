@@ -65,8 +65,8 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/sf-detail-tab-history/);
  assert.match(html,/sf-detail-tab-more/);
  assert.match(html,/Configure school enquiry interface/);
- assert.match(html,/Select call outcome/);
+ assert.match(html,/Call outcome/);assert.match(html,/Disqualification reason/);
  assert.doesNotMatch(html,/href="#sf-contact"/);
- assert.match(html,/Record a call/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
+ assert.match(html,/Save follow-up/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
  console.log('PASS: JavaScript renders School Visits, Families, Email Templates, filters, call manager, communications and audit drawer');
 })().catch(e=>{console.error(e);process.exitCode=1;});

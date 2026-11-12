@@ -787,3 +787,70 @@ body{background:#f4f7fb;color:#182b43}
 }
 .sf-lead-message summary{cursor:pointer;font-weight:650}
 .sf-lead-message p{margin:8px 0 2px;white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+/* Follow-up V2: compact first-screen workflows and accessible disposition dialog. */
+.sf-followup-v2 {max-width:740px;min-width:0}
+.sf-followup-v2 form {display:grid;gap:16px}
+.sf-v2-fieldset {border:0;min-width:0;margin:0;padding:0}
+.sf-v2-fieldset legend,.sf-followup-field label {
+  display:block;font-size:14px;font-weight:750;color:#223953;
+  margin:0 0 9px;padding:0;
+}
+.sf-required {color:#bf3656}
+.sf-call-options,.sf-disposition-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.sf-outcome-option {position:relative;cursor:pointer;min-width:0}
+.sf-outcome-option input {position:absolute;top:50%;left:12px;transform:translateY(-50%);accent-color:#6557e8;width:16px;height:16px}
+.sf-outcome-option span {
+  display:block;min-height:42px;padding:11px 9px 10px 37px;
+  background:#fff;border:1px solid #e0e6f1;border-radius:10px;
+  color:#31415b;font-weight:600;font-size:12px;line-height:18px;
+}
+.sf-outcome-option input:checked+span {border-color:#6557e8;background:#f3f0ff;color:#392fac}
+.sf-outcome-option input:focus-visible+span {outline:3px solid #9084ff;outline-offset:2px}
+.sf-followup-field input,.sf-followup-field textarea,.sf-disqual-card select,.sf-disqual-card textarea {
+  box-sizing:border-box;width:100%;background:#fff;border:1px solid #d9e1ee;
+  padding:12px 13px;border-radius:9px;color:#27344a;font:inherit;font-size:13px;
+}
+.sf-followup-field textarea,.sf-disqual-card textarea {resize:vertical;min-height:76px}
+.sf-followup-field small {display:block;font-size:11px;color:#778399;margin-top:5px}
+.sf-disposition-choice {
+  display:flex;align-items:center;gap:11px;text-align:left;min-height:50px;
+  padding:12px;background:#fff;border:1px solid #dfe5ef;border-radius:11px;
+  color:#27354c;font:inherit;font-size:13px;font-weight:650;cursor:pointer;
+}
+.sf-disposition-choice>span {font-size:19px;line-height:1}
+.sf-disposition-choice.selected {border-color:#6557e8;background:#f5f2ff;color:#4234a9;box-shadow:inset 0 0 0 1px #6557e8}
+.sf-disposition-choice:focus-visible {outline:3px solid #aa9aff;outline-offset:2px}
+.sf-disqual-chosen {padding:10px 12px;border:1px solid #dfd8ff;background:#f7f5ff;border-radius:9px;color:#473d99;font-size:12px}
+.sf-disqual-chosen button {border:0;background:none;color:#4c40ba;text-decoration:underline;cursor:pointer;font:inherit;font-weight:700;margin-left:6px}
+.sf-followup-feedback:not([hidden]),.sf-disqual-error:not([hidden]) {
+  background:#fff1f2;border:1px solid #fecdd3;border-radius:9px;padding:11px 13px;
+  color:#9f1239;font-size:12px;font-weight:650;
+}
+.sf-disqual-dialog {
+  position:fixed;inset:0;z-index:120;background:#131e36b3;
+  display:flex;align-items:center;justify-content:center;padding:18px;
+}
+.sf-disqual-dialog[hidden],.sf-disqual-chosen[hidden],.sf-followup-feedback[hidden],.sf-disqual-error[hidden] {display:none!important}
+.sf-disqual-card {
+  width:min(430px,100%);max-height:80vh;overflow:auto;background:#fff;
+  box-shadow:0 20px 60px #13203b42;border-radius:16px;padding:22px;
+  display:grid;gap:10px;
+}
+.sf-disqual-card h3 {margin:0;font-size:17px;color:#223953}
+.sf-disqual-card p {margin:0 0 5px;font-size:12px;line-height:1.5;color:#65758c}
+.sf-disqual-card label {font-size:12px;font-weight:700;color:#41546c}
+.sf-disqual-actions {display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.sf-followup-history {border-top:1px solid #e8ebf3;margin-top:16px;padding-top:12px;color:#485976;font-size:12px}
+.sf-followup-history summary {cursor:pointer;font-weight:700;list-style:revert;padding:4px 0}
+.sf-call-entry {padding:10px 0;border-bottom:1px solid #edf0f6}
+.sf-call-entry strong {margin-right:9px}
+.sf-call-entry span {font-size:11px;color:#8190a2}
+.sf-call-entry p {margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:430px){
+ .sf-call-options,.sf-disposition-grid {gap:7px}
+ .sf-disposition-choice {padding:10px;min-height:46px;font-size:12px}
+ .sf-outcome-option span {font-size:11px;padding-right:5px}
+ .sf-disqual-card {padding:17px}
+}
