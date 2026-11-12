@@ -75,9 +75,9 @@ async function initialize(){
  try{state.me=await api('/api/me');state.schoolId=Number(sessionStorage.getItem('schoolflow_school'))||state.me.schools[0]?.id;
  if(!state.me.schools.find(s=>s.id===state.schoolId))state.schoolId=state.me.schools[0]?.id;
  if(state.me.user.must_change_password){render();return;}
- if(managementOnly())state.page='Management Intelligence';
+ if(role()==='Management')state.page='Management Intelligence';
  if(!canSeePage(state.page))state.page=managementOnly()?'Management Intelligence':'Dashboard';
- if(managementOnly())await window.SFManagementUI.load(api,render);else await reload();
+ if(role()==='Management')await window.SFManagementUI.load(api,render);else await reload();
  if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page)&&canManageSchools())await loadRouting();
  if(state.page==='Admissions AI'&&isAdmin())await loadPublicChat();
  if(state.page==='Reports')await loadCampaignReport();
@@ -85,7 +85,7 @@ async function initialize(){
  if(state.page==='Master Leads')await loadMasterLeads();}catch(e){state.token='';sessionStorage.removeItem('schoolflow_session');state.error=e.message;render();}
 }
 async function reload(){
- if(managementOnly()){await window.SFManagementUI.load(api,render);return;}
+ if(role()==='Management'){await window.SFManagementUI.load(api,render);return;}
  if(!state.schoolId){render();return;}
  const path=`/api/schools/${state.schoolId}`;
  [state.leads,state.sites,state.members,state.demo,state.audit]=await Promise.all([
@@ -117,7 +117,7 @@ NAV_SVG['Master Leads']=NAV_SVG['Enquiries'];
 function navIcon(page){return `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${NAV_SVG[page]||NAV_SVG.Dashboard}</svg>`;}
 function canSeePage(p){
  if(p==='Management Intelligence')return !!state.me?.schools?.some(x=>x.role==='Management');
- if(managementOnly())return false;
+ if(role()==='Management')return false;
  if(p==='Master Leads')return canMaster();
  return !((['Schools & Routing','Landing Pages','Popup Campaigns'].includes(p)&&!canManageSchools())||
   (['Automations','Seat Planning','Admissions AI'].includes(p)&&!isAdmin())||
@@ -146,13 +146,13 @@ function nav(){
  }).join('');
  return '<aside class="sidebar" id="sidebar"><div class="logo"><div class="logomark">S</div><div><strong>SchoolFlow</strong><small>ADMISSIONS OS</small></div><button class="sf-close-nav" type="button" data-action="close-menu" aria-label="Close menu">×</button></div>'+
  '<div class="school-select"><label for="schoolSelect">ACTIVE CAMPUS</label><select id="schoolSelect" aria-label="Choose school">'+state.me.schools.map(s=>option(s.id,s.name,state.schoolId)).join('')+'</select></div>'+
- '<nav class="nav sf-navigation-v3" aria-label="SchoolFlow main navigation"><div class="sf-nav-core">'+(managementOnly()?'':navButton('Dashboard','sf-core-link')+navButton('My Work','sf-core-link'))+'</div>'+groups+'</nav>'+
+ '<nav class="nav sf-navigation-v3" aria-label="SchoolFlow main navigation"><div class="sf-nav-core">'+(role()==='Management'?'':navButton('Dashboard','sf-core-link')+navButton('My Work','sf-core-link'))+'</div>'+groups+'</nav>'+
  '<div class="sidebar-bottom"><div class="sf-workspace-health"><span class="sf-dot"></span><div><strong>Workspace ready</strong><small>'+state.sites.filter(s=>s.enabled).length+' connected sources</small></div></div>'+
  '<div class="profile"><div class="avatar">'+esc(initials(state.me.user.name))+'</div><div class="sf-profile-details"><strong>'+esc(state.me.user.name)+'</strong><span>'+esc(role())+'</span></div>'+
  '<button type="button" class="icon-btn" title="Sign out" aria-label="Sign out" data-action="logout">'+navIcon('Sign out')+'</button></div></div></aside>';
 }
 function topbar(){
- if(managementOnly())return '<header class="topbar"><div class="sf-top-left"><button type="button" class="icon-btn mobile-menu" data-action="menu" aria-label="Open navigation">☰</button><div class="sf-top-location"><span>SchoolFlow / Management</span><strong>Admissions Intelligence</strong></div></div><div class="top-actions"><span class="sf-top-date">Read-only reporting</span></div></header>';
+ if(role()==='Management')return '<header class="topbar"><div class="sf-top-left"><button type="button" class="icon-btn mobile-menu" data-action="menu" aria-label="Open navigation">☰</button><div class="sf-top-location"><span>SchoolFlow / Management</span><strong>Admissions Intelligence</strong></div></div><div class="top-actions"><span class="sf-top-date">Read-only reporting</span></div></header>';
  const date=new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
  const due=state.leads.filter(l=>l.followup_date&&l.followup_date<=day()&&!CLOSED_STAGES.includes(l.status)&&l.status!=='Admission Confirmed').length;
  return `<header class="topbar"><div class="sf-top-left"><button type="button" class="icon-btn mobile-menu" data-action="menu" title="Open navigation" aria-label="Open navigation" aria-controls="sidebar">☰</button><div class="sf-top-location"><span>SchoolFlow / ${esc(school()?.name||'Campus')}</span><strong>${esc(state.page)}</strong></div></div><div class="top-actions"><span class="sf-top-date">${esc(date)}</span><button type="button" class="sf-top-icon" data-action="open-search" title="Search enquiries" aria-label="Search enquiries">⌕</button><button type="button" class="sf-top-reminders" data-action="nav" data-page="Follow-ups" title="Open due follow-ups">Follow-ups ${due?`<span>${due}</span>`:''}</button>${canManageSchools()&&state.page!=='Schools & Routing'?'<button type="button" class="sf-top-icon sf-add-school" data-action="new-school" title="Add school" aria-label="Add school">＋</button>':''}<button type="button" class="btn primary sf-new-action" data-action="new-lead">＋ New enquiry</button></div></header>`;
@@ -2214,7 +2214,7 @@ root.addEventListener('change',e=>{
  if(e.target.id==='schoolSelect'){window.SFManagementUI.reset();ext.detailTab=null;ext.registerReport=null;ext.registerFilters={};ext.registerPage=1;ext.registerRequest++;ext.resetResult=null;ext.importUpload=null;ext.importPreview=null;ext.lastImport=null;state.schoolId=Number(e.target.value);sessionStorage.setItem('schoolflow_school',String(state.schoolId));
   ext.groupSites=[];ext.schoolsOverview=[];ext.editGroupId=null;ext.chatGroups=[];
   state.key='';state.detail=null;state.modal='';
-  state.page=managementOnly()?'Management Intelligence':'Dashboard';ext.masterReport=null;ext.masterRequest++;perform(reload);}
+  state.page=role()==='Management'?'Management Intelligence':'Dashboard';ext.masterReport=null;ext.masterRequest++;perform(reload);}
  if(e.target.id==='visitMonth'){ext.visitMonth=e.target.value;render();}
  if(e.target.id==='assignedFilter'){ext.assignedFilter=e.target.value;render();}
  if(e.target.id==='dueFilter'){ext.dueFilter=e.target.value;render();}
