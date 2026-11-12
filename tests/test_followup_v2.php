@@ -39,8 +39,9 @@ try{
     [$code,$invalid]=fuv2_request('POST',$path.'/followup',
         array_merge($base,['note'=>'short']),$admin);
     fuv2_check($code===422,'summary must be mandatory on follow-up endpoint');
-    fuv2_check(fuv2_request('POST',$path.'/calls',
-        ['outcome'=>'Answered','note'=>''])[0]===422,'legacy calls must reject empty summary');
+    [$legacyCode,$legacyData]=fuv2_request('POST',$path.'/calls',
+        ['outcome'=>'Answered','note'=>'']);
+    fuv2_check($legacyCode===422,'legacy calls must reject empty summary; got '.(string)$legacyCode.' '.json_encode($legacyData));
     [$code,$saved]=fuv2_request('POST',$path.'/followup',$base,$admin);
     fuv2_check($code===201 && ($saved['lead']['temperature']??'')==='Hot','save call and hot temperature');
     fuv2_check(($saved['lead']['followup_date']??'')==='2026-11-21','save next follow-up');
