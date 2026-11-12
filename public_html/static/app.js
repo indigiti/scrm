@@ -2696,9 +2696,18 @@ root.addEventListener('keydown',e=>{
  if(lead&&(e.key==='Enter'||e.key===' ')){e.preventDefault();lead.click();}
 });
 document.addEventListener('keydown',e=>{
- if(e.key==='Escape'&&(state.modal||state.detail)){closeDialog();return;}
+ if(e.key==='Escape'){
+  const disqual=root.querySelector('#sfDisqualDialog:not([hidden])');
+  if(disqual){
+   e.preventDefault();
+   disqual.hidden=true;
+   root.querySelector('#followupV2Form [data-action="followup-pick-disposition"][aria-pressed="true"]')?.focus();
+   return;
+  }
+  if(state.modal||state.detail){closeDialog();return;}
+ }
  if(e.key!=='Tab'||(!state.modal&&!state.detail)||typeof document.querySelector!=='function')return;
- const dialog=document.querySelector('.modal[role="dialog"],.drawer[role="dialog"]');
+ const dialog=document.querySelector('#sfDisqualDialog:not([hidden]) .sf-disqual-card,.modal[role="dialog"],.drawer[role="dialog"]');
  if(!dialog)return;
  const controls=Array.from(dialog.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')).filter(el=>el.getClientRects().length);
  if(!controls.length)return;
