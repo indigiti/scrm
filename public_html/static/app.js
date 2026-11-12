@@ -1025,7 +1025,7 @@ function modal(){if(!state.modal)return '';
    return modalFrame('Edit staff account','Update school role and account details.',`<form id="editStaffForm">
    ${input('Full name','name','text',staff.name,true)}
    ${input('Work email','email','email',staff.email,true)}
-   ${select('School role','role',['Counsellor','Admissions','Admin'].map(r=>option(r,r,staff.role)).join(''))}
+   ${select('School role','role',['Counsellor','Admissions','Management','Admin'].map(r=>option(r,r,staff.role)).join(''))}
    <p class="muted-note">Multi-school identities must be edited centrally. Role changes revoke existing sessions.</p>
    <div class="button-row">${btn('Cancel','close-modal')}<button type="submit" class="btn primary">Save staff changes</button></div></form>`);
  }
@@ -1041,13 +1041,13 @@ function modal(){if(!state.modal)return '';
      '<div class="form-field"><label>Existing staff account<select name="user_id" required>'+
        '<option value="">Select an employee</option>'+people.map(p=>option(p.id,p.name+' · '+p.email+' · '+p.source_schools.join(', '))).join('')+
      '</select></label></div>'+
-     select('Role at this campus','role',[['Admissions','Admissions · All school enquiries'],['Counsellor','Counsellor · Only assigned enquiries']].map(([value,label])=>option(value,label,'Admissions')).join(''))+
+     select('Role at this campus','role',[['Admissions','Admissions · All school enquiries'],['Counsellor','Counsellor · Only assigned enquiries'],['Management','Management · Read-only school intelligence']].map(([value,label])=>option(value,label,'Admissions')).join(''))+
      '<div class="sf-admin-notice">Counsellors may have only one active school assignment. For a transfer, disable their access at the old school first. Admissions may be assigned to multiple schools. Only an administrator of both schools can link the account.</div>'+
      '<div class="button-row">'+btn('Cancel','close-modal')+'<button class="btn primary" type="submit">Assign to this school</button></div></form>':
      '<div class="sf-admin-notice">No eligible existing staff are available from your other administered schools. Create a new account, or disable an existing counsellor at their current school before transferring.</div>'+
      '<div class="button-row">'+btn('Close','close-modal')+'</div>');
  }
- if(state.modal==='new-member')return modalFrame('Add staff account','Create a NEW login for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">Create a new login here. If the email already exists, use <strong>Assign existing staff</strong> instead. Counsellors are limited to one home campus.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
+ if(state.modal==='new-member')return modalFrame('Add staff account','Create a NEW login for a counsellor, admissions member or admin.',`<form id="memberForm">${input('Staff full name','name','text','',true)}${input('Email for login','email','email','',true)}${input('Initial password (12+ characters for new account)','password','password','',true)}${select('School role','role',['Counsellor','Admissions','Management','Admin'].map(s=>option(s,s,'Counsellor')).join(''))}<div class="footer-tip" style="margin-bottom:13px">Create a new login here. If the email already exists, use <strong>Assign existing staff</strong> instead. Counsellors are limited to one home campus.</div><div class="button-row" style="justify-content:flex-end">${btn('Cancel','close-modal')}<button class="btn primary" type="submit">Add member</button></div></form>`);
  if(state.modal==='book-visit')return modalFrame('Book school visit','Schedule a parent campus tour or admissions consultation.',`<form id="visitForm">${select('Student enquiry','lead_id',state.leads.map(l=>option(l.id,l.name+' · '+l.guardian,state.visitLeadId||state.detail?.lead?.id)).join(''))}${input('Visit date and time','starts_at','datetime-local','',true)}${input('Purpose','purpose','text','Campus tour',true)}${role()==='Counsellor'?'':select('Assigned staff','staff_id',memberOptions(state.detail?.lead?.assigned_to))}<button class="btn primary" type="submit">Book visit</button></form>`);
  if(state.modal==='new-template'||state.modal==='edit-template'){
   const t=ext.templates.find(x=>x.id===state.editTemplateId)||{title:'',subject:'',body:''};
@@ -1859,6 +1859,7 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
    if(state.page==='Reports'){ext.campaignReport=null;perform(loadCampaignReport);}
    if(state.page==='Admission Register'){ext.registerReport=null;ext.registerPage=1;perform(loadAdmissionRegister);}
    if(state.page==='Master Leads'){ext.masterReport=null;ext.masterPage=1;perform(loadMasterLeads);}
+    if(state.page==='Management Intelligence'&&!window.SFManagementUI.isReady())perform(()=>window.SFManagementUI.load(api,render));
    if(state.page==='Reports' && isAdmin()){state.audit=null;ext.schoolAuditOpen=false;}
    if(['Schools & Routing','Landing Pages','Popup Campaigns'].includes(state.page) && canManageSchools()){perform(loadRouting);}
    if(state.page==='Admissions AI' && isAdmin()){ext.chatSettings=null;perform(loadPublicChat);}
