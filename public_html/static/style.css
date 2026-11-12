@@ -854,3 +854,21 @@ body{background:#f4f7fb;color:#182b43}
  .sf-outcome-option span {font-size:11px;padding-right:5px}
  .sf-disqual-card {padding:17px}
 }
+
+/* Show the server-issued enquiry timestamp beside attribution rather than below tabs. */
+.sf-lead-snapshot .sf-lead-received {
+  display:flex;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin-top:9px;
+  padding:8px 0 0;
+  border-top:1px solid #e4e8f1;
+  font-size:11px;
+  line-height:1.45;
+  color:#6f7b94;
+}
+.sf-lead-snapshot .sf-lead-received time {
+  font-weight:650;
+  color:#394b67;
+}

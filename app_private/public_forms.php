@@ -225,6 +225,10 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         if(trim((string)($p['website']??''))!=='')sf_fail(422,'Invalid submission');
         if(($p['consent']??null)!==true)sf_fail(422,'Parent/guardian consent required');
         $guardian=sf_text($p,'parent_name',140,2);
+        // Legacy short-form embeds may not send email until their cached script refreshes.
+        // Validate and persist it whenever supplied; updated forms require it in the UI.
+        $email=sf_text($p,'email',160);
+        if($email!=='')$email=sf_email($email);
         $phone=sf_text($p,'phone',20,10);
         if(!preg_match('/^[6-9][0-9]{9}$/D',$phone))sf_fail(422,'Valid 10-digit mobile number required');
         $code=sf_text($p,'school_code',50,3);
@@ -240,7 +244,7 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
         $proof=sf_public_verify_challenge($store,$guid,$origin,(string)($p['captcha_token']??''),$p['captcha_answer']??'');
         $ipKey=substr(hash('sha256',$ip),0,20);
         $otpSecret=$store->publicFormKey();
-        return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$page,$referrer,$otpSecret):array{
+        return $store->transaction(static function(array &$s)use($guid,$origin,$idem,$proof,$ipKey,$p,$code,$grade,$phone,$guardian,$email,$page,$referrer,$otpSecret):array{
             $g=sf_public_group($s,$guid);
             if(!$g || !sf_public_origin_ok($g,$origin) || !sf_short_surface_allowed($g,$p,$origin,$page,$code))sf_fail(403,'Form unavailable');
             $route=null;
@@ -264,7 +268,7 @@ function sf_public_handle(string $method, string $path, array $p, array $headers
             $details['parent_name']=$guardian;
             $details['phone']='+91 '.$phone;
             $details['grade']=$grade;
-            $details['email']='';
+            $details['email']=$email;
             $details['pincode']='';$details['state']='';$details['city']='';
             $details['message']='Short admission enquiry — student details pending';
             $trigger=(string)($p['popup_trigger']??'');

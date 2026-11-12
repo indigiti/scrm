@@ -25,6 +25,7 @@ function init(){
   (mode==='popup'?'<button type="button" class="sf2-close" aria-label="Close">×</button>':'')+
   '<h2>Admission Enquiry</h2><p>Get a call back from our admissions team.</p>'+
   '<form novalidate><label>Parent / Guardian name<input name="parent_name" maxlength="140" autocomplete="name" required placeholder="Your full name"></label>'+
+  (mode==='inline'?'<label>Email address<input type="email" name="email" maxlength="160" autocomplete="email" required placeholder="you@example.com"></label>':'')+
   '<label>Mobile number<input name="phone" inputmode="numeric" autocomplete="tel" maxlength="10" required placeholder="10-digit mobile"></label>'+
   '<div class="sf2-row"><label>Class<select name="grade" required><option value="">Select class</option>'+
   ['Nursery','LKG','UKG','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'].map(function(x){return '<option>'+x+'</option>';}).join('')+
@@ -327,6 +328,8 @@ function init(){
   ev.preventDefault();if(busy||!opened)return;clear();
   var p=form.elements;var phone=p.phone.value.trim();
   if(p.parent_name.value.trim().length<2)return error('Enter parent or guardian name.');
+  var email=(mode==='inline'&&p.email)?p.email.value.trim():'';
+  if(mode==='inline'&&(!email||email.length>160||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))return error('Enter a valid email address.');
   if(!/^[6-9][0-9]{9}$/.test(phone))return error('Enter a valid 10-digit mobile number.');
   if(!p.grade.value||!campus.value||campus.disabled)return error('Select class and an available campus.');
   if(!p.consent.checked)return error('Consent is required.');
@@ -336,7 +339,7 @@ function init(){
    return error('Verify your WhatsApp number before submitting the enquiry.');
   if(!attemptId){if(!crypto||!crypto.randomUUID)return error('A secure browser is required.');attemptId=crypto.randomUUID();}
   var query=new URLSearchParams(location.search),data={
-   student_name:'',parent_name:p.parent_name.value.trim(),phone:phone,grade:p.grade.value,
+   student_name:'',parent_name:p.parent_name.value.trim(),email:email,phone:phone,grade:p.grade.value,
    school_code:campus.value,form_display:mode,popup_campaign_guid:pagePopupGuid,popup_trigger:mode==='popup'?popupTrigger:'',consent:true,website:p.website.value,captcha_token:token,
    captcha_answer:p.captcha_answer.value.trim(),landing_page:location.href.slice(0,500),
    referrer:document.referrer.slice(0,500),first_touch_data:firstTouch(),utm_source:query.get('utm_source')||'',
