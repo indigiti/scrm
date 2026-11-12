@@ -19,7 +19,7 @@ try{
  pa(preq('PATCH','/api/schools/1/followup-policy',['retry_days'=>[0,100,-1]])[0]===422,'invalid retry schedule rejected');
  $lead=preq('POST','/api/schools/1/leads',['student_name'=>'Example Child','parent_name'=>'Example Guardian','phone'=>'9876543210','consent'=>true])[1];
  $id=$lead['id'];$path='/api/schools/1/leads/'.$id;
- pa(preq('POST',$path.'/calls',['outcome'=>'No Answer'])[0]===201,'first no answer');
+ pa(preq('POST',$path.'/calls',['outcome'=>'No Answer','note'=>'No answer after the first dial attempt'])[0]===201,'first no answer');
  $after=preq('GET',$path)[1]['lead'];
  pa($after['followup_date']===(new DateTimeImmutable(sf_admission_today()))->modify('+1 day')->format('Y-m-d'),'first retry policy applied');
  pa(empty($after['last_successful_contact_at']),'failed contact does not set successful contact');
