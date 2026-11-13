@@ -89,9 +89,24 @@ try{
     'other campus membership stays active');
  staff_ok(staff_api('GET',$b.'/leads',[],$otherLogin['token'])[0]===403,
     'disabled campus stays inaccessible on a fresh session');
+ $store->transaction(function(&$s)use($id){
+   // Exercise a real multi-campus reset: both memberships must be active.
+   foreach($s['memberships'] as &$m)if($m['user_id']===$id){
+     $m['enabled']=true;
+     if($m['school_id']===2)$m['role']='Management';
+   }
+   unset($m);
+ },true);
+ $row=sf_find(staff_api('GET',$b.'/members')[1],$id);
+ staff_ok($row['can_reset_password']===false,'roster disables reset without full campus coverage');
+ staff_ok(staff_api('POST',$b.'/members/'.$id.'/reset-password')[0]===403,'direct reset denied for active Admissions and Management memberships');
  $store->transaction(function(&$s){
    $s['memberships'][]=['user_id'=>1,'school_id'=>2,'role'=>'Admin'];
  },true);
+ foreach([$b,'/api/schools/2'] as $campus){
+   $row=sf_find(staff_api('GET',$campus.'/members')[1],$id);
+   staff_ok($row['shared_account']&&$row['can_reset_password']===true,'reset enabled on both campus rosters with full Admin coverage');
+ }
  [$code,$sharedReset]=staff_api('POST','/api/schools/2/members/'.$id.'/reset-password');
  staff_ok($code===200&&!empty($sharedReset['temporary_password']),'admin of all active campuses can reset shared account');
  staff_ok(staff_api('GET','/api/me',[],$otherLogin['token'])[0]===401,'shared reset revokes prior sessions');
