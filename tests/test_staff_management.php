@@ -79,7 +79,7 @@ try{
  $store->transaction(function(&$s)use($id){
    $s['memberships'][]=['user_id'=>$id,'school_id'=>2,'role'=>'Counsellor'];
  },true);
- staff_ok(staff_api('POST',$b.'/members/'.$id.'/reset-password')[0]===409,'campus admin cannot reset shared password');
+ staff_ok(staff_api('POST',$b.'/members/'.$id.'/reset-password')[0]===403,'campus admin cannot reset shared password');
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['email'=>'global-change@example.org'])[0]===409,'campus admin cannot change shared identity');
  staff_ok(staff_api('PATCH',$b.'/members/'.$id,['enabled'=>false])[0]===200,'local campus disabled while shared account remains');
  staff_ok(staff_api('GET',$b.'/leads',[],$loggedIn['token'])[0]===401,'existing session revoked on campus disable');
@@ -89,6 +89,12 @@ try{
     'other campus membership stays active');
  staff_ok(staff_api('GET',$b.'/leads',[],$otherLogin['token'])[0]===403,
     'disabled campus stays inaccessible on a fresh session');
+ $store->transaction(function(&$s){
+   $s['memberships'][]=['user_id'=>1,'school_id'=>2,'role'=>'Admin'];
+ },true);
+ [$code,$sharedReset]=staff_api('POST','/api/schools/2/members/'.$id.'/reset-password');
+ staff_ok($code===200&&!empty($sharedReset['temporary_password']),'admin of all active campuses can reset shared account');
+ staff_ok(staff_api('GET','/api/me',[],$otherLogin['token'])[0]===401,'shared reset revokes prior sessions');
  $audit=$store->transaction(fn($s)=>$s['audit_logs']??[]);
  staff_ok(count(array_filter($audit,fn($e)=>str_contains((string)($e['action']??''),'member_')))>1,'administration actions recorded');
  echo "PASS: school staff edit, role, disable, reactivate, last-admin protection, unassignment, credential rotation, forced change, tenant isolation\n";
