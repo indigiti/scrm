@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const js=fs.readFileSync(__dirname+'/../public_html/static/app.js','utf8');
 const handlers={};let html='';
-const lead={id:1,school_id:1,site_id:null,name:'Test Student',guardian:'Test Parent',phone:'+919999999876',normalized_phone:'919999999876',grade:'Grade 3',status:'New',assigned_to:1,assigned_name:'Demo Admin',source_name:'Manual entry',followup_date:'',email:'parent@example.org',created_at:'2026-10-13T04:00:00+00:00',consent:1,last_contact_at:'',last_call_outcome:''};
+const lead={id:1,school_id:1,site_id:null,name:'Test Student',guardian:'Test Parent',phone:'+919999999876',normalized_phone:'919999999876',grade:'Grade 3',status:'New',assigned_to:1,assigned_name:'Demo Admin',source_name:'Manual entry',followup_date:'',email:'parent@example.org',created_at:'2026-10-13T04:00:00+00:00',consent:1,last_contact_at:'',last_call_outcome:'Answered',temperature:'Warm'};
 const root={addEventListener:(kind,fn)=>handlers[kind]=fn,querySelector:()=>null};Object.defineProperty(root,'innerHTML',{get:()=>html,set:v=>html=v});
 const demo={has_demo_data:false,leads:0,sites:0};
 const data={
@@ -41,6 +41,8 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  click('nav','Families');assert.match(html,/Parent &amp; sibling profiles/);
  click('nav','Email Templates');assert.match(html,/Email templates/);
  click('nav','Enquiries');assert.match(html,/assignedFilter/);assert.match(html,/contactFilter/);
+ assert.match(html,/<th>Last call outcome<\/th><th>Lead temperature<\/th>/);
+ assert.match(html,/<td>Answered<\/td><td>Warm<\/td>/);
  click('nav','Admission Register');await sleep(150);
  assert.match(html,/Admission Enquiry Register/);
  assert.match(html,/Latest Calling Remark/);
