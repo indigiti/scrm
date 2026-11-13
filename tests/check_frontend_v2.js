@@ -42,7 +42,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  click('nav','Email Templates');assert.match(html,/Email templates/);
  click('nav','Enquiries');assert.match(html,/assignedFilter/);assert.match(html,/contactFilter/);
  assert.match(html,/<th>Last call outcome<\/th><th>Lead temperature<\/th>/);
- assert.match(html,/<td>Answered<\/td><td>Warm<\/td>/);
+ assert.match(html,/<td>Answered<\/td><td><span class="sf-enquiry-temperature"><span class="sf-enquiry-temperature-dot is-warm" aria-hidden="true"><\/span>Warm<\/span><\/td>/);
  click('nav','Admission Register');await sleep(150);
  assert.match(html,/Admission Enquiry Register/);
  assert.match(html,/Latest Calling Remark/);
