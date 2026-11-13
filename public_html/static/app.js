@@ -727,7 +727,7 @@ function teamPage(){
  <td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td>
  ${can?`<td><div class="staff-actions">
  ${btn('Edit','edit-staff','small',`data-id="${Number(m.id)}"`)}
- ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${m.shared_account||m.id===state.me.user.id?'disabled title="Use a central administrator or your own password settings"':''}`)}
+ ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${!m.can_reset_password?'disabled title="Use your own password settings, or ask an administrator of all active campuses"':''}`)}
  ${m.id===state.me.user.id?'':btn(m.enabled===false?'Reactivate':'Disable',m.enabled===false?'enable-staff':'disable-staff','small',`data-id="${Number(m.id)}"`)}
  </div></td>`:''}</tr>`).join('')||'<tr><td colspan="6">No staff members</td></tr>'}
  </tbody></table></div></div>
@@ -739,7 +739,7 @@ function teamPage(){
  <p class="muted-note">Disabled counsellors are excluded and their open tasks become unassigned for reassignment.</p>
  <form id="assignmentForm"><div class="button-row">${select('Assignment policy','mode',[['least_loaded','Least-loaded counsellor'],['round_robin','Round-robin counsellors'],['manual','Manual / leave unassigned']].map(([k,v])=>option(k,v,ext.assignment.mode)).join(''))}
  <button class="btn primary" type="submit">Save policy</button></div></form></section>`:''}
- <div class="footer-tip" style="margin-top:17px">Access is school-scoped: Counsellor = one home school and assigned enquiries only. Admissions = all enquiries in explicitly assigned schools. Admin = manage only schools they administer. Linking existing accounts never changes passwords; existing sessions are revoked. Multi-school account credentials cannot be reset or edited by an individual campus administrator.</div>`;
+ <div class="footer-tip" style="margin-top:17px">Access is school-scoped: Counsellor = one home school and assigned enquiries only. Admissions = all enquiries in explicitly assigned schools. Admin = manage only schools they administer. Linking existing accounts never changes passwords; existing sessions are revoked. To reset a multi-school password, you must be an Admin at every campus where that user has active access. Shared account identity edits are restricted separately.</div>`;
 }
 function admissionInsights(){const a=ext.analytics||{},temps=a.temperature_counts||{},phases=a.by_phase||{},reasons=a.lost_reasons||{};return `<div class="stats" style="margin:0 0 18px">${stat("Hot Leads",temps.Hot||0,"Qualified high-priority enquiries","♨","orange")}${stat("Applications Submitted",a.applications_submitted||0,"Verified submissions","▣","blue")}${stat("Visits Scheduled",a.visits_scheduled||0,"Planned campus visits","▤")}${stat("Overdue Tasks",a.overdue_tasks||0,"Needs counsellor action","◷","orange")}</div><div class="panel" style="padding:16px;margin-bottom:18px"><h3>Lead temperature distribution</h3>${Object.entries(temps).map(([k,v])=>`<span class="badge" style="margin:4px">${esc(k)} · ${Number(v)}</span>`).join("")}<h3>Admissions phases</h3>${Object.entries(phases).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")}<h3>Lost reasons</h3>${Object.entries(reasons).map(([k,v])=>`<div class="muted-note">${esc(k)} — ${Number(v)}</div>`).join("")||"<div class=muted-note>No recorded lost reasons</div>"}</div>`;} 
 
@@ -1801,8 +1801,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(action==='reset-staff'){
   if(!isAdmin())return;
-  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
-  if(!confirm('Reset password for '+staff.name+' and revoke all their sessions?'))return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff?.can_reset_password)return;
+  if(!confirm('Reset password for '+staff.name+' across all campuses and revoke all their sessions?'))return;
   perform(async()=>{
    const result=await api('/api/schools/'+state.schoolId+'/members/'+staff.id+'/reset-password','POST',{});
    ext.resetResult={password:result.temporary_password,name:staff.name};

@@ -1675,7 +1675,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
             sf_fail(404,'Not found');
         }
         if ($area==='members' && $itemId===null) {
-            if($method==='GET')return [200,sf_staff_view($s,$schoolId)];
+            if($method==='GET')return [200,sf_staff_view($s,$schoolId,$uid)];
             if($method==='POST'){
                 sf_membership($s,$schoolId,$uid,['Admin']);
                 $name=sf_text($payload,'name',140,2);$email=sf_email(sf_text($payload,'email',254,3));
