@@ -1889,10 +1889,12 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         sf_fail(422,'Select a valid call outcome');
                     $note=sf_text($payload,'note',1000,8);
                     $next=sf_date($payload['followup_date']??null);
-                    $classify=sf_enquiry_panel_settings($s,$schoolId,$role)['preferences']['followup_disposition'];
-                    $disposition=$classify?sf_text($payload,'disposition',20,3):null;
-                    if($classify&&!in_array($disposition,['Hot','Warm','Cold','Disqualified'],true))
-                        sf_fail(422,'Select a lead temperature or Disqualified');
+                    $allowDisqualify=sf_enquiry_panel_settings($s,$schoolId,$role)['preferences']['followup_disposition'];
+                    $disposition=sf_text($payload,'disposition',20,3);
+                    if(!in_array($disposition,['Hot','Warm','Cold','Disqualified'],true))
+                        sf_fail(422,'Select a valid lead temperature or disposition');
+                    if(!$allowDisqualify&&$disposition==='Disqualified')
+                        sf_fail(403,'Disqualification is disabled for this campus. Reopen the enquiry panel and select a temperature.');
                     if(in_array($lead['status'],['Enrolled','Lost'],true))
                         sf_fail(409,'Reopen this closed enquiry before recording a new follow-up');
                     $reason='';$explanation='';
@@ -1933,8 +1935,8 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                             $v['disqualified_at']=$now;
                             $v['disqualified_by']=$uid;
                             sf_audit($s,$schoolId,$itemId,$uid,'lead_disqualified','Reason: '.$reason.($explanation!==''?' · '.$explanation:''));
-                        }elseif($classify){
-                            if(($v['status']??'')==='Not Eligible'){
+                        }else{
+                            if($allowDisqualify&&($v['status']??'')==='Not Eligible'){
                                 $v['status']='Contact Attempted';
                                 sf_audit($s,$schoolId,$itemId,$uid,'lead_reopened','Disqualified enquiry reopened for follow-up');
                             }
@@ -1944,8 +1946,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                                 sf_audit($s,$schoolId,$itemId,$uid,'update_temperature',$previousTemp.' → '.$disposition.' · Call summary recorded');
                             }
                             // Previous disqualification remains in audit, but is no longer active.
-                            $v['disqualification_reason']='';
-                            $v['disqualification_note']='';
+                            if(($v['status']??'')!=='Not Eligible'){
+                                $v['disqualification_reason']='';
+                                $v['disqualification_note']='';
+                            }
                         }
                         $v['followup_date']=$next;
                         $v['updated_at']=$now;
