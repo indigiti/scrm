@@ -36,13 +36,13 @@ try{
     $settingsPath='/api/schools/1/enquiry-panels';
     [$code,$settings]=fuv2_request('GET',$settingsPath,[],$admin);
     fuv2_check($code===200&&$settings['preferences']['followup_disposition']===false,'disqualification disabled by default');
-    $hidden=['disposition'=>'Warm','outcome'=>'Answered','note'=>'Parent confirmed receiving the prospectus.',
+    $hidden=['disposition'=>'Warm','outcome'=>'Busy','note'=>'Parent confirmed receiving the prospectus.',
         'followup_date'=>'2026-11-20','submission_id'=>'followup-hidden-0001'];
     fuv2_check(fuv2_request('POST',$path.'/followup',array_replace($hidden,[
         'disposition'=>'Disqualified','disqualification_reason'=>'Fees'
     ]),$admin)[0]===403,'direct disqualification is blocked while disabled');
     [$code,$unchanged]=fuv2_request('POST',$path.'/followup',$hidden,$admin);
-    fuv2_check($code===201&&$unchanged['lead']['temperature']==='Warm'&&
+    fuv2_check($code===201&&$unchanged['lead']['temperature']==='Warm'&&$unchanged['lead']['status']==='Contact Attempted'&&
         $unchanged['lead']['followup_date']==='2026-11-20','temperature and follow-up save while disqualification is disabled');
     $prefs=$settings['preferences'];
     $prefs['followup_disposition']=true;
@@ -59,6 +59,7 @@ try{
     fuv2_check($legacyCode===422,'legacy calls must reject empty summary; got '.(string)$legacyCode.' '.json_encode($legacyData));
     [$code,$saved]=fuv2_request('POST',$path.'/followup',$base,$admin);
     fuv2_check($code===201 && ($saved['lead']['temperature']??'')==='Hot','save call and hot temperature');
+    fuv2_check($saved['lead']['status']==='Contact Established','successful contact advances attempted stage');
     fuv2_check(($saved['lead']['followup_date']??'')==='2026-11-21','save next follow-up');
     [$code,$repeat]=fuv2_request('POST',$path.'/followup',$base,$admin);
     fuv2_check($code===200 && !empty($repeat['duplicate']),'retry should be idempotent');
@@ -104,6 +105,21 @@ try{
     fuv2_check(($restored['lead']['temperature']??'')==='Warm'
         && ($restored['lead']['disqualification_reason']??'')==='',
         'reopened lead classification and active reason');
+    foreach(['Answered','Interested','Not Interested','Callback Requested'] as $outcome){
+        fuv2_check(sf_admission_stage_after_call('New Enquiry',$outcome)==='Contact Established','connected outcome advances new enquiry: '.$outcome);
+    }
+    foreach(['No Answer','Busy'] as $outcome){
+        fuv2_check(sf_admission_stage_after_call('New',$outcome)==='Contact Attempted','missed call advances new stage: '.$outcome);
+        foreach(['Contact Established','Visit Planned','Application Submitted','Admission Confirmed','Lost','Not Eligible'] as $stage)
+            fuv2_check(sf_admission_stage_after_call($stage,$outcome)===$stage,'missed call does not regress '.$stage);
+    }
+    [$code]=fuv2_request('POST',$path.'/calls',['outcome'=>'Not Interested','note'=>'Parent did not want to proceed.'],$admin);
+    fuv2_check($code===201,'legacy call endpoint accepts call');
+    [$code,$detail]=fuv2_request('GET',$path,[],$admin);
+    fuv2_check($code===200&&$detail['lead']['status']==='Contact Established','legacy calls advance attempted leads without closing them');
+    $history=$store->transaction(fn($s)=>array_values(array_filter($s['stage_history']??[],
+        fn($e)=>$e['lead_id']===$lead['id']&&$e['from_stage']==='Contact Attempted'&&$e['to_stage']==='Contact Established')));
+    fuv2_check(count($history)===2,'each call path records exactly one stage transition, with no duplicate on retry');
     $audit=$store->transaction(function($s)use($lead){
         return array_values(array_filter($s['audit_logs']??[],
             fn($e)=>($e['lead_id']??null)===$lead['id']));
