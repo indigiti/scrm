@@ -872,3 +872,18 @@ body{background:#f4f7fb;color:#182b43}
   font-weight:650;
   color:#394b67;
 }
+
+/* Follow-up drawer: color reinforces the visible temperature label. */
+.sf-disposition-choice .sf-enquiry-temperature-dot{display:inline-block;flex:none;width:.55rem;height:.55rem;border-radius:50%;background:#64748b}
+.sf-disposition-choice .sf-enquiry-temperature-dot.is-hot{background:#dc2626}
+.sf-disposition-choice .sf-enquiry-temperature-dot.is-warm{background:#b45309}
+.sf-disposition-choice .sf-enquiry-temperature-dot.is-cold{background:#2563eb}
+
+/* Enquiries stage tags: readable labels with colors grouped by workflow phase. */
+.lead-table .stage-tag:is([class~="stage-New"],[class~="stage-New-Enquiry"]){background:#ecebff;color:#4738a3}
+.lead-table .stage-tag:is([class~="stage-Contact-Attempted"],[class~="stage-On-Hold-/-Deferred"],[class~="stage-Waitlisted"]){background:#fff0d6;color:#854306}
+.lead-table .stage-tag:is([class~="stage-Contacted"],[class~="stage-Contact-Established"]){background:#e2eeff;color:#194a91}
+.lead-table .stage-tag:is([class~="stage-Counselling"],[class~="stage-Visit-Scheduled"],[class~="stage-Visit-Planned"],[class~="stage-Visit-Completed"]){background:#ddf5f0;color:#10594f}
+.lead-table .stage-tag:is([class~="stage-Applied"],[class~="stage-Application-Started"],[class~="stage-Application-Submitted"],[class~="stage-Documents-Pending"],[class~="stage-Under-Review"],[class~="stage-Offer-Issued"]){background:#f2e7ff;color:#693293}
+.lead-table .stage-tag:is([class~="stage-Admission-Confirmed"],[class~="stage-Enrolled"]){background:#ddf5e6;color:#15603b}
+.lead-table .stage-tag:is([class~="stage-Lost"],[class~="stage-Not-Eligible"],[class~="stage-Duplicate-/-Invalid"]){background:#fce8ec;color:#94233f}

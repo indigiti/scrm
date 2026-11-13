@@ -1148,8 +1148,7 @@ function followupWorkspace(d, allowDisqualify=false){
  const outcomes=['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'];
  const outcomesMarkup=outcomes.map(value=>'<label class="sf-outcome-option"><input type="radio" name="outcome" value="'+esc(value)+'" required><span>'+esc(value)+'</span></label>').join('');
  const dispositions=['Hot','Warm','Cold','Disqualified'];
- const emojis={Hot:'♨',Warm:'☀',Cold:'❄',Disqualified:'⊘'};
- const dispositionMarkup=dispositions.map(value=>'<button type="button" class="sf-disposition-choice'+(value===active?' selected':'')+'" '+(value==='Disqualified'&&!allowDisqualify?'disabled title="Disqualification is disabled for this campus" ':'')+'data-action="followup-pick-disposition" data-value="'+value+'" aria-pressed="'+String(value===active)+'"><span aria-hidden="true">'+emojis[value]+'</span>'+esc(value)+'</button>').join('');
+ const dispositionMarkup=dispositions.map(value=>'<button type="button" class="sf-disposition-choice'+(value===active?' selected':'')+'" '+(value==='Disqualified'&&!allowDisqualify?'disabled title="Disqualification is disabled for this campus" ':'')+'data-action="followup-pick-disposition" data-value="'+value+'" aria-pressed="'+String(value===active)+'">'+(value==='Disqualified'?'<span aria-hidden="true">⊘</span>':'<span class="sf-enquiry-temperature-dot is-'+value.toLowerCase()+'" aria-hidden="true"></span>')+esc(value)+'</button>').join('');
  const reasons=['Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Not eligible','Other'];
  const currentReason=l.status==='Not Eligible'?(l.disqualification_reason||''):'';
  const reasonOptions='<option value="">Select reason</option>'+reasons.map(value=>'<option value="'+esc(value)+'"'+(value===currentReason?' selected':'')+'>'+esc(value)+'</option>').join('');
