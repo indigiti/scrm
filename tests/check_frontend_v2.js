@@ -57,6 +57,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/name="action_email"/);assert.match(html,/name="action_api_email"/);
  assert.match(html,/name="tab_followup"/);assert.match(html,/name="tab_more"/);
  assert.match(html,/name="admin_shortcut"/);
+ assert.match(html,/name="followup_disposition"/);
  click('nav','Enquiries');await sleep(30);
  click('view-lead','',1);await sleep(150);
  assert.match(html,/sf-detail-tab-followup/);
@@ -65,7 +66,15 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/sf-detail-tab-history/);
  assert.match(html,/sf-detail-tab-more/);
  assert.match(html,/Configure school enquiry interface/);
- assert.match(html,/Call outcome/);assert.match(html,/Disqualification reason/);
+ assert.match(html,/Call outcome/);
+ assert.doesNotMatch(html,/Lead temperature \/ disposition|id="sfDisqualDialog"/);
+ assert.match(html,/Save follow-up/);
+ // Simulate the next settings fetch after an Admin enables the feature.
+ data['/api/schools/1/enquiry-panels'].preferences={followup_disposition:true};
+ await vm.runInNewContext('reload()',ctx);
+ assert.match(html,/Lead temperature \/ disposition/);
+ assert.match(html,/id="sfDisqualDialog"/);
+ assert.match(html,/Disqualification reason/);
  assert.doesNotMatch(html,/href="#sf-contact"/);
  assert.match(html,/Save follow-up/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
  console.log('PASS: JavaScript renders School Visits, Families, Email Templates, filters, call manager, communications and audit drawer');
