@@ -21,6 +21,11 @@ for(const temp of ['Hot','Warm','Cold'])assert.match(hidden,new RegExp('<button[
 assert.match(hidden,/<button[^>]* disabled[^>]*data-value="Disqualified"/);
 const closed=render({lead:{...lead,status:'Not Eligible'},calls:[],visits:[]});
 assert.match(closed,/name="disposition" value="Warm"/);
+for(const temperature of ['Hot','Warm','Cold']){
+ const dot='<span class="sf-enquiry-temperature-dot is-'+temperature.toLowerCase()+'" aria-hidden="true"></span>';
+ assert(hidden.includes(dot+temperature),'Follow-up drawer shows dot and label for '+temperature);
+}
+assert.match(hidden,/data-value="Warm" aria-pressed="true"/,'Saved temperature stays selected');
 const html=render({lead,calls:[],visits:[]},true);
 for(const part of ['id="followupV2Form"','Call outcome','Call summary','required minlength="8"',
  'name="followup_date"','data-value="Hot"','data-value="Warm"','data-value="Cold"',
