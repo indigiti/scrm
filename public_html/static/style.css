@@ -872,3 +872,10 @@ body{background:#f4f7fb;color:#182b43}
   font-weight:650;
   color:#394b67;
 }
+
+/* Enquiries: color reinforces the visible temperature label. */
+.sf-enquiry-temperature{display:inline-flex;align-items:center;gap:.45rem}
+.sf-enquiry-temperature-dot{display:inline-block;flex:none;width:.55rem;height:.55rem;border-radius:50%;background:#64748b}
+.sf-enquiry-temperature-dot.is-hot{background:#dc2626}
+.sf-enquiry-temperature-dot.is-warm{background:#b45309}
+.sf-enquiry-temperature-dot.is-cold{background:#2563eb}
