@@ -16,7 +16,11 @@ const render=vm.runInNewContext(src.slice(begin,end)+'\nfollowupWorkspace',
 const lead={id:3,temperature:'Warm',status:'New',followup_date:'2026-11-21'};
 const hidden=render({lead,calls:[],visits:[]});
 assert(hidden.includes('Save follow-up')&&hidden.includes('Next follow-up date'));
-assert(!hidden.includes('Lead temperature / disposition')&&!hidden.includes('name="disposition"')&&!hidden.includes('id="sfDisqualDialog"'));
+assert(hidden.includes('Lead temperature / disposition')&&hidden.includes('name="disposition"')&&!hidden.includes('id="sfDisqualDialog"'));
+for(const temp of ['Hot','Warm','Cold'])assert.match(hidden,new RegExp('<button[^>]*class="sf-disposition-choice[^"]*" data-action="followup-pick-disposition" data-value="'+temp+'"'));
+assert.match(hidden,/<button[^>]* disabled[^>]*data-value="Disqualified"/);
+const closed=render({lead:{...lead,status:'Not Eligible'},calls:[],visits:[]});
+assert.match(closed,/name="disposition" value="Warm"/);
 const html=render({lead,calls:[],visits:[]},true);
 for(const part of ['id="followupV2Form"','Call outcome','Call summary','required minlength="8"',
  'name="followup_date"','data-value="Hot"','data-value="Warm"','data-value="Cold"',

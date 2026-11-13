@@ -67,7 +67,9 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/sf-detail-tab-more/);
  assert.match(html,/Configure school enquiry interface/);
  assert.match(html,/Call outcome/);
- assert.doesNotMatch(html,/Lead temperature \/ disposition|id="sfDisqualDialog"/);
+ assert.match(html,/Lead temperature \/ disposition/);
+ assert.match(html,/<button[^>]* disabled[^>]*data-value="Disqualified"/);
+ assert.doesNotMatch(html,/id="sfDisqualDialog"/);
  assert.match(html,/Save follow-up/);
  // Simulate the next settings fetch after an Admin enables the feature.
  data['/api/schools/1/enquiry-panels'].preferences={followup_disposition:true};
@@ -78,6 +80,7 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  await sleep(150);
  assert.match(html,/Lead temperature \/ disposition/);
  assert.match(html,/id="sfDisqualDialog"/);
+ assert.doesNotMatch(html,/<button[^>]* disabled[^>]*data-value="Disqualified"/);
  assert.match(html,/Disqualification reason/);
  assert.doesNotMatch(html,/href="#sf-contact"/);
  assert.match(html,/Save follow-up/);assert.match(html,/Parent & sibling profile/);assert.match(html,/Audit log/);assert.match(html,/aria-modal="true"/);assert.match(html,/Next action/);assert.match(html,/emailTemplateChoice/);
