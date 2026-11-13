@@ -60,6 +60,15 @@ function sf_admission_extra_changes(array $payload): array {
     if(array_key_exists('date_of_birth',$payload))$changes['date_of_birth']=sf_date($payload['date_of_birth']);
     return $changes;
 }
+/** Move only early pipeline stages; later or closed stages are never inferred from a call. */
+function sf_admission_stage_after_call(string $stage,string $outcome):string {
+    $isNew=in_array($stage,['New','New Enquiry'],true);
+    if(!$isNew&&$stage!=='Contact Attempted')return $stage;
+    if(in_array($outcome,['Answered','Interested','Not Interested','Callback Requested'],true))
+        return 'Contact Established';
+    if($isNew&&in_array($outcome,['No Answer','Busy'],true))return 'Contact Attempted';
+    return $stage;
+}
 function sf_admission_call_update(array &$lead,string $outcome,string $timestamp): void {
     $lead['contact_attempts']=(int)($lead['contact_attempts']??0)+1;
     $lead['last_attempt_at']=$timestamp;
