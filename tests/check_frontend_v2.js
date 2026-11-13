@@ -25,7 +25,7 @@ const data={
 };
 const ctx={document:{getElementById:(id)=>id==='root'?root:null,addEventListener:()=>{},createElement:()=>({style:{},setAttribute(){},remove(){}}),body:{append:()=>{}}},sessionStorage:{getItem:k=>k==='schoolflow_session'?'test-session':null,setItem:()=>{},removeItem:()=>{}},
 fetch:async(path)=>({status:200,ok:true,json:async()=>{if(!(path.replace('/scrm','') in data))throw Error('unexpected path '+path);return data[path.replace('/scrm','')];}}),
-setTimeout,Date,Intl,console,URL,URLSearchParams,Blob,confirm:()=>true,prompt:()=>null,navigator:{},window:{location:{href:''},open:()=>{}},};
+setTimeout,Date,Intl,console,URL,URLSearchParams,Blob,confirm:()=>true,prompt:()=>null,navigator:{},window:{location:{href:''},open:()=>{},SFManagementUI:{reset(){}}},};
 vm.runInNewContext(js,ctx);
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 (async()=>{
@@ -71,7 +71,11 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
  assert.match(html,/Save follow-up/);
  // Simulate the next settings fetch after an Admin enables the feature.
  data['/api/schools/1/enquiry-panels'].preferences={followup_disposition:true};
- await vm.runInNewContext('reload()',ctx);
+ handlers.change({target:{id:'schoolSelect',value:'1'}});
+ await sleep(150);
+ click('nav','Enquiries');
+ click('view-lead','',1);
+ await sleep(150);
  assert.match(html,/Lead temperature \/ disposition/);
  assert.match(html,/id="sfDisqualDialog"/);
  assert.match(html,/Disqualification reason/);
