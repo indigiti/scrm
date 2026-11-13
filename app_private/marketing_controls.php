@@ -138,7 +138,7 @@ function sf_enquiry_tab_defaults():array{
  return ['followup'=>true,'admission'=>true,'family'=>true,'history'=>true,'more'=>true];
 }
 function sf_enquiry_preference_defaults():array{
- return ['default_tab'=>'followup','remember_tab'=>true,'admin_shortcut'=>true];
+ return ['default_tab'=>'followup','remember_tab'=>true,'admin_shortcut'=>true,'followup_disposition'=>false];
 }
 function sf_enquiry_panel_settings(array $s,int $sid,string $role):array{
  $defaults=sf_enquiry_panel_defaults();
@@ -209,10 +209,11 @@ function sf_enquiry_panel_validate(array $payload):array{
  }
  if(array_key_exists('preferences',$payload)){
   $given=$payload['preferences'];$expected=sf_enquiry_preference_defaults();
-  if(!is_array($given)||array_keys($given)!==array_keys($expected)||
-    !is_string($given['default_tab'])||
+  if(!is_array($given)||array_diff(array_keys($given),array_keys($expected))||
+    !is_string($given['default_tab']??null)||
     !array_key_exists($given['default_tab'],sf_enquiry_tab_defaults())||
-    !is_bool($given['remember_tab'])||!is_bool($given['admin_shortcut']))
+    !is_bool($given['remember_tab']??null)||!is_bool($given['admin_shortcut']??null)||
+    (array_key_exists('followup_disposition',$given)&&!is_bool($given['followup_disposition'])))
     sf_fail(422,'Invalid enquiry workspace preferences');
   $out['preferences']=$given;
  }

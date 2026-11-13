@@ -33,6 +33,18 @@ try{
             'phone'=>'+91 9999988877','grade'=>'Grade 4'],$admin);
     fuv2_check($code===201,'create test enquiry');
     $path='/api/schools/1/leads/'.$lead['id'];
+    $settingsPath='/api/schools/1/enquiry-panels';
+    [$code,$settings]=fuv2_request('GET',$settingsPath,[],$admin);
+    fuv2_check($code===200&&$settings['preferences']['followup_disposition']===false,'classification hidden by default');
+    $hidden=['outcome'=>'Answered','note'=>'Parent confirmed receiving the prospectus.',
+        'followup_date'=>'2026-11-20','submission_id'=>'followup-hidden-0001'];
+    [$code,$unchanged]=fuv2_request('POST',$path.'/followup',$hidden,$admin);
+    fuv2_check($code===201&&$unchanged['lead']['temperature']==='Unrated'&&
+        $unchanged['lead']['followup_date']==='2026-11-20','hidden classification does not prevent follow-up save');
+    $prefs=$settings['preferences'];
+    $prefs['followup_disposition']=true;
+    fuv2_check(fuv2_request('PATCH',$settingsPath,['sections'=>$settings['sections'],'preferences'=>$prefs],$admin)[0]===200,
+        'Admin can enable follow-up classification');
     $base=['outcome'=>'Interested','note'=>'Parent requested a campus visit this week.',
         'followup_date'=>'2026-11-21','disposition'=>'Hot',
         'submission_id'=>'followup-request-0001'];
@@ -48,7 +60,7 @@ try{
     [$code,$repeat]=fuv2_request('POST',$path.'/followup',$base,$admin);
     fuv2_check($code===200 && !empty($repeat['duplicate']),'retry should be idempotent');
     [$code,$detail]=fuv2_request('GET',$path,[],$admin);
-    fuv2_check($code===200 && count($detail['calls'])===1,'retry should create only one call');
+    fuv2_check($code===200 && count($detail['calls'])===2,'retry should create only one call');
     fuv2_check(fuv2_request('PATCH',$path,['status'=>'Not Eligible'],$admin)[0]===422,
         'direct stage API must not bypass mandatory reason');
     $dq=array_merge($base,['outcome'=>'No Answer',
@@ -70,7 +82,18 @@ try{
     fuv2_check(($disqualified['lead']['disqualification_reason']??'')==='Fees',
         'reason persisted');
     [$code,$detail]=fuv2_request('GET',$path,[],$admin);
-    fuv2_check($code===200 && count($detail['calls'])===2,'both calls persisted');
+    fuv2_check($code===200 && count($detail['calls'])===3,'all calls persisted');
+    $prefs['followup_disposition']=false;
+    fuv2_check(fuv2_request('PATCH',$settingsPath,['sections'=>$settings['sections'],'preferences'=>$prefs],$admin)[0]===200,
+        'Admin can disable follow-up classification again');
+    [$code,$stillClosed]=fuv2_request('POST',$path.'/followup',array_merge($hidden,[
+        'submission_id'=>'followup-hidden-0002','disposition'=>'Cold','followup_date'=>''
+    ]),$admin);
+    fuv2_check($code===201&&$stillClosed['lead']['status']==='Not Eligible'&&$stillClosed['lead']['temperature']==='Hot'&&
+        $stillClosed['lead']['disqualification_reason']==='Fees','stale clients cannot reclassify or reopen while hidden');
+    $prefs['followup_disposition']=true;
+    fuv2_check(fuv2_request('PATCH',$settingsPath,['sections'=>$settings['sections'],'preferences'=>$prefs],$admin)[0]===200,
+        'classification can be restored');
     $reopen=array_merge($base,['disposition'=>'Warm','submission_id'=>'followup-request-0003']);
     [$code,$restored]=fuv2_request('POST',$path.'/followup',$reopen,$admin);
     fuv2_check($code===201 && ($restored['lead']['status']??'')==='Contact Attempted',

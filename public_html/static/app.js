@@ -549,6 +549,8 @@ function enquiryInterfacePage(){
    '<input type="checkbox" name="remember_tab" '+(prefs.remember_tab!==false?'checked':'')+'></label>'+
   '<label class="sf-interface-toggle"><span><strong>Show admin Settings shortcut</strong><small>Only Admin staff can see the shortcut in an enquiry drawer</small></span>'+
    '<input type="checkbox" name="admin_shortcut" '+(prefs.admin_shortcut!==false?'checked':'')+'></label>'+
+  '<label class="sf-interface-toggle"><span><strong>Show lead temperature / disposition</strong><small>Show Hot, Warm, Cold and Disqualified on the Follow-up tab. When off, follow-ups save without changing the classification.</small></span>'+
+   '<input type="checkbox" name="followup_disposition" '+(prefs.followup_disposition===true?'checked':'')+'></label>'+
   '<h3 class="sf-setting-subtitle">Advanced section visibility</h3>'+
   '<p class="muted-note">Existing section controls are preserved. Disabling a section hides its interface, not its historical records or audit logging.</p>'+
   '<div class="sf-panel-pref-head"><strong>Section</strong><strong>Visible</strong><strong>Expand by default</strong></div>'+
@@ -1139,7 +1141,7 @@ function enquirySnapshot(l){
  </section>`;
 }
 /** Follow-up V2: one atomic save instead of a call + separate temperature PATCH. */
-function followupWorkspace(d){
+function followupWorkspace(d, showDisposition=false){
  const l=d.lead;
  const active=l.status==='Not Eligible'?'Disqualified':
    (['Hot','Warm','Cold'].includes(l.temperature)?l.temperature:'');
@@ -1158,21 +1160,21 @@ function followupWorkspace(d){
    '<fieldset class="sf-v2-fieldset"><legend>Call outcome <span class="sf-required">*</span></legend><div class="sf-call-options">'+outcomesMarkup+'</div></fieldset>'+
    '<div class="sf-followup-field"><label for="sfCallSummary">Call summary <span class="sf-required">*</span></label><textarea id="sfCallSummary" name="note" required minlength="8" maxlength="1000" rows="3" placeholder="Record the conversation, parent response and next action…"></textarea><small>At least 8 characters. Saved in the call history.</small></div>'+
    '<div class="sf-followup-field"><label for="sfNextFollowup">Next follow-up date</label><input id="sfNextFollowup" name="followup_date" type="date" value="'+esc(l.followup_date||'')+'"></div>'+
-   '<fieldset class="sf-v2-fieldset"><legend>Lead temperature / disposition <span class="sf-required">*</span></legend><div class="sf-disposition-grid">'+dispositionMarkup+'</div></fieldset>'+
+   (showDisposition?'<fieldset class="sf-v2-fieldset"><legend>Lead temperature / disposition <span class="sf-required">*</span></legend><div class="sf-disposition-grid">'+dispositionMarkup+'</div></fieldset>'+
    '<input type="hidden" name="disposition" value="'+esc(active)+'">'+
    '<input type="hidden" name="disqualification_reason" value="'+esc(currentReason)+'">'+
    '<input type="hidden" name="disqualification_note" value="'+esc(l.status==='Not Eligible'?(l.disqualification_note||''):'')+'">'+
-   '<div id="sfDisqualChosen" class="sf-disqual-chosen"'+(active==='Disqualified'?'':' hidden')+'>Disqualified: <strong id="sfDisqualChosenText">'+esc(currentReason||'Choose reason')+'</strong> <button type="button" data-action="followup-pick-disposition" data-value="Disqualified">Edit reason</button></div>'+
+   '<div id="sfDisqualChosen" class="sf-disqual-chosen"'+(active==='Disqualified'?'':' hidden')+'>Disqualified: <strong id="sfDisqualChosenText">'+esc(currentReason||'Choose reason')+'</strong> <button type="button" data-action="followup-pick-disposition" data-value="Disqualified">Edit reason</button></div>':'')+
    '<div class="sf-followup-feedback" role="alert" hidden></div>'+
    '<button class="btn primary full-btn" type="submit">Save follow-up</button>'+
-   '<div class="sf-disqual-dialog" id="sfDisqualDialog" role="dialog" aria-modal="true" aria-labelledby="sfDisqualTitle" hidden><div class="sf-disqual-card">'+
+   (showDisposition?'<div class="sf-disqual-dialog" id="sfDisqualDialog" role="dialog" aria-modal="true" aria-labelledby="sfDisqualTitle" hidden><div class="sf-disqual-card">'+
    '<h3 id="sfDisqualTitle">Disqualification reason <span class="sf-required">*</span></h3>'+
    '<p>Explain why this lead is not eligible. This change is recorded in the audit trail.</p>'+
    '<label for="sfDisqualReason">Reason</label><select id="sfDisqualReason">'+reasonOptions+'</select>'+
    '<label for="sfDisqualExplanation">Additional explanation</label><textarea id="sfDisqualExplanation" rows="3" maxlength="500" placeholder="Add context (required when Other is selected)">'+esc(l.status==='Not Eligible'?(l.disqualification_note||''):'')+'</textarea>'+
    '<div class="sf-disqual-error" role="alert" hidden></div>'+
    '<div class="sf-disqual-actions"><button type="button" class="btn" data-action="followup-cancel-disqualified">Cancel</button><button type="button" class="btn primary" data-action="followup-confirm-disqualified">Confirm reason</button></div>'+
-   '</div></div></form>'+
+   '</div></div>':'')+'</form>'+
    '<details class="sf-followup-history"><summary>Recent calls ('+Number((d.calls||[]).length)+')</summary>'+ (previousCalls||'<p>No calls recorded yet.</p>')+'</details>'+
    '<details class="sf-followup-history"><summary>Campus visits ('+Number((d.visits||[]).length)+')</summary><div class="button-row">'+btn('＋ Book visit','book-visit','small','data-id="'+Number(l.id)+'"')+'</div>'+(visits||'<p>No campus visits booked.</p>')+'</details>'+
    '</section>';
@@ -1197,7 +1199,7 @@ function detailDrawer(){
   '" role="tabpanel" id="sf-detail-panel-'+key+'" aria-labelledby="sf-detail-tab-'+key+
   '" '+(selected===key?'':'hidden')+'>';
  const endPanel='</section>';
- return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name||'Student name pending')}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(state.me?.schools?.find(sc=>Number(sc.id)===Number(state.schoolId))?.name||'School not specified')} · ${esc(l.assigned_name||'Unassigned')}</p></div>${isAdmin()&&prefs.admin_shortcut!==false?'<button class="sf-detail-settings" type="button" data-action="open-enquiry-settings" aria-label="Configure school enquiry interface">⚙ Settings</button>':''}<button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body">${enquirySnapshot(l)}<div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="sf-detail-tabs" role="tablist" aria-label="Enquiry workspace tabs">${tabButtons}</nav>${l.duplicate_of?`<div class="sf-lead-notice"><strong>Potential duplicate:</strong> Same contact as enquiry #${Number(l.duplicate_of)}</div>`:''}${l.message?`<details class="sf-lead-message"><summary>Enquiry message</summary><p>${esc(l.message)}</p></details>`:''}${beginPanel('followup')}${followupWorkspace(d)}${endPanel}${beginPanel('admission')}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<div class="sf-save-feedback" role="status" aria-live="polite" hidden></div><button class="btn primary full-btn" type="submit">Save changes</button></form>${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
+ return `<div class="drawer-overlay" id="drawerOverlay" data-action="close-detail"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="sf-drawer-title" style="overflow:auto;max-height:100vh"><div class="drawer-head"><div><div class="eyebrow">ENQUIRY ${esc(l.guid?'#'+l.guid.slice(0,8):'#'+l.id)}</div><h2 id="sf-drawer-title" style="margin:4px 0">${esc(l.name||'Student name pending')}</h2><p>${esc(l.grade||'Class not specified')} · ${esc(state.me?.schools?.find(sc=>Number(sc.id)===Number(state.schoolId))?.name||'School not specified')} · ${esc(l.assigned_name||'Unassigned')}</p></div>${isAdmin()&&prefs.admin_shortcut!==false?'<button class="sf-detail-settings" type="button" data-action="open-enquiry-settings" aria-label="Configure school enquiry interface">⚙ Settings</button>':''}<button class="icon-btn" aria-label="Close enquiry details" data-action="close-detail">✕</button></div><div class="detail-body">${enquirySnapshot(l)}<div class="next-action-strip"><strong>Next action</strong><span>${esc(l.followup_status||"Pending Contact")}${l.followup_date?" · "+esc(dateFmt(l.followup_date)):" · Schedule the next contact or close the enquiry"}</span></div><nav class="sf-detail-tabs" role="tablist" aria-label="Enquiry workspace tabs">${tabButtons}</nav>${l.duplicate_of?`<div class="sf-lead-notice"><strong>Potential duplicate:</strong> Same contact as enquiry #${Number(l.duplicate_of)}</div>`:''}${l.message?`<details class="sf-lead-message"><summary>Enquiry message</summary><p>${esc(l.message)}</p></details>`:''}${beginPanel('followup')}${followupWorkspace(d,ext.enquiryPanels?.preferences?.followup_disposition===true)}${endPanel}${beginPanel('admission')}<h3 class="section-title">Admissions & assignment</h3><form id="editLeadForm">${select('Current stage','status',STAGES.map(s=>option(s,s,l.status)).join(''))}${select('Lead temperature','temperature',TEMPERATURES.map(t=>option(t,t,l.temperature||'Unrated')).join(''))}${input('Temperature override reason (required if changed)','temperature_reason','text','')}${select('Contact state','contact_state',CONTACT_STATES.map(t=>option(t,t,l.contact_state||'Pending Contact')).join(''))}${select('Lost reason','lost_reason',LOST_REASONS.map(t=>option(t,t||'Select if lost',l.lost_reason||'')).join(''))}${input('Academic year (YYYY-YY)','academic_year','text',l.academic_year||'')}${input('Deferred review date','deferred_until','date',l.deferred_until||'')}${input('Current school','current_school','text',l.current_school||'')}${input('Date of birth','date_of_birth','date',l.date_of_birth||'')}<div class="muted-note">Follow-up: ${esc(l.followup_status||'Pending Contact')} · Recommended: ${esc(l.temperature_suggestion||'Unrated')} · Calls: ${Number(l.contact_attempts||0)}</div><div class="muted-note">Recommendation evidence: ${esc(l.temperature_suggestion_reason||"Not assessed")}</div>${role()==='Counsellor'?'':select('Assigned counsellor / team','assigned_to',memberOptions(l.assigned_to))}${input('Next follow-up date','followup_date','date',l.followup_date)}<div class="sf-save-feedback" role="status" aria-live="polite" hidden></div><button class="btn primary full-btn" type="submit">Save changes</button></form>${drawerPanelStart('application','Application progress')}<div id="sf-admission"></div><div class="page-card">${(()=>{const app=(ext.applications||[]).find(a=>a.lead_id===l.id);return app?`<div><b>Application:</b> ${esc(app.status)}${app.fee_recorded?' · Fee recorded':''}</div><form id="applicationForm"><input type="hidden" name="application_id" value="${app.id}">${select('Application milestone','status',['Started','Submitted','Documents Pending','Under Review','Offer Issued','Admission Confirmed','Enrolled','Rejected'].map(v=>option(v,v,app.status)).join(''))}${role()==='Admin'||role()==='Admissions'?'<label><input type="checkbox" name="fee_recorded" value="true"> Fee verified and recorded</label>':''}<button class="btn small" type="submit">Save milestone</button></form>`:`<button class="btn small" data-action="create-application" data-id="${l.id}">Start application</button>`;})()}</div>${drawerPanelEnd()}${drawerPanelStart('documents','Admission document checklist')}
 <div class="page-card"><p class="muted-note">Record documents received or verified. No student document files are uploaded to this CRM.</p>
 ${(d.documents||[]).map(doc=>`<div class="doc-status-row"><strong>${esc(doc.type)}</strong><span>${esc(doc.status)}</span>
 ${doc.status==='Verified'&&role()==='Counsellor'?'':`<form class="documentStatusForm">
@@ -2398,7 +2400,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   const disposition=String(fd.disposition||'');
   if(!fd.outcome)return showError('Select the call outcome.');
   if(note.length<8)return showError('Call summary must contain at least 8 characters.');
-  if(!['Hot','Warm','Cold','Disqualified'].includes(disposition))
+  if(f.elements.disposition&&!['Hot','Warm','Cold','Disqualified'].includes(disposition))
    return showError('Select Hot, Warm, Cold or Disqualified.');
   if(disposition==='Disqualified'&&!fd.disqualification_reason){
    showError('Confirm the disqualification reason before saving.');
@@ -2412,8 +2414,9 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
      ?crypto.randomUUID():'followup-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   }
   const body={outcome:fd.outcome,note,followup_date:fd.followup_date||'',
-    disposition,disqualification_reason:fd.disqualification_reason||'',
-    disqualification_note:fd.disqualification_note||'',submission_id:f.dataset.submissionId};
+    submission_id:f.dataset.submissionId};
+  if(f.elements.disposition)Object.assign(body,{disposition,disqualification_reason:fd.disqualification_reason||'',
+    disqualification_note:fd.disqualification_note||''});
   const button=f.querySelector('button[type="submit"]');
   f.dataset.saving='true';feedback.hidden=true;
   if(button){button.disabled=true;button.textContent='Saving…';}
@@ -2483,7 +2486,8 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   const preferences={
    default_tab:tabs[pref]?pref:Object.keys(tabs).find(key=>tabs[key]),
    remember_tab:!!f.elements.remember_tab?.checked,
-   admin_shortcut:!!f.elements.admin_shortcut?.checked
+   admin_shortcut:!!f.elements.admin_shortcut?.checked,
+   followup_disposition:!!f.elements.followup_disposition?.checked
   };
   perform(async()=>{
    ext.enquiryPanels=await api('/api/schools/'+state.schoolId+'/enquiry-panels','PATCH',{

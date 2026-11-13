@@ -970,7 +970,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                     'sections'=>$settings['sections'],
                     'actions'=>$settings['actions']??$prior['actions'],
                     'tabs'=>$settings['tabs']??$prior['tabs'],
-                    'preferences'=>$settings['preferences']??$prior['preferences']
+                    'preferences'=>array_replace($prior['preferences'],$settings['preferences']??[])
                 ];
                 if(!$saved['tabs'][$saved['preferences']['default_tab']])
                     $saved['preferences']['default_tab']=array_key_first(array_filter($saved['tabs']));
@@ -1889,8 +1889,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         sf_fail(422,'Select a valid call outcome');
                     $note=sf_text($payload,'note',1000,8);
                     $next=sf_date($payload['followup_date']??null);
-                    $disposition=sf_text($payload,'disposition',20,3);
-                    if(!in_array($disposition,['Hot','Warm','Cold','Disqualified'],true))
+                    $classify=sf_enquiry_panel_settings($s,$schoolId,$role)['preferences']['followup_disposition'];
+                    $disposition=$classify?sf_text($payload,'disposition',20,3):null;
+                    if($classify&&!in_array($disposition,['Hot','Warm','Cold','Disqualified'],true))
                         sf_fail(422,'Select a lead temperature or Disqualified');
                     if(in_array($lead['status'],['Enrolled','Lost'],true))
                         sf_fail(409,'Reopen this closed enquiry before recording a new follow-up');
@@ -1932,7 +1933,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                             $v['disqualified_at']=$now;
                             $v['disqualified_by']=$uid;
                             sf_audit($s,$schoolId,$itemId,$uid,'lead_disqualified','Reason: '.$reason.($explanation!==''?' · '.$explanation:''));
-                        }else{
+                        }elseif($classify){
                             if(($v['status']??'')==='Not Eligible'){
                                 $v['status']='Contact Attempted';
                                 sf_audit($s,$schoolId,$itemId,$uid,'lead_reopened','Disqualified enquiry reopened for follow-up');
@@ -1953,7 +1954,7 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         break;
                     }unset($v);
                     if(!isset($updated))sf_fail(404,'Enquiry not found');
-                    if($disposition==='Disqualified'){
+                    if(($updated['status']??'')==='Not Eligible'){
                         sf_task_cancel_for_closed_lead($s,$schoolId,$itemId,$uid);
                     }else{
                         if(!empty($updated['last_successful_contact_at']))
