@@ -14,7 +14,10 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>
 const render=vm.runInNewContext(src.slice(begin,end)+'\nfollowupWorkspace',
  {esc,auditStamp:()=>'12 Nov 2026',btn:()=>'<button>Book visit</button>'});
 const lead={id:3,temperature:'Warm',status:'New',followup_date:'2026-11-21'};
-const html=render({lead,calls:[],visits:[]});
+const hidden=render({lead,calls:[],visits:[]});
+assert(hidden.includes('Save follow-up')&&hidden.includes('Next follow-up date'));
+assert(!hidden.includes('Lead temperature / disposition')&&!hidden.includes('name="disposition"')&&!hidden.includes('id="sfDisqualDialog"'));
+const html=render({lead,calls:[],visits:[]},true);
 for(const part of ['id="followupV2Form"','Call outcome','Call summary','required minlength="8"',
  'name="followup_date"','data-value="Hot"','data-value="Warm"','data-value="Cold"',
  'data-value="Disqualified"','id="sfDisqualDialog"','aria-modal="true"','Save follow-up']) {
@@ -22,11 +25,11 @@ for(const part of ['id="followupV2Form"','Call outcome','Call summary','required
 }
 assert(!html.includes('Parent communication'),'Parent communication must not be in Follow-up V2 workspace');
 const chosen=render({lead:{...lead,status:'Not Eligible',disqualification_reason:'Fees',
- disqualification_note:'Reason <unsafe>'},calls:[],visits:[]});
+ disqualification_note:'Reason <unsafe>'},calls:[],visits:[]},true);
 assert(chosen.includes('value="Disqualified"'),'Disqualified must reopen as selected');
 assert(chosen.includes('value="Fees" selected'),'Existing disqualification reason must be preselected');
 assert(!chosen.includes('<unsafe>'),'Stored reasons must be escaped');
-assert(src.includes("${beginPanel('followup')}${followupWorkspace(d)}"),
+assert(src.includes("${beginPanel('followup')}${followupWorkspace(d,ext.enquiryPanels?.preferences?.followup_disposition===true)}"),
  'First lead tab must use the new follow-up workspace');
 assert(src.includes("${beginPanel('more')}${drawerPanelStart('communication'"),
  'Parent communication must be moved to More');
