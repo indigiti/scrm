@@ -35,12 +35,15 @@ try{
     $path='/api/schools/1/leads/'.$lead['id'];
     $settingsPath='/api/schools/1/enquiry-panels';
     [$code,$settings]=fuv2_request('GET',$settingsPath,[],$admin);
-    fuv2_check($code===200&&$settings['preferences']['followup_disposition']===false,'classification hidden by default');
-    $hidden=['outcome'=>'Answered','note'=>'Parent confirmed receiving the prospectus.',
+    fuv2_check($code===200&&$settings['preferences']['followup_disposition']===false,'disqualification disabled by default');
+    $hidden=['disposition'=>'Warm','outcome'=>'Answered','note'=>'Parent confirmed receiving the prospectus.',
         'followup_date'=>'2026-11-20','submission_id'=>'followup-hidden-0001'];
+    fuv2_check(fuv2_request('POST',$path.'/followup',array_replace($hidden,[
+        'disposition'=>'Disqualified','disqualification_reason'=>'Fees'
+    ]),$admin)[0]===403,'direct disqualification is blocked while disabled');
     [$code,$unchanged]=fuv2_request('POST',$path.'/followup',$hidden,$admin);
-    fuv2_check($code===201&&$unchanged['lead']['temperature']==='Unrated'&&
-        $unchanged['lead']['followup_date']==='2026-11-20','hidden classification does not prevent follow-up save');
+    fuv2_check($code===201&&$unchanged['lead']['temperature']==='Warm'&&
+        $unchanged['lead']['followup_date']==='2026-11-20','temperature and follow-up save while disqualification is disabled');
     $prefs=$settings['preferences'];
     $prefs['followup_disposition']=true;
     fuv2_check(fuv2_request('PATCH',$settingsPath,['sections'=>$settings['sections'],'preferences'=>$prefs],$admin)[0]===200,
@@ -89,8 +92,8 @@ try{
     [$code,$stillClosed]=fuv2_request('POST',$path.'/followup',array_merge($hidden,[
         'submission_id'=>'followup-hidden-0002','disposition'=>'Cold','followup_date'=>''
     ]),$admin);
-    fuv2_check($code===201&&$stillClosed['lead']['status']==='Not Eligible'&&$stillClosed['lead']['temperature']==='Hot'&&
-        $stillClosed['lead']['disqualification_reason']==='Fees','stale clients cannot reclassify or reopen while hidden');
+    fuv2_check($code===201&&$stillClosed['lead']['status']==='Not Eligible'&&$stillClosed['lead']['temperature']==='Cold'&&
+        $stillClosed['lead']['disqualification_reason']==='Fees','temperature can change without reopening or clearing disqualification');
     $prefs['followup_disposition']=true;
     fuv2_check(fuv2_request('PATCH',$settingsPath,['sections'=>$settings['sections'],'preferences'=>$prefs],$admin)[0]===200,
         'classification can be restored');
