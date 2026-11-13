@@ -549,7 +549,7 @@ function enquiryInterfacePage(){
    '<input type="checkbox" name="remember_tab" '+(prefs.remember_tab!==false?'checked':'')+'></label>'+
   '<label class="sf-interface-toggle"><span><strong>Show admin Settings shortcut</strong><small>Only Admin staff can see the shortcut in an enquiry drawer</small></span>'+
    '<input type="checkbox" name="admin_shortcut" '+(prefs.admin_shortcut!==false?'checked':'')+'></label>'+
-  '<label class="sf-interface-toggle"><span><strong>Show lead temperature / disposition</strong><small>Show Hot, Warm, Cold and Disqualified on the Follow-up tab. When off, follow-ups save without changing the classification.</small></span>'+
+  '<label class="sf-interface-toggle"><span><strong>Allow disqualification in Follow-up</strong><small>Enable Disqualified and its reason dialog for this campus. Hot, Warm and Cold are always available.</small></span>'+
    '<input type="checkbox" name="followup_disposition" '+(prefs.followup_disposition===true?'checked':'')+'></label>'+
   '<h3 class="sf-setting-subtitle">Advanced section visibility</h3>'+
   '<p class="muted-note">Existing section controls are preserved. Disabling a section hides its interface, not its historical records or audit logging.</p>'+
@@ -1141,15 +1141,15 @@ function enquirySnapshot(l){
  </section>`;
 }
 /** Follow-up V2: one atomic save instead of a call + separate temperature PATCH. */
-function followupWorkspace(d, showDisposition=false){
+function followupWorkspace(d, allowDisqualify=false){
  const l=d.lead;
- const active=l.status==='Not Eligible'?'Disqualified':
+ const active=allowDisqualify&&l.status==='Not Eligible'?'Disqualified':
    (['Hot','Warm','Cold'].includes(l.temperature)?l.temperature:'');
  const outcomes=['Answered','No Answer','Busy','Interested','Not Interested','Callback Requested'];
  const outcomesMarkup=outcomes.map(value=>'<label class="sf-outcome-option"><input type="radio" name="outcome" value="'+esc(value)+'" required><span>'+esc(value)+'</span></label>').join('');
  const dispositions=['Hot','Warm','Cold','Disqualified'];
  const emojis={Hot:'♨',Warm:'☀',Cold:'❄',Disqualified:'⊘'};
- const dispositionMarkup=dispositions.map(value=>'<button type="button" class="sf-disposition-choice'+(value===active?' selected':'')+'" data-action="followup-pick-disposition" data-value="'+value+'" aria-pressed="'+String(value===active)+'"><span aria-hidden="true">'+emojis[value]+'</span>'+esc(value)+'</button>').join('');
+ const dispositionMarkup=dispositions.map(value=>'<button type="button" class="sf-disposition-choice'+(value===active?' selected':'')+'" '+(value==='Disqualified'&&!allowDisqualify?'disabled title="Disqualification is disabled for this campus" ':'')+'data-action="followup-pick-disposition" data-value="'+value+'" aria-pressed="'+String(value===active)+'"><span aria-hidden="true">'+emojis[value]+'</span>'+esc(value)+'</button>').join('');
  const reasons=['Fees','Location','Transport','Curriculum','Admission elsewhere','No longer interested','No response','Not eligible','Other'];
  const currentReason=l.status==='Not Eligible'?(l.disqualification_reason||''):'';
  const reasonOptions='<option value="">Select reason</option>'+reasons.map(value=>'<option value="'+esc(value)+'"'+(value===currentReason?' selected':'')+'>'+esc(value)+'</option>').join('');
@@ -1160,14 +1160,14 @@ function followupWorkspace(d, showDisposition=false){
    '<fieldset class="sf-v2-fieldset"><legend>Call outcome <span class="sf-required">*</span></legend><div class="sf-call-options">'+outcomesMarkup+'</div></fieldset>'+
    '<div class="sf-followup-field"><label for="sfCallSummary">Call summary <span class="sf-required">*</span></label><textarea id="sfCallSummary" name="note" required minlength="8" maxlength="1000" rows="3" placeholder="Record the conversation, parent response and next action…"></textarea><small>At least 8 characters. Saved in the call history.</small></div>'+
    '<div class="sf-followup-field"><label for="sfNextFollowup">Next follow-up date</label><input id="sfNextFollowup" name="followup_date" type="date" value="'+esc(l.followup_date||'')+'"></div>'+
-   (showDisposition?'<fieldset class="sf-v2-fieldset"><legend>Lead temperature / disposition <span class="sf-required">*</span></legend><div class="sf-disposition-grid">'+dispositionMarkup+'</div></fieldset>'+
+   '<fieldset class="sf-v2-fieldset"><legend>Lead temperature / disposition <span class="sf-required">*</span></legend><div class="sf-disposition-grid">'+dispositionMarkup+'</div></fieldset>'+
    '<input type="hidden" name="disposition" value="'+esc(active)+'">'+
-   '<input type="hidden" name="disqualification_reason" value="'+esc(currentReason)+'">'+
+   (allowDisqualify?'<input type="hidden" name="disqualification_reason" value="'+esc(currentReason)+'">'+
    '<input type="hidden" name="disqualification_note" value="'+esc(l.status==='Not Eligible'?(l.disqualification_note||''):'')+'">'+
    '<div id="sfDisqualChosen" class="sf-disqual-chosen"'+(active==='Disqualified'?'':' hidden')+'>Disqualified: <strong id="sfDisqualChosenText">'+esc(currentReason||'Choose reason')+'</strong> <button type="button" data-action="followup-pick-disposition" data-value="Disqualified">Edit reason</button></div>':'')+
    '<div class="sf-followup-feedback" role="alert" hidden></div>'+
    '<button class="btn primary full-btn" type="submit">Save follow-up</button>'+
-   (showDisposition?'<div class="sf-disqual-dialog" id="sfDisqualDialog" role="dialog" aria-modal="true" aria-labelledby="sfDisqualTitle" hidden><div class="sf-disqual-card">'+
+   (allowDisqualify?'<div class="sf-disqual-dialog" id="sfDisqualDialog" role="dialog" aria-modal="true" aria-labelledby="sfDisqualTitle" hidden><div class="sf-disqual-card">'+
    '<h3 id="sfDisqualTitle">Disqualification reason <span class="sf-required">*</span></h3>'+
    '<p>Explain why this lead is not eligible. This change is recorded in the audit trail.</p>'+
    '<label for="sfDisqualReason">Reason</label><select id="sfDisqualReason">'+reasonOptions+'</select>'+
@@ -1556,10 +1556,11 @@ async function csvExport(){await api(`/api/schools/${state.schoolId}/audit`,'POS
 root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!el)return;let action=el.dataset.action;
  if(action.startsWith('management-')){perform(()=>window.SFManagementUI.click(action,el.dataset,api,render));return;}
  if(action==='followup-pick-disposition'){
-  const form=el.closest('#followupV2Form');if(!form)return;
+  const form=el.closest('#followupV2Form');if(!form||el.disabled)return;
   const choice=el.dataset.value;
   if(choice==='Disqualified'){
    const dialog=form.querySelector('#sfDisqualDialog');
+   if(!dialog)return;
    dialog.hidden=false;
    dialog.querySelector('.sf-disqual-error').hidden=true;
    dialog.querySelector('#sfDisqualReason').focus();
@@ -1568,8 +1569,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
   if(form.elements.disposition.value==='Disqualified' &&
      !confirm('Reopen this disqualified enquiry when saving the follow-up?'))return;
   form.elements.disposition.value=choice;
-  form.elements.disqualification_reason.value='';
-  form.elements.disqualification_note.value='';
+  if(form.elements.disqualification_reason)form.elements.disqualification_reason.value='';
+  if(form.elements.disqualification_note)form.elements.disqualification_note.value='';
   const chosen=form.querySelector('#sfDisqualChosen');if(chosen)chosen.hidden=true;
   form.querySelectorAll('[data-action="followup-pick-disposition"][aria-pressed]').forEach(button=>{
    const selected=button.dataset.value===choice;
@@ -2401,7 +2402,7 @@ root.addEventListener('submit',e=>{e.preventDefault();const f=e.target;let fd=Ob
   if(!fd.outcome)return showError('Select the call outcome.');
   if(note.length<8)return showError('Call summary must contain at least 8 characters.');
   if(f.elements.disposition&&!['Hot','Warm','Cold','Disqualified'].includes(disposition))
-   return showError('Select Hot, Warm, Cold or Disqualified.');
+   return showError(f.elements.disqualification_reason?'Select Hot, Warm, Cold or Disqualified.':'Select Hot, Warm or Cold.');
   if(disposition==='Disqualified'&&!fd.disqualification_reason){
    showError('Confirm the disqualification reason before saving.');
    f.querySelector('[data-action="followup-pick-disposition"][data-value="Disqualified"][aria-pressed]')?.click();
