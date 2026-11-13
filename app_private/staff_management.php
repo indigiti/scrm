@@ -86,12 +86,27 @@ function sf_staff_admin_count(array $s,int $sid):int{
         (sf_user($s,$m['user_id'])['active']??false))$n++;
     return $n;
 }
-function sf_staff_view(array $s,int $sid):array{
+// A shared credential can be rotated only by an admin authorized for every active campus.
+function sf_staff_can_reset(array $s,int $sid,int $actor,int $target):bool {
+    if($actor===$target||empty(sf_user($s,$target)['active']))return false;
+    $schools=[$sid=>true];
+    foreach($s['memberships'] as $m)if($m['user_id']===$target&&sf_staff_enabled($m))
+        $schools[$m['school_id']]=true;
+    try {
+        foreach(array_keys($schools) as $school)sf_membership($s,$school,$actor,['Admin']);
+    } catch(SFError $e) {
+        if($e->httpStatus!==403)throw $e;
+        return false;
+    }
+    return true;
+}
+function sf_staff_view(array $s,int $sid,?int $actor=null):array{
     $out=[];
     foreach($s['memberships'] as $m)if($m['school_id']===$sid){
         $person=sf_user($s,$m['user_id']);if(!$person)continue;
         $out[]=['id'=>$person['id'],'guid'=>$person['guid']??null,'name'=>$person['name'],'email'=>$person['email'],
             'role'=>$m['role'],'enabled'=>sf_staff_enabled($m)&&($person['active']??false),
+            'can_reset_password'=>$actor!==null&&sf_staff_can_reset($s,$sid,$actor,(int)$person['id']),
             'shared_account'=>count(array_filter($s['memberships'],fn($v)=>$v['user_id']===$person['id']))>1];
     }
     usort($out,fn($a,$b)=>strcmp($a['name'],$b['name']));
@@ -152,8 +167,8 @@ function sf_staff_reset_password(array &$s,int $sid,int $actor,int $target):arra
     $membership=false;
     foreach($s['memberships'] as $m)if($m['school_id']===$sid&&$m['user_id']===$target){$membership=true;break;}
     if(!$membership)sf_fail(404,'Member not found in this school');
-    if(count(array_filter($s['memberships'],fn($v)=>$v['user_id']===$target))!==1)
-        sf_fail(409,'Shared-account passwords cannot be reset by one school');
+    if(!sf_staff_can_reset($s,$sid,$actor,$target))
+        sf_fail(403,'Password reset requires an active account and Admin access to all its active campuses');
     $temporary=bin2hex(random_bytes(12)).'!aA1';
     foreach($s['users'] as &$user)if($user['id']===$target){
         $user['password_hash']=password_hash($temporary,PASSWORD_DEFAULT);
