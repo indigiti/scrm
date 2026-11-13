@@ -727,7 +727,7 @@ function teamPage(){
  <td>${state.leads.filter(l=>l.assigned_to===m.id&&!['Enrolled','Lost'].includes(l.status)).length}</td>
  ${can?`<td><div class="staff-actions">
  ${btn('Edit','edit-staff','small',`data-id="${Number(m.id)}"`)}
- ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${m.shared_account||m.id===state.me.user.id?'disabled title="Use a central administrator or your own password settings"':''}`)}
+ ${btn('Reset password','reset-staff','small',`data-id="${Number(m.id)}" ${!m.can_reset_password?'disabled title="Use your own password settings, or ask an administrator of all active campuses"':''}`)}
  ${m.id===state.me.user.id?'':btn(m.enabled===false?'Reactivate':'Disable',m.enabled===false?'enable-staff':'disable-staff','small',`data-id="${Number(m.id)}"`)}
  </div></td>`:''}</tr>`).join('')||'<tr><td colspan="6">No staff members</td></tr>'}
  </tbody></table></div></div>
@@ -1801,8 +1801,8 @@ root.addEventListener('click',e=>{let el=e.target.closest('[data-action]');if(!e
  }
  if(action==='reset-staff'){
   if(!isAdmin())return;
-  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff)return;
-  if(!confirm('Reset password for '+staff.name+' and revoke all their sessions?'))return;
+  const staff=state.members.find(m=>m.id===Number(el.dataset.id));if(!staff?.can_reset_password)return;
+  if(!confirm('Reset password for '+staff.name+' across all campuses and revoke all their sessions?'))return;
   perform(async()=>{
    const result=await api('/api/schools/'+state.schoolId+'/members/'+staff.id+'/reset-password','POST',{});
    ext.resetResult={password:result.temporary_password,name:staff.name};
