@@ -1951,6 +1951,9 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                                 $v['disqualification_note']='';
                             }
                         }
+                        // Explicit disqualification/reopening takes precedence over automatic contact progression.
+                        if($v['status']===$previousStage)
+                            $v['status']=sf_admission_stage_after_call($previousStage,$outcome);
                         $v['followup_date']=$next;
                         $v['updated_at']=$now;
                         sf_stage_history_add($s,$v,$previousStage,$v['status'],$uid);
@@ -1998,7 +2001,10 @@ function sf_handle(string $method, string $uri, array $payload, array $headers, 
                         'actor_id'=>$uid,'outcome'=>$outcome,'note'=>$note,'created_at'=>sf_time(), 'followup_date'=>$next];
                     $s['calls'][]=$entry;
                     foreach($s['leads'] as &$v)if($v['id']===$itemId){
+                        $previousStage=$v['status'];
                         $v['last_call_outcome']=$outcome;sf_admission_call_update($v,$outcome,sf_time());
+                        $v['status']=sf_admission_stage_after_call($previousStage,$outcome);
+                        sf_stage_history_add($s,$v,$previousStage,$v['status'],$uid);
                         if($outcome==='Interested')sf_admission_recommend($v,'Warm','Parent confirmed interest','call');
                         if($outcome==='Not Interested')sf_admission_recommend($v,'Cold','Parent explicitly declined interest','call');
                         if($outcome==='Callback Requested')sf_admission_recommend($v,'Warm','Parent requested a callback','call');
